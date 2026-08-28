@@ -1,5 +1,5 @@
-const CACHE = 'market-edge-v6';
-const APP_SHELL = ['./', './index.html', './market-edge.html', './manifest.webmanifest'];
+const CACHE = 'market-edge-v7';
+const APP_SHELL = ['./', './index.html', './market-edge.html', './quant-engine.js', './manifest.webmanifest'];
 
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(APP_SHELL)));
