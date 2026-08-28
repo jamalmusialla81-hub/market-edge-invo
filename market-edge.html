@@ -122,6 +122,16 @@
     .method-item span { display: block; color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .09em; margin-bottom: 5px; }
     .method-item strong { font-size: 12px; }
     .trader-check { margin-top: 22px; }
+    .alternatives-card { margin-top: 22px; }
+    .alternative-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 18px 20px 20px; }
+    .alternative { padding: 15px; border: 1px solid var(--line); border-radius: 17px; background: var(--panel-2); }
+    .alternative-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin-bottom: 13px; }
+    .alternative-head strong { display: block; font-size: 17px; }
+    .alternative-head span { color: var(--muted); font-size: 10px; }
+    .alternative-values { display: grid; grid-template-columns: repeat(2, 1fr); gap: 7px; }
+    .alternative-value { padding: 9px; border-radius: 11px; background: rgba(9,11,13,.58); }
+    .alternative-value span { display: block; color: var(--muted); font-size: 9px; text-transform: uppercase; letter-spacing: .07em; margin-bottom: 4px; }
+    .alternative-value b { font-size: 12px; font-variant-numeric: tabular-nums; }
     .trader-body { padding: 18px 20px 20px; }
     .trader-copy { margin: 0 0 16px; color: var(--muted); font-size: 12px; line-height: 1.55; }
     .trader-fields { display: grid; grid-template-columns: repeat(5, 1fr) auto; gap: 10px; }
@@ -158,6 +168,7 @@
       .footer { display: block; }
       .trader-fields { grid-template-columns: 1fr 1fr; }
       .check-trader { grid-column: 1 / -1; }
+      .alternative-grid { grid-template-columns: 1fr; padding: 14px; }
     }
   </style>
 </head>
@@ -215,7 +226,7 @@
 
       <article class="card">
         <div class="card-head">
-          <div><p class="eyebrow">Opportunity radar</p><h2>Liquid spot markets</h2></div>
+          <div><p class="eyebrow">Opportunity radar</p><h2>20 liquid perpetuals</h2></div>
           <span id="timeframeBadge" class="badge">4-hour</span>
         </div>
         <div id="marketList" class="market-list">
@@ -223,6 +234,16 @@
           <div class="empty"><strong>Ready when you are</strong>Press Scan markets to load the latest candles.</div>
         </div>
       </article>
+    </section>
+
+    <section class="card alternatives-card" aria-label="Other qualified live trades">
+      <div class="card-head">
+        <div><p class="eyebrow">Backup choices</p><h2>Two other live setups</h2></div>
+        <span class="badge">Choose one—not all</span>
+      </div>
+      <div id="alternatives" class="alternative-grid">
+        <div class="empty" style="grid-column:1/-1"><strong>Scan first</strong>Only qualified Long or Short setups that fit your entered balance will appear here.</div>
+      </div>
     </section>
 
     <section class="card trader-check" aria-label="Invo trader checker">
@@ -259,8 +280,8 @@
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
   <script>
-    const MARKETS = ['BTC','ETH','SOL','XRP','DOGE','ADA','AVAX','LINK','SUI','PENGU'];
-    const LABELS = { BTC:'Bitcoin', ETH:'Ethereum', SOL:'Solana', XRP:'XRP', DOGE:'Dogecoin', ADA:'Cardano', AVAX:'Avalanche', LINK:'Chainlink', SUI:'Sui', PENGU:'Pudgy Penguins' };
+    const MARKETS = ['BTC','ETH','SOL','XRP','DOGE','ADA','AVAX','LINK','SUI','PENGU','BNB','LTC','DOT','NEAR','APT','ARB','OP','UNI','AAVE','INJ'];
+    const LABELS = { BTC:'Bitcoin', ETH:'Ethereum', SOL:'Solana', XRP:'XRP', DOGE:'Dogecoin', ADA:'Cardano', AVAX:'Avalanche', LINK:'Chainlink', SUI:'Sui', PENGU:'Pudgy Penguins', BNB:'BNB', LTC:'Litecoin', DOT:'Polkadot', NEAR:'NEAR', APT:'Aptos', ARB:'Arbitrum', OP:'Optimism', UNI:'Uniswap', AAVE:'Aave', INJ:'Injective' };
     const HYPERLIQUID_API = 'https://api.hyperliquid.xyz/info';
     const MIN_ORDER_NOTIONAL = 10;
     let latestBest = null;
@@ -268,6 +289,7 @@
       scan: document.getElementById('scanButton'), balance: document.getElementById('balance'), risk: document.getElementById('riskMode'),
       status: document.getElementById('feedStatus'), list: document.getElementById('marketList'), rec: document.getElementById('recommendation'),
       title: document.getElementById('decisionTitle'), badge: document.getElementById('decisionBadge'), toast: document.getElementById('toast'),
+      alternatives: document.getElementById('alternatives'),
       sourcePills: document.getElementById('sourcePills'), sourceNote: document.getElementById('sourceNote'),
       traderWins: document.getElementById('traderWins'), traderLosses: document.getElementById('traderLosses'), traderPnl: document.getElementById('traderPnl'),
       traderLeverage: document.getElementById('traderLeverage'), traderSide: document.getElementById('traderSide'),
@@ -437,6 +459,36 @@
           <span><span class="badge ${r.action}">${['buy','short'].includes(r.action)?`${r.agreeVotes}/${r.sourceCount} ${r.direction}`:signalLabel(r.action)}</span></span>
         </div>`).join('');
     }
+    function renderAlternatives(results) {
+      const balance = Math.max(0, Number(els.balance.value) || 0), riskPct = Number(els.risk.value);
+      const candidates = results.slice(1).filter(result=>['buy','short'].includes(result.action)).map(result=>{
+        const isShort = result.action === 'short';
+        const stop = Math.max(0, isShort ? result.price + result.atr * 1.5 : result.price - result.atr * 1.5);
+        const target = Math.max(0, isShort ? result.price - result.atr * 3 : result.price + result.atr * 3);
+        const stopPct = Math.abs(result.price - stop) / result.price;
+        const allocation = Math.min(balance, stopPct > 0 ? balance * riskPct / stopPct : 0);
+        return { result, isShort, stop, target, allocation };
+      }).filter(plan=>plan.allocation >= MIN_ORDER_NOTIONAL).slice(0,2);
+      if (!candidates.length) {
+        els.alternatives.innerHTML = `<div class="empty" style="grid-column:1/-1"><strong>No other qualified live trade fits ${balance.toFixed(2)} USDC</strong>The app scanned ${results.length} markets. A cheaper coin does not bypass the 10 USDC minimum order value.</div>`;
+        return;
+      }
+      els.alternatives.innerHTML = candidates.map(({result,isShort,stop,target,allocation})=>`
+        <article class="alternative">
+          <div class="alternative-head">
+            <div><strong>${result.symbol} ${isShort?'Short':'Long'}</strong><span>${result.agreeVotes}/${result.sourceCount} feeds agree · ${result.score.toFixed(1)}/8</span></div>
+            <span class="badge ${isShort?'short':'buy'}">Qualified</span>
+          </div>
+          <div class="alternative-values">
+            <div class="alternative-value"><span>Entry near</span><b>${formatPrice(result.price)} USDT</b></div>
+            <div class="alternative-value"><span>Position size</span><b>${allocation.toFixed(2)} USDC</b></div>
+            <div class="alternative-value"><span>Take profit</span><b>${formatPrice(target)} USDT</b></div>
+            <div class="alternative-value"><span>Stop loss</span><b>${formatPrice(stop)} USDT</b></div>
+            <div class="alternative-value"><span>Leverage</span><b>1×</b></div>
+            <div class="alternative-value"><span>Action</span><b>${isShort?'Short':'Long'}</b></div>
+          </div>
+        </article>`).join('') + (candidates.length < 2 ? `<div class="empty"><strong>Only one backup qualified</strong>A second trade did not pass the same live-data and balance rules.</div>` : '');
+    }
     function renderRecommendation(best) {
       const balance = Math.max(0, Number(els.balance.value) || 0), currency = 'USDC', riskPct = Number(els.risk.value);
       latestBest = best || null;
@@ -570,7 +622,7 @@
     async function scan() {
       els.scan.disabled = true; els.scan.textContent = 'Scanning…';
       els.status.className = 'status'; els.status.querySelector('span:last-child').textContent = 'Loading live candles';
-      els.list.innerHTML = '<div class="market-row table-head"><span>Market</span><span>Price</span><span>24h</span><span>Signal</span></div><div class="empty"><strong>Analyzing ten markets across three feeds</strong>Checking agreement, trend, RSI, MACD, volume and volatility.</div>';
+      els.list.innerHTML = '<div class="market-row table-head"><span>Market</span><span>Price</span><span>24h</span><span>Signal</span></div><div class="empty"><strong>Analyzing twenty markets across three feeds</strong>Checking agreement, trend, RSI, MACD, volume and volatility.</div>';
       try {
         const settled = await Promise.allSettled(MARKETS.map(loadMarket));
         const results = settled.filter(x=>x.status==='fulfilled').map(x=>x.value).sort((a,b)=>{
@@ -578,7 +630,7 @@
           return bQualified - aQualified || b.score - a.score;
         });
         if (!results.length) throw new Error('Live market data could not be reached from this browser.');
-        renderSourceStatus(results); renderList(results); renderRecommendation(results[0]);
+        renderSourceStatus(results); renderList(results); renderRecommendation(results[0]); renderAlternatives(results);
         els.status.className = 'status live'; els.status.querySelector('span:last-child').textContent = `Live · ${new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}`;
         localStorage.setItem('market-edge-balance', els.balance.value); localStorage.setItem('market-edge-risk', els.risk.value);
       } catch (error) {
@@ -586,6 +638,7 @@
         els.list.innerHTML = '<div class="market-row table-head"><span>Market</span><span>Price</span><span>24h</span><span>Signal</span></div><div class="empty"><strong>Could not reach the market feed</strong>Check your connection or try again shortly. No recommendation was generated.</div>';
         els.title.textContent = 'No trade'; els.badge.className = 'badge avoid'; els.badge.textContent = 'No data';
         els.rec.innerHTML = '<div class="empty"><strong>Never trade on stale or missing data</strong>Your available balance remains untouched.</div>';
+        els.alternatives.innerHTML = '<div class="empty" style="grid-column:1/-1"><strong>No backup trades without live data</strong>Try again when at least two feeds respond.</div>';
         els.sourceNote.textContent = 'All public feeds were blocked or unavailable. No recommendation was generated.';
       } finally { els.scan.disabled = false; els.scan.textContent = 'Scan markets'; }
     }
