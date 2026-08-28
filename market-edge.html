@@ -175,6 +175,75 @@
     .trader-result strong { color: var(--text); }
     .trader-result.pass { border-color: rgba(100,230,173,.2); background: rgba(100,230,173,.055); }
     .trader-result.skip { border-color: rgba(255,125,120,.2); background: rgba(255,125,120,.055); }
+    .ai-assistant { margin-top: 22px; }
+    .ai-body { padding: 20px; display: grid; gap: 18px; }
+    .workflow-steps { display: grid; grid-template-columns: repeat(7, 1fr); gap: 7px; counter-reset: workflow; }
+    .workflow-step { min-height: 58px; padding: 10px; border: 1px solid var(--line); border-radius: 13px; background: var(--panel-2); color: var(--muted); font-size: 10px; line-height: 1.35; }
+    .workflow-step::before { counter-increment: workflow; content: counter(workflow); display: grid; place-items: center; width: 19px; height: 19px; margin-bottom: 6px; border-radius: 7px; background: var(--accent-dark); color: var(--accent); font-weight: 800; }
+    .ai-controls { display: grid; grid-template-columns: .55fr 1.45fr; gap: 12px; }
+    .ai-controls textarea, .chat-compose textarea { width: 100%; min-height: 86px; resize: vertical; border: 1px solid var(--line); border-radius: 14px; background: var(--panel-2); color: var(--text); padding: 12px 14px; font: inherit; outline: none; }
+    .ai-controls textarea:focus, .chat-compose textarea:focus { border-color: rgba(216,255,99,.55); box-shadow: 0 0 0 3px rgba(216,255,99,.08); }
+    .upload-zone { padding: 16px; border: 1px dashed rgba(216,255,99,.28); border-radius: 17px; background: rgba(216,255,99,.025); }
+    .upload-zone input { position: absolute; inline-size: 1px; block-size: 1px; opacity: 0; pointer-events: none; }
+    .upload-label { display: flex; align-items: center; justify-content: space-between; gap: 16px; cursor: pointer; }
+    .upload-label strong { display: block; font-size: 14px; }
+    .upload-label span { display: block; margin-top: 4px; color: var(--muted); font-size: 10px; line-height: 1.45; }
+    .upload-action { flex: 0 0 auto; padding: 9px 12px; border-radius: 11px; background: var(--accent); color: var(--bg) !important; font-weight: 760; }
+    .chart-previews { display: grid; grid-template-columns: repeat(2, 1fr); gap: 9px; margin-top: 12px; }
+    .chart-preview { display: grid; grid-template-columns: 72px 1fr auto; align-items: center; gap: 10px; padding: 9px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel-2); }
+    .chart-preview img { width: 72px; height: 52px; border-radius: 9px; object-fit: cover; background: var(--bg); }
+    .chart-preview strong, .chart-preview span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .chart-preview strong { max-width: 170px; font-size: 11px; }
+    .chart-preview span { color: var(--muted); font-size: 9px; margin-top: 3px; }
+    .chart-preview select { width: 70px; min-height: 36px; padding: 0 8px; border-radius: 10px; }
+    .chart-preview button { grid-column: 3; border: 0; background: transparent; color: var(--red); font-size: 9px; }
+    .compact { padding: 22px 12px; }
+    .ai-actions { display: flex; gap: 9px; flex-wrap: wrap; }
+    .ai-actions .scan { min-height: 42px; }
+    .final-verdict { padding: 18px; border: 1px solid var(--line); border-radius: 18px; background: var(--panel-2); }
+    .final-verdict > span, .fusion-view > span, .case-grid article > span, .paper-row span { display: block; color: var(--muted); font-size: 9px; letter-spacing: .08em; text-transform: uppercase; margin-bottom: 5px; }
+    .final-verdict > strong { display: block; font-size: clamp(26px, 4vw, 46px); letter-spacing: -.05em; }
+    .final-verdict p, .fusion-view p, .case-grid p { margin: 7px 0 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
+    .final-verdict.long { border-color: rgba(100,230,173,.27); background: rgba(100,230,173,.055); }
+    .final-verdict.short { border-color: rgba(255,159,115,.27); background: rgba(255,159,115,.055); }
+    .final-verdict.wait { border-color: rgba(243,201,105,.27); background: rgba(243,201,105,.055); }
+    .final-verdict.no-trade { border-color: rgba(255,125,120,.22); background: rgba(255,125,120,.045); }
+    .fusion-grid, .case-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+    .fusion-view, .case-grid article { padding: 14px; border: 1px solid var(--line); border-radius: 15px; background: rgba(9,11,13,.38); }
+    .fusion-view strong, .case-grid strong { font-size: 13px; }
+    .ai-timeframes { margin-top: 12px; grid-template-columns: repeat(5, 1fr); }
+    .ai-timeframes .metric strong { font-size: 10px; line-height: 1.45; font-weight: 590; }
+    .evidence-list { margin: 10px 0 0; padding-left: 18px; color: var(--muted); font-size: 11px; line-height: 1.55; }
+    .evidence-list b { color: var(--text); font-size: 9px; margin-right: 5px; }
+    .detail-columns { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 10px; color: var(--muted); font-size: 11px; line-height: 1.5; }
+    .detail-columns b { color: var(--text); }
+    .detail-columns ul, .verdict ul, .social-summary ul { padding-left: 17px; }
+    .ai-lower-grid { display: grid; grid-template-columns: 1.2fr .8fr; gap: 12px; }
+    .chat-panel, .explain-panel { border: 1px solid var(--line); border-radius: 18px; padding: 14px; background: rgba(9,11,13,.3); }
+    .chat-panel h3, .explain-panel h3 { margin: 0 0 4px; font-size: 15px; }
+    .panel-copy { margin: 0 0 12px; color: var(--muted); font-size: 10px; line-height: 1.45; }
+    .chat-log { max-height: 270px; overflow-y: auto; display: grid; gap: 8px; margin-bottom: 10px; }
+    .chat-message { max-width: 88%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 13px; background: var(--panel-2); }
+    .chat-message.user { justify-self: end; background: rgba(216,255,99,.07); border-color: rgba(216,255,99,.18); }
+    .chat-message span { display: block; color: var(--muted); font-size: 8px; text-transform: uppercase; letter-spacing: .08em; }
+    .chat-message p { margin: 4px 0 0; font-size: 11px; line-height: 1.5; white-space: pre-wrap; }
+    .chat-compose { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+    .chat-compose textarea { min-height: 54px; }
+    .term-list { display: flex; gap: 7px; flex-wrap: wrap; margin: 11px 0; }
+    .term-chip { border: 1px solid var(--line); border-radius: 999px; padding: 7px 9px; background: var(--panel-2); color: var(--muted); font-size: 9px; }
+    .term-chip:hover { color: var(--accent); border-color: rgba(216,255,99,.25); }
+    .explain-result { min-height: 76px; padding: 11px; border: 1px solid var(--line); border-radius: 12px; color: var(--muted); font-size: 11px; line-height: 1.5; }
+    .paper-card { margin-top: 22px; }
+    .paper-controls { display: grid; grid-template-columns: minmax(180px, .35fr) 1fr auto; align-items: end; gap: 12px; margin-bottom: 14px; }
+    .paper-stats { grid-template-columns: repeat(8, 1fr); }
+    .paper-section-title { margin: 20px 0 9px; font-size: 13px; }
+    .paper-list { display: grid; gap: 8px; }
+    .paper-row { display: grid; grid-template-columns: 1.15fr .8fr .65fr .9fr auto; align-items: center; gap: 10px; padding: 11px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel-2); }
+    .paper-row strong { display: block; font-size: 12px; }
+    .paper-row > div:first-child > span { margin-top: 4px; text-transform: none; letter-spacing: 0; }
+    .paper-row b { font-size: 11px; }
+    .paper-row select { min-height: 38px; padding: 0 9px; font-size: 9px; }
+    .paper-row.closed { grid-template-columns: 1.2fr .55fr .7fr .8fr; }
     .footer { display: flex; justify-content: space-between; gap: 18px; margin-top: 28px; color: var(--muted); font-size: 11px; line-height: 1.55; }
     .toast { position: fixed; right: 22px; bottom: 22px; max-width: 340px; padding: 13px 15px; border-radius: 13px; background: var(--text); color: var(--bg); font-size: 12px; font-weight: 680; transform: translateY(120px); opacity: 0; transition: .25s ease; box-shadow: var(--shadow); }
     .toast.show { transform: translateY(0); opacity: 1; }
@@ -186,6 +255,10 @@
       .trader-fields { grid-template-columns: repeat(3, 1fr); }
       .settings-grid { grid-template-columns: repeat(2, 1fr); }
       .research-grid { grid-template-columns: 1fr; }
+      .workflow-steps { grid-template-columns: repeat(4, 1fr); }
+      .paper-stats { grid-template-columns: repeat(4, 1fr); }
+      .paper-row { grid-template-columns: 1fr 1fr; }
+      .paper-row button { min-height: 40px; }
     }
     @media (max-width: 620px) {
       .shell { width: min(100% - 20px, 1180px); padding-top: 14px; }
@@ -206,6 +279,17 @@
       .check-trader { grid-column: 1 / -1; }
       .alternative-grid { grid-template-columns: 1fr; padding: 14px; }
       .settings-grid, .metric-grid, .evidence-grid { grid-template-columns: 1fr 1fr; }
+      .workflow-steps { grid-template-columns: repeat(2, 1fr); }
+      .ai-controls, .ai-lower-grid, .fusion-grid, .case-grid, .detail-columns, .paper-controls { grid-template-columns: 1fr; }
+      .chart-previews { grid-template-columns: 1fr; }
+      .chart-preview { grid-template-columns: 64px 1fr; }
+      .chart-preview img { width: 64px; }
+      .chart-preview select { grid-column: 1; width: 100%; }
+      .chart-preview button { grid-column: 2; justify-self: end; }
+      .ai-timeframes, .paper-stats { grid-template-columns: 1fr 1fr; }
+      .chat-compose { grid-template-columns: 1fr; }
+      .chat-compose button { min-height: 42px; }
+      .paper-row, .paper-row.closed { grid-template-columns: 1fr 1fr; }
     }
   </style>
 </head>
@@ -324,6 +408,60 @@
       </div>
     </section>
 
+    <section class="card ai-assistant" aria-label="Market Edge AI research assistant">
+      <div class="card-head">
+        <div><p class="eyebrow">Visual context + quantitative gate</p><h2>Market Edge AI research assistant</h2></div>
+        <span id="aiBackendStatus" class="badge watch">Checking AI backend</span>
+      </div>
+      <div class="ai-body">
+        <div class="workflow-steps" aria-label="Analysis workflow">
+          <div class="workflow-step">Choose asset</div><div class="workflow-step">Scan market</div><div class="workflow-step">Upload charts</div><div class="workflow-step">Analyse with AI</div><div class="workflow-step">Review fusion</div><div class="workflow-step">Ask questions</div><div class="workflow-step">Paper trade</div>
+        </div>
+        <div class="ai-controls">
+          <div class="field"><label for="aiAsset">Asset to analyse</label><select id="aiAsset"><option value="">Scan markets first</option></select></div>
+          <div class="field"><label for="aiQuestion">Question or chart context</label><textarea id="aiQuestion" maxlength="1500" placeholder="Optional: Is the 15m bounce contradicting the 4h trend?"></textarea></div>
+        </div>
+        <div class="upload-zone">
+          <input id="chartUpload" type="file" multiple accept="image/png,image/jpeg,image/webp">
+          <label class="upload-label" for="chartUpload"><span><strong>Upload up to four chart screenshots</strong><span>PNG, JPEG or WebP. Images are compressed in your browser, analysed in memory, and not permanently stored by Market Edge.</span></span><span class="upload-action">Choose charts</span></label>
+          <div id="chartPreviews" class="chart-previews"></div>
+        </div>
+        <div class="ai-actions"><button id="analyzeCharts" class="scan" type="button">Analyse with AI</button><button id="clearCharts" class="secondary-button" type="button">Clear charts and analysis</button></div>
+        <div class="card" aria-live="polite">
+          <div class="card-head"><div><p class="eyebrow">AI + quant fusion</p><h2>Combined decision</h2></div><span id="aiFinalBadge" class="badge no-trade">NO TRADE</span></div>
+          <div id="aiAnalysisResult" class="research-body"></div>
+        </div>
+        <div class="ai-lower-grid">
+          <section class="chat-panel" aria-label="Ask Market Edge AI">
+            <h3>Ask Market Edge AI</h3><p class="panel-copy">Follow-ups reuse the structured chart analysis, current quant snapshot and paper context. They never create missing market facts.</p>
+            <div id="aiChatLog" class="chat-log" aria-live="polite"></div>
+            <div class="chat-compose"><textarea id="aiChatInput" maxlength="2000" placeholder="Why is this WAIT?"></textarea><button id="aiChatSend" class="secondary-button" type="button">Ask</button></div>
+          </section>
+          <section class="explain-panel" aria-label="Explain trading terms">
+            <h3>Explain this</h3><p class="panel-copy">Definitions reference the current quantitative setup where possible.</p>
+            <div class="field"><label for="explainLevel">Explanation level</label><select id="explainLevel"><option value="beginner">Beginner</option><option value="intermediate">Intermediate</option><option value="advanced">Advanced</option></select></div>
+            <div class="term-list"><button class="term-chip" type="button" data-explain-term="BOS">BOS</button><button class="term-chip" type="button" data-explain-term="CHoCH">CHoCH</button><button class="term-chip" type="button" data-explain-term="liquidity sweep">liquidity sweep</button><button class="term-chip" type="button" data-explain-term="retest">retest</button><button class="term-chip" type="button" data-explain-term="ATR">ATR</button><button class="term-chip" type="button" data-explain-term="expectancy">expectancy</button><button class="term-chip" type="button" data-explain-term="R:R">R:R</button><button class="term-chip" type="button" data-explain-term="drawdown">drawdown</button><button class="term-chip" type="button" data-explain-term="OOS">OOS</button></div>
+            <div id="explainResult" class="explain-result"><strong>Select a term.</strong> The explanation will use the latest scanned setup.</div>
+          </section>
+        </div>
+      </div>
+    </section>
+
+    <section class="card paper-card" aria-label="Paper portfolio and journal">
+      <div class="card-head"><div><p class="eyebrow">Simulation only</p><h2>Paper portfolio and journal</h2></div><span class="badge watch">No exchange execution</span></div>
+      <div class="research-body">
+        <div class="paper-controls">
+          <div class="field"><label for="paperStartBalance">Starting paper balance (USDC)</label><input id="paperStartBalance" type="number" min="0.01" step="0.01" value="5.70"></div>
+          <p class="analysis-copy">Paper positions use the same risk-sized margin and leverage controls as the quantitative plan. Original signal fields are immutable; outcomes and journal notes are stored separately on this device.</p>
+          <div class="research-actions"><button id="paperThisSetup" class="secondary-button" type="button" disabled>Paper trade requires LONG/SHORT agreement</button><button id="paperReset" class="secondary-button" type="button">Reset portfolio</button></div>
+        </div>
+        <div id="paperStats" class="metric-grid paper-stats"></div>
+        <h3 class="paper-section-title">Open paper positions</h3><div id="paperPositions" class="paper-list"></div>
+        <h3 class="paper-section-title">Closed paper positions</h3><div id="paperHistory" class="paper-list"></div>
+        <h3 class="paper-section-title">History-based feedback</h3><div id="journalFeedback" class="social-summary"></div>
+      </div>
+    </section>
+
     <section class="card trader-check" aria-label="Invo trader checker">
       <div class="card-head">
         <div><p class="eyebrow">Second opinion</p><h2>Check an Invo trader before mimicking</h2></div>
@@ -399,7 +537,9 @@
   </main>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
+  <script src="ai-config.js"></script>
   <script src="quant-engine.js"></script>
+  <script src="ai-engine.js"></script>
   <script>
     const MARKETS = ['BTC','ETH','SOL','XRP','DOGE','ADA','AVAX','LINK','SUI','PENGU','BNB','LTC','DOT','NEAR','APT','ARB','OP','UNI','AAVE','INJ'];
     const LABELS = { BTC:'Bitcoin', ETH:'Ethereum', SOL:'Solana', XRP:'XRP', DOGE:'Dogecoin', ADA:'Cardano', AVAX:'Avalanche', LINK:'Chainlink', SUI:'Sui', PENGU:'Pudgy Penguins', BNB:'BNB', LTC:'Litecoin', DOT:'Polkadot', NEAR:'NEAR', APT:'Aptos', ARB:'Arbitrum', OP:'Optimism', UNI:'Uniswap', AAVE:'Aave', INJ:'Injective' };
@@ -946,6 +1086,8 @@
         );
         if (!results.length) throw new Error('Live market data could not be reached from this browser.');
         latestResults=results; renderSourceStatus(results); renderList(results); renderQuantRecommendation(results[0]); renderQuantAlternatives(results);
+        const aiResults=results.map(result=>MarketEdgeAI.sanitizeQuantSnapshot(result)).filter(Boolean);
+        window.dispatchEvent(new CustomEvent('market-edge:scan',{detail:{best:aiResults[0]||null,results:aiResults}}));
         updateForward(results); els.runBacktest.disabled=!results[0]?.candles?.length;
         els.status.className = 'status live'; els.status.querySelector('span:last-child').textContent = `Live · ${new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}`;
         localStorage.setItem('market-edge-settings',JSON.stringify({
@@ -959,6 +1101,7 @@
         els.rec.innerHTML = '<div class="empty"><strong>Never trade on stale or missing data</strong>Your available balance remains untouched.</div>';
         els.alternatives.innerHTML = '<div class="empty" style="grid-column:1/-1"><strong>No backup trades without live data</strong>Try again when at least two feeds respond.</div>';
         els.sourceNote.textContent = 'All public feeds were blocked or unavailable. No recommendation was generated.';
+        window.dispatchEvent(new CustomEvent('market-edge:scan',{detail:{best:null,results:[]}}));
       } finally { els.scan.disabled = false; els.scan.textContent = 'Scan markets'; }
     }
     els.scan.addEventListener('click', scan);
@@ -982,5 +1125,6 @@
     renderSocialSummary(); renderForward();
     if ('serviceWorker' in navigator) window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
   </script>
+  <script src="ai-ui.js"></script>
 </body>
 </html>
