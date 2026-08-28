@@ -74,6 +74,17 @@
     .plan-box { background: var(--panel-2); border: 1px solid var(--line); border-radius: 15px; padding: 13px; }
     .plan-box span { display: block; color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 5px; }
     .plan-box strong { font-size: 15px; }
+    .invo-entry { margin-top: 18px; padding: 16px; border: 1px solid rgba(216,255,99,.23); border-radius: 18px; background: linear-gradient(145deg, rgba(216,255,99,.075), rgba(216,255,99,.018)); }
+    .invo-entry-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 13px; }
+    .invo-entry-head h3 { margin: 0; font-size: 17px; letter-spacing: -.025em; }
+    .invo-entry-head p { margin: 4px 0 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
+    .invo-fields { display: grid; gap: 8px; }
+    .invo-field { min-height: 46px; display: grid; grid-template-columns: 26px 1fr auto; align-items: center; gap: 10px; padding: 9px 11px; border-radius: 13px; background: rgba(9,11,13,.58); border: 1px solid rgba(255,255,255,.055); }
+    .invo-field b:first-child { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 8px; background: var(--accent); color: #0b0e0f; font-size: 10px; }
+    .invo-field span { color: var(--muted); font-size: 11px; }
+    .invo-field strong { color: var(--text); font-size: 14px; text-align: right; font-variant-numeric: tabular-nums; }
+    .invo-field .long-value { color: var(--green); }
+    .fresh-note { margin: 11px 0 0; color: var(--yellow); font-size: 10px; line-height: 1.45; }
     .confirm { margin-top: 14px; display: grid; grid-template-columns: 1fr auto; gap: 10px; }
     .confirm-note { display: flex; align-items: center; gap: 9px; color: var(--muted); font-size: 11px; }
     .confirm-note input { width: 18px; min-height: 18px; accent-color: var(--accent); }
@@ -114,6 +125,9 @@
       .market-row { grid-template-columns: 1.15fr .8fr .7fr; padding-left: 14px; padding-right: 14px; }
       .market-row > :nth-child(3) { display: none; }
       .order-plan, .method { grid-template-columns: 1fr 1fr; }
+      .invo-entry { padding: 14px; }
+      .invo-field { grid-template-columns: 26px 1fr; }
+      .invo-field strong { grid-column: 2; text-align: left; margin-top: -4px; }
       .confirm { grid-template-columns: 1fr; }
       .prepare { min-height: 44px; }
       .footer { display: block; }
@@ -138,8 +152,8 @@
         <input id="balance" type="number" min="1" step="1" value="7" inputmode="decimal">
       </div>
       <div class="field">
-        <label for="quoteAsset">Contract pricing</label>
-        <input id="quoteAsset" value="USDT quote · USDC P&amp;L" readonly>
+        <label for="quoteAsset">Price shown in</label>
+        <input id="quoteAsset" value="USDT (balance stays USDC)" readonly>
       </div>
       <div class="field">
         <label for="riskMode">Risk mode</label>
@@ -302,15 +316,30 @@
           <div class="plan-box"><span>Stop reference</span><strong>${formatPrice(stop)} USDT</strong></div>
           <div class="plan-box"><span>2R target</span><strong>${formatPrice(target)} USDT</strong></div>
         </div>
+        <section class="invo-entry" aria-label="Values to enter in Invo">
+          <div class="invo-entry-head">
+            <div><h3>Enter these exact values in Invo</h3><p>Open Create Trade and copy each line into the matching field.</p></div>
+            <span class="badge buy">Manual entry</span>
+          </div>
+          <div class="invo-fields">
+            <div class="invo-field"><b>1</b><span>Coin</span><strong>${best.name} (${best.symbol})</strong></div>
+            <div class="invo-field"><b>2</b><span>Direction</span><strong class="long-value">Long</strong></div>
+            <div class="invo-field"><b>3</b><span>Take-Profit Price</span><strong>${formatPrice(target)} USDT</strong></div>
+            <div class="invo-field"><b>4</b><span>Stop-Loss Price</span><strong>${formatPrice(stop)} USDT</strong></div>
+            <div class="invo-field"><b>5</b><span>Leverage</span><strong>1×</strong></div>
+            <div class="invo-field"><b>6</b><span>Position Size</span><strong>${allocation.toFixed(2)} USDC</strong></div>
+          </div>
+          <p class="fresh-note">Only enter this while Invo's current price is close to ${formatPrice(best.price)} USDT. If it has moved noticeably, scan again.</p>
+        </section>
         <div class="confirm">
           <label class="confirm-note"><input id="ack" type="checkbox">I understand this can lose money and is not guaranteed.</label>
-          <button id="prepare" class="prepare" type="button" disabled>Copy order plan</button>
+          <button id="prepare" class="prepare" type="button" disabled>Copy exact Invo values</button>
         </div>`;
       const ack = document.getElementById('ack'), prepare = document.getElementById('prepare');
       ack.addEventListener('change',()=>prepare.disabled=!ack.checked);
       prepare.addEventListener('click',async()=>{
-        const text = `${best.instId} Invo plan | allocation ${allocation.toFixed(2)} ${currency} | reference entry ${formatPrice(best.price)} USDT | stop ${formatPrice(stop)} USDT | target ${formatPrice(target)} USDT | 1x leverage`;
-        await navigator.clipboard.writeText(text).catch(()=>{}); showToast('Order plan copied. Review it manually on your exchange.');
+        const text = `INVO CREATE TRADE\nCoin: ${best.name} (${best.symbol})\nDirection: Long\nTake-Profit Price: ${formatPrice(target)} USDT\nStop-Loss Price: ${formatPrice(stop)} USDT\nLeverage: 1x\nPosition Size: ${allocation.toFixed(2)} USDC\nOnly enter near: ${formatPrice(best.price)} USDT`;
+        await navigator.clipboard.writeText(text).catch(()=>{}); showToast('Exact Invo values copied. Check every field before submitting.');
       });
     }
     function showToast(message) {
