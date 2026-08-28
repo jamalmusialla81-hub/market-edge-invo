@@ -41,7 +41,7 @@
     h1 { margin: 0; max-width: 720px; font-size: clamp(42px, 7vw, 82px); line-height: .96; letter-spacing: -.065em; font-weight: 760; }
     h1 span { color: var(--accent); }
     .hero-copy { color: var(--muted); font-size: 15px; line-height: 1.6; max-width: 430px; margin: 0 0 6px; }
-    .control-panel { background: linear-gradient(145deg, rgba(255,255,255,.025), transparent 48%), var(--panel); border: 1px solid var(--line); border-radius: 24px; padding: 18px; box-shadow: var(--shadow); display: grid; grid-template-columns: 1.15fr .8fr 1fr .8fr auto; gap: 12px; margin-bottom: 12px; }
+    .control-panel { background: linear-gradient(145deg, rgba(255,255,255,.025), transparent 48%), var(--panel); border: 1px solid var(--line); border-radius: 24px; padding: 18px; box-shadow: var(--shadow); display: grid; grid-template-columns: 1.05fr .75fr .9fr .8fr .85fr auto; gap: 12px; margin-bottom: 12px; }
     .field { display: grid; gap: 8px; }
     .field label { font-size: 12px; color: var(--muted); }
     input, select { width: 100%; min-height: 48px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel-2); color: var(--text); padding: 0 14px; outline: none; }
@@ -56,6 +56,10 @@
     .source-pill i { width: 6px; height: 6px; border-radius: 50%; background: var(--yellow); }
     .source-pill.live { color: var(--green); border-color: rgba(100,230,173,.18); background: rgba(100,230,173,.055); }
     .source-pill.live i { background: var(--green); }
+    .settings-panel { margin: 0 0 22px; border: 1px solid var(--line); border-radius: 18px; background: rgba(255,255,255,.012); overflow: hidden; }
+    .settings-panel summary { cursor: pointer; padding: 13px 16px; color: var(--muted); font-size: 12px; font-weight: 720; }
+    .settings-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; padding: 2px 16px 16px; }
+    .settings-note { grid-column: 1 / -1; margin: 0; color: var(--muted); font-size: 10px; line-height: 1.45; }
     .main-grid { display: grid; grid-template-columns: .95fr 1.35fr; gap: 22px; }
     .card { background: linear-gradient(150deg, rgba(255,255,255,.02), transparent 58%), var(--panel); border: 1px solid var(--line); border-radius: 24px; overflow: hidden; }
     .card-head { padding: 18px 20px; border-bottom: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; gap: 12px; }
@@ -66,6 +70,8 @@
     .badge.short { color: #ff9f73; background: rgba(255,159,115,.08); border-color: rgba(255,159,115,.2); }
     .badge.watch { color: var(--yellow); background: rgba(243,201,105,.08); border-color: rgba(243,201,105,.2); }
     .badge.avoid { color: var(--red); background: rgba(255,125,120,.08); border-color: rgba(255,125,120,.2); }
+    .badge.take { color: var(--green); background: rgba(100,230,173,.08); border-color: rgba(100,230,173,.2); }
+    .badge.no-trade { color: var(--red); background: rgba(255,125,120,.08); border-color: rgba(255,125,120,.2); }
     .recommendation { padding: 22px 20px 20px; }
     .asset-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; margin-bottom: 22px; }
     .asset-name { display: flex; align-items: center; gap: 12px; }
@@ -121,6 +127,34 @@
     .method-item { padding: 14px; border: 1px solid var(--line); border-radius: 16px; background: rgba(255,255,255,.012); }
     .method-item span { display: block; color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .09em; margin-bottom: 5px; }
     .method-item strong { font-size: 12px; }
+    .quality-score { display: flex; align-items: baseline; gap: 5px; }
+    .quality-score strong { font-size: 34px; letter-spacing: -.05em; }
+    .quality-score span { color: var(--muted); font-size: 11px; }
+    .evidence-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; margin: 16px 0 0; }
+    .evidence-item { padding: 11px; border: 1px solid var(--line); border-radius: 13px; background: rgba(9,11,13,.4); }
+    .evidence-item span { display: block; color: var(--muted); font-size: 9px; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 4px; }
+    .evidence-item strong { font-size: 12px; }
+    .research-grid { margin-top: 22px; display: grid; grid-template-columns: 1.15fr .85fr; gap: 22px; }
+    .research-body { padding: 18px 20px 20px; }
+    .research-actions { display: flex; gap: 9px; flex-wrap: wrap; margin-bottom: 14px; }
+    .secondary-button { min-height: 42px; padding: 0 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel-2); color: var(--text); font-weight: 700; }
+    .secondary-button:hover { border-color: rgba(216,255,99,.35); }
+    .metric-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+    .metric { padding: 11px; border-radius: 12px; background: var(--panel-2); border: 1px solid var(--line); }
+    .metric span { display: block; color: var(--muted); font-size: 9px; text-transform: uppercase; letter-spacing: .07em; margin-bottom: 4px; }
+    .metric strong { font-size: 13px; }
+    .split-table { width: 100%; margin-top: 12px; border-collapse: collapse; font-size: 10px; }
+    .split-table th, .split-table td { padding: 8px; text-align: right; border-bottom: 1px solid var(--line); }
+    .split-table th:first-child, .split-table td:first-child { text-align: left; }
+    .split-table th { color: var(--muted); font-weight: 650; }
+    .verdict { margin-top: 12px; padding: 12px; border-radius: 12px; border: 1px solid rgba(243,201,105,.2); background: rgba(243,201,105,.055); color: var(--yellow); font-size: 11px; line-height: 1.5; }
+    .social-import { display: grid; gap: 10px; }
+    .social-import textarea { width: 100%; min-height: 112px; resize: vertical; border: 1px solid var(--line); border-radius: 14px; background: var(--panel-2); color: var(--text); padding: 12px; font: 11px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .social-summary { padding: 13px; border: 1px solid var(--line); border-radius: 13px; color: var(--muted); font-size: 11px; line-height: 1.55; }
+    .filter-select { min-height: 36px; width: auto; max-width: 180px; padding: 0 10px; font-size: 11px; }
+    details.analysis-details { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 10px; }
+    details.analysis-details summary { cursor: pointer; color: var(--muted); font-size: 11px; }
+    .analysis-copy { color: var(--muted); font-size: 11px; line-height: 1.55; }
     .trader-check { margin-top: 22px; }
     .alternatives-card { margin-top: 22px; }
     .alternative-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 18px 20px 20px; }
@@ -150,6 +184,8 @@
       .hero-copy { max-width: 680px; }
       .method { grid-template-columns: repeat(2, 1fr); }
       .trader-fields { grid-template-columns: repeat(3, 1fr); }
+      .settings-grid { grid-template-columns: repeat(2, 1fr); }
+      .research-grid { grid-template-columns: 1fr; }
     }
     @media (max-width: 620px) {
       .shell { width: min(100% - 20px, 1180px); padding-top: 14px; }
@@ -169,6 +205,7 @@
       .trader-fields { grid-template-columns: 1fr 1fr; }
       .check-trader { grid-column: 1 / -1; }
       .alternative-grid { grid-template-columns: 1fr; padding: 14px; }
+      .settings-grid, .metric-grid, .evidence-grid { grid-template-columns: 1fr 1fr; }
     }
   </style>
 </head>
@@ -181,7 +218,7 @@
 
     <section class="hero">
       <h1>Turn market noise into a <span>clear plan.</span></h1>
-      <p class="hero-copy">Live, transparent signals across liquid crypto markets. Market Edge can recommend waiting—the highest score wins only when the evidence is strong enough.</p>
+      <p class="hero-copy">A disciplined futures research engine that starts by asking whether sufficient evidence exists to risk capital. No setup is allowed to bypass costs, minimum size or liquidation checks.</p>
     </section>
 
     <section class="control-panel" aria-label="Portfolio controls">
@@ -202,17 +239,36 @@
         </select>
       </div>
       <div class="field">
-        <label for="leverage">Leverage</label>
+        <label for="leverage">Maximum leverage</label>
         <select id="leverage">
-          <option value="1">1×</option>
+          <option value="1" selected>1×</option>
           <option value="2">2×</option>
           <option value="3">3×</option>
           <option value="5">5×</option>
-          <option value="10" selected>10× · high risk</option>
+          <option value="10">10× · high risk</option>
         </select>
+      </div>
+      <div class="field">
+        <label for="minQuality">Minimum quality</label>
+        <input id="minQuality" type="number" min="50" max="95" step="1" value="72" inputmode="numeric">
       </div>
       <button id="scanButton" class="scan" type="button">Scan markets</button>
     </section>
+
+    <details class="settings-panel">
+      <summary>Account, portfolio and validation settings</summary>
+      <div class="settings-grid">
+        <div class="field"><label for="minRR">Minimum risk/reward</label><input id="minRR" type="number" min="1" max="5" step="0.1" value="1.8"></div>
+        <div class="field"><label for="maxConcurrent">Maximum concurrent trades</label><input id="maxConcurrent" type="number" min="1" max="10" step="1" value="1"></div>
+        <div class="field"><label for="maxExposure">Maximum portfolio exposure</label><select id="maxExposure"><option value="0.5">50% of balance</option><option value="1" selected>100% of balance</option><option value="2">200% of balance</option></select></div>
+        <div class="field"><label for="openDirection">Existing crypto exposure</label><select id="openDirection"><option value="none">None entered</option><option value="long">Already net LONG</option><option value="short">Already net SHORT</option></select></div>
+        <div class="field"><label for="maxDailyLoss">Maximum daily loss</label><select id="maxDailyLoss"><option value="0.02">2%</option><option value="0.03" selected>3%</option><option value="0.05">5%</option></select></div>
+        <div class="field"><label for="maxDrawdown">Maximum drawdown</label><select id="maxDrawdown"><option value="0.05">5%</option><option value="0.1" selected>10%</option><option value="0.15">15%</option></select></div>
+        <div class="field"><label for="feeAssumption">Round-trip fees + slippage</label><input id="feeAssumption" value="0.16% modeled" readonly></div>
+        <div class="field"><label for="forwardMode">Forward-test recording</label><select id="forwardMode"><option value="on" selected>Record qualifying setups</option><option value="off">Off</option></select></div>
+        <p class="settings-note">Position size is calculated before leverage. Leverage only changes required margin; it never increases the permitted loss. With tiny balances, the correct output may be NO TRADE.</p>
+      </div>
+    </details>
 
     <section class="source-strip" aria-label="Market data sources">
       <div id="sourcePills" class="source-pills">
@@ -230,17 +286,29 @@
           <span id="decisionBadge" class="badge">Unscored</span>
         </div>
         <div id="recommendation" class="recommendation">
-          <div class="empty"><strong>No recommendation yet</strong>Live data will be scored on trend, momentum, volume, volatility and chase risk.</div>
+          <div class="empty"><strong>No recommendation yet</strong>Live data will be evaluated across strategy, regime, structure, momentum, volume, costs and account risk.</div>
         </div>
       </article>
 
       <article class="card">
         <div class="card-head">
           <div><p class="eyebrow">Opportunity radar</p><h2>20 liquid perpetuals</h2></div>
-          <span id="timeframeBadge" class="badge">4-hour</span>
+          <select id="opportunityFilter" class="filter-select" aria-label="Opportunity filter">
+            <option value="overall">Best overall</option>
+            <option value="long">Long only</option>
+            <option value="short">Short only</option>
+            <option value="quality">Highest quality</option>
+            <option value="rr">Best risk/reward</option>
+            <option value="trend">Strongest trend</option>
+            <option value="breakout">Breakouts</option>
+            <option value="reversal">Reversals</option>
+            <option value="social">Highest social confirmation</option>
+            <option value="risk">Lowest risk</option>
+            <option value="liquidity">Highest liquidity</option>
+          </select>
         </div>
         <div id="marketList" class="market-list">
-          <div class="market-row table-head"><span>Market</span><span>Price</span><span>24h</span><span>Signal</span></div>
+          <div class="market-row table-head"><span>Market</span><span>Price</span><span>24h</span><span>Decision</span></div>
           <div class="empty"><strong>Ready when you are</strong>Press Scan markets to load the latest candles.</div>
         </div>
       </article>
@@ -272,39 +340,109 @@
           <button id="checkTrader" class="check-trader" type="button">Check trader</button>
         </div>
         <div id="traderResult" class="trader-result"><strong>No trader checked yet.</strong> Run the market scan first, then enter the numbers from the Invo card.</div>
+        <div class="social-import" style="margin-top:16px">
+          <p class="trader-copy" style="margin:0">Optional authorised social import. Paste JSON or CSV exported/provided by you—Market Edge does not scrape Invo. Fields supported: trader, asset, direction, wins, losses, trades, expectancy, maxDrawdown, leverage.</p>
+          <textarea id="socialData" spellcheck="false" placeholder='[{"trader":"example","asset":"SOL","direction":"long","wins":56,"losses":14,"expectancy":0.18,"maxDrawdown":12,"leverage":3}]'></textarea>
+          <div class="research-actions"><button id="importSocial" class="secondary-button" type="button">Import authorised data</button><button id="clearSocial" class="secondary-button" type="button">Clear social data</button></div>
+          <div id="socialSummary" class="social-summary"><strong>No authorised social data imported.</strong> Social weighting is currently zero.</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="research-grid">
+      <article class="card">
+        <div class="card-head">
+          <div><p class="eyebrow">Historical edge</p><h2>Deterministic chronological backtest</h2></div>
+          <span class="badge watch">Research—not proof</span>
+        </div>
+        <div class="research-body">
+          <div class="research-actions"><button id="runBacktest" class="secondary-button" type="button" disabled>Backtest best scanned market</button></div>
+          <div id="backtestResult" class="social-summary"><strong>No backtest run yet.</strong> Scan first, then test the deterministic strategy engine on available prior 4-hour candles with next-bar execution, fees and slippage.</div>
+        </div>
+      </article>
+      <article class="card">
+        <div class="card-head">
+          <div><p class="eyebrow">Unseen live evidence</p><h2>Forward-test ledger</h2></div>
+          <span id="forwardBadge" class="badge">0 recorded</span>
+        </div>
+        <div class="research-body">
+          <div id="forwardResult" class="social-summary"><strong>No forward setups recorded.</strong> Historical backtests and forward observations remain separate.</div>
+          <div class="research-actions" style="margin-top:12px"><button id="clearForward" class="secondary-button" type="button">Clear local ledger</button></div>
+        </div>
+      </article>
+    </section>
+
+    <section class="card" style="margin-top:22px" aria-label="Latest historical validation findings">
+      <div class="card-head"><div><p class="eyebrow">Failed ideas are visible</p><h2>Latest 900-bar validation findings</h2></div><span class="badge no-trade">No live edge established</span></div>
+      <div class="research-body">
+        <div class="metric-grid">
+          <div class="metric"><span>BTC unseen test</span><strong>−0.69R · disabled</strong></div>
+          <div class="metric"><span>SOL rolling unseen</span><strong>−0.80R · disabled</strong></div>
+          <div class="metric"><span>DOGE LONG overall</span><strong>−0.92R · disabled</strong></div>
+          <div class="metric"><span>LTC LONG overall</span><strong>−0.46R · disabled</strong></div>
+        </div>
+        <p class="analysis-copy">ETH was positive in validation, test and rolling unseen windows, but the untouched test contained only five trades and the history was 4h-only. It remains paper research—not a live approval.</p>
       </div>
     </section>
 
     <section class="method" aria-label="Decision method">
       <div class="method-item"><span>Consensus</span><strong>Hyperliquid + Binance + Coinbase</strong></div>
-      <div class="method-item"><span>Trend</span><strong>EMA20 + EMA50 alignment</strong></div>
-      <div class="method-item"><span>Momentum</span><strong>RSI + MACD confirmation</strong></div>
-      <div class="method-item"><span>Leverage</span><strong>User-selected · up to 10×</strong></div>
+      <div class="method-item"><span>Strategies</span><strong>Trend · breakout · momentum · range · reversal</strong></div>
+      <div class="method-item"><span>Validation</span><strong>Chronological 60/20/20 · no shuffled candles</strong></div>
+      <div class="method-item"><span>Risk</span><strong>Position first · then lowest required leverage</strong></div>
     </section>
 
     <footer class="footer">
-      <span>Decision support only—not guaranteed returns or personal financial advice. Crypto can fall sharply and you may lose the full amount.</span>
-      <span>Feeds: Hyperliquid, Binance and Coinbase public APIs · Invo pricing: USDT · Margin and P&amp;L: USDC</span>
+      <span>Research and decision support only—not guaranteed returns or personal financial advice. Crypto futures can lose the full margin.</span>
+      <span>Public feeds: Hyperliquid, Binance and Coinbase · Invo social data: authorised manual import only · Verdict: PAPER TRADE ONLY until out-of-sample evidence is sufficient</span>
     </footer>
   </main>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
+  <script src="quant-engine.js"></script>
   <script>
     const MARKETS = ['BTC','ETH','SOL','XRP','DOGE','ADA','AVAX','LINK','SUI','PENGU','BNB','LTC','DOT','NEAR','APT','ARB','OP','UNI','AAVE','INJ'];
     const LABELS = { BTC:'Bitcoin', ETH:'Ethereum', SOL:'Solana', XRP:'XRP', DOGE:'Dogecoin', ADA:'Cardano', AVAX:'Avalanche', LINK:'Chainlink', SUI:'Sui', PENGU:'Pudgy Penguins', BNB:'BNB', LTC:'Litecoin', DOT:'Polkadot', NEAR:'NEAR', APT:'Aptos', ARB:'Arbitrum', OP:'Optimism', UNI:'Uniswap', AAVE:'Aave', INJ:'Injective' };
     const HYPERLIQUID_API = 'https://api.hyperliquid.xyz/info';
     const MIN_ORDER_NOTIONAL = 10;
-    let latestBest = null;
+    const RESEARCH_GATES = {
+      BTC:'900-bar test expectancy −0.69R and no positive neighbouring parameter set',
+      SOL:'unseen test −0.25R and rolling unseen windows −0.80R; LONG expectancy −0.11R overall',
+      DOGE:'validation −0.76R, test −1.15R and LONG expectancy −0.92R overall',
+      LTC:'validation −0.40R, test −0.22R and LONG expectancy −0.46R overall'
+    };
+    let latestBest = null, latestResults = [], socialRecords = [];
     const els = {
       scan: document.getElementById('scanButton'), balance: document.getElementById('balance'), risk: document.getElementById('riskMode'), leverage: document.getElementById('leverage'),
+      minQuality: document.getElementById('minQuality'), minRR: document.getElementById('minRR'), maxConcurrent: document.getElementById('maxConcurrent'),
+      maxExposure: document.getElementById('maxExposure'), openDirection: document.getElementById('openDirection'), maxDailyLoss: document.getElementById('maxDailyLoss'),
+      maxDrawdown: document.getElementById('maxDrawdown'), forwardMode: document.getElementById('forwardMode'), opportunityFilter: document.getElementById('opportunityFilter'),
       status: document.getElementById('feedStatus'), list: document.getElementById('marketList'), rec: document.getElementById('recommendation'),
       title: document.getElementById('decisionTitle'), badge: document.getElementById('decisionBadge'), toast: document.getElementById('toast'),
       alternatives: document.getElementById('alternatives'),
       sourcePills: document.getElementById('sourcePills'), sourceNote: document.getElementById('sourceNote'),
       traderWins: document.getElementById('traderWins'), traderLosses: document.getElementById('traderLosses'), traderPnl: document.getElementById('traderPnl'),
       traderLeverage: document.getElementById('traderLeverage'), traderSide: document.getElementById('traderSide'),
-      checkTrader: document.getElementById('checkTrader'), traderResult: document.getElementById('traderResult')
+      checkTrader: document.getElementById('checkTrader'), traderResult: document.getElementById('traderResult'),
+      socialData: document.getElementById('socialData'), importSocial: document.getElementById('importSocial'), clearSocial: document.getElementById('clearSocial'), socialSummary: document.getElementById('socialSummary'),
+      runBacktest: document.getElementById('runBacktest'), backtestResult: document.getElementById('backtestResult'),
+      forwardBadge: document.getElementById('forwardBadge'), forwardResult: document.getElementById('forwardResult'), clearForward: document.getElementById('clearForward')
     };
+    function currentSettings() {
+      return {
+        balance: Math.max(0, Number(els.balance.value) || 0),
+        riskPct: Number(els.risk.value),
+        maxLeverage: Math.max(1, Number(els.leverage.value) || 1),
+        minQuality: Math.max(50, Number(els.minQuality.value) || 72),
+        minRR: Math.max(1, Number(els.minRR.value) || 1.8),
+        maxExposurePct: Math.max(0.1, Number(els.maxExposure.value) || 1),
+        minNotional: MIN_ORDER_NOTIONAL,
+        maxConcurrent: Math.max(1, Number(els.maxConcurrent.value) || 1),
+        openDirection: els.openDirection.value,
+        maxDailyLoss: Number(els.maxDailyLoss.value),
+        maxDrawdown: Number(els.maxDrawdown.value)
+      };
+    }
 
     function ema(values, period) {
       const k = 2 / (period + 1);
@@ -333,6 +471,8 @@
       return value.toLocaleString(undefined,{minimumFractionDigits:4,maximumFractionDigits:7});
     }
     function scoreMarket(instId, candles, source) {
+      const validation=MarketEdgeQuant.validateCandles(candles);
+      if (!validation.valid) throw new Error(`${source} data rejected: ${validation.reason}`);
       const closes = candles.map(c=>c.close), volumes = candles.map(c=>c.volume);
       const e20 = ema(closes,20), e50 = ema(closes,50), e12 = ema(closes,12), e26 = ema(closes,26);
       const macd = e12.map((v,i)=>v-e26[i]), signal = ema(macd,9);
@@ -372,29 +512,38 @@
       const score = direction === 'short' ? shortScore : direction === 'long' ? longScore : Math.max(longScore, shortScore);
       const action = direction === 'long' ? 'buy' : direction === 'short' ? 'short' : score >= 4 ? 'watch' : 'avoid';
       const reasons = direction === 'short' ? shortReasons : longReasons;
-      return { instId, symbol: instId.split('-')[0], name: LABELS[instId.split('-')[0]], price:last, change24, rsi:currentRsi, atr:currentAtr, volumeRatio, score, action, direction, reasons, source, longScore, shortScore };
+      return { instId, symbol: instId.split('-')[0], name: LABELS[instId.split('-')[0]], price:last, change24, rsi:currentRsi, atr:currentAtr, volumeRatio, score, action, direction, reasons, source, longScore, shortScore, candles };
     }
 
-    async function loadHyperliquid(coin) {
-      const endTime = Date.now(), startTime = endTime - 120 * 4 * 60 * 60 * 1000;
+    async function loadHyperliquidCandles(coin, interval = '4h', bars = 500) {
+      const duration = { '5m':5*60*1000, '15m':15*60*1000, '1h':60*60*1000, '4h':4*60*60*1000, '1d':24*60*60*1000 }[interval];
+      const endTime = Date.now(), startTime = endTime - bars * duration;
       const response = await fetch(HYPERLIQUID_API, {
         method: 'POST',
         headers: { 'Accept':'application/json', 'Content-Type':'application/json' },
-        body: JSON.stringify({ type:'candleSnapshot', req:{ coin, interval:'4h', startTime, endTime } })
+        body: JSON.stringify({ type:'candleSnapshot', req:{ coin, interval, startTime, endTime } })
       });
       if (!response.ok) throw new Error(`Hyperliquid unavailable for ${coin}`);
       const json = await response.json();
-      if (!Array.isArray(json) || json.length < 60) throw new Error(`No Hyperliquid candles for ${coin}`);
-      const candles = json.map(row=>({ time:+row.t, open:+row.o, high:+row.h, low:+row.l, close:+row.c, volume:+row.v })).sort((a,b)=>a.time-b.time);
-      return scoreMarket(`${coin}-PERP`, candles, 'Hyperliquid');
+      if (!Array.isArray(json)) throw new Error(`No Hyperliquid candles for ${coin}`);
+      const candles=json.map(row=>({ time:+row.t, open:+row.o, high:+row.h, low:+row.l, close:+row.c, volume:+row.v }))
+        .filter(candle=>candle.time+duration<=Date.now()).sort((a,b)=>a.time-b.time);
+      if (candles.length < 60 || Date.now()-candles.at(-1).time>duration*3) throw new Error(`Missing or stale Hyperliquid candles for ${coin}`);
+      return candles;
+    }
+
+    async function loadHyperliquid(coin) {
+      return scoreMarket(`${coin}-PERP`, await loadHyperliquidCandles(coin, '4h', 500), 'Hyperliquid');
     }
 
     async function loadBinance(coin) {
-      const response = await fetch(`https://api.binance.com/api/v3/klines?symbol=${coin}USDT&interval=4h&limit=120`, { headers:{ 'Accept':'application/json' } });
+      const response = await fetch(`https://api.binance.com/api/v3/klines?symbol=${coin}USDT&interval=4h&limit=500`, { headers:{ 'Accept':'application/json' } });
       if (!response.ok) throw new Error(`Binance unavailable for ${coin}`);
       const json = await response.json();
       if (!Array.isArray(json) || json.length < 60) throw new Error(`No Binance candles for ${coin}`);
-      const candles = json.map(row=>({ time:+row[0], open:+row[1], high:+row[2], low:+row[3], close:+row[4], volume:+row[5] })).sort((a,b)=>a.time-b.time);
+      const candles = json.map(row=>({ time:+row[0], open:+row[1], high:+row[2], low:+row[3], close:+row[4], volume:+row[5], closeTime:+row[6] }))
+        .filter(candle=>candle.closeTime<=Date.now()).sort((a,b)=>a.time-b.time);
+      if (Date.now()-candles.at(-1).time>12*60*60*1000) throw new Error(`Stale Binance candles for ${coin}`);
       return scoreMarket(`${coin}-PERP`, candles, 'Binance');
     }
 
@@ -417,9 +566,10 @@
       if (!response.ok) throw new Error(`Coinbase unavailable for ${coin}`);
       const json = await response.json();
       if (!Array.isArray(json) || json.length < 240) throw new Error(`No Coinbase candles for ${coin}`);
-      const hourly = json.map(row=>({ time:+row[0]*1000, low:+row[1], high:+row[2], open:+row[3], close:+row[4], volume:+row[5] }));
-      const candles = resampleFourHours(hourly);
+      const hourly = json.map(row=>({ time:+row[0]*1000, low:+row[1], high:+row[2], open:+row[3], close:+row[4], volume:+row[5] })).filter(candle=>candle.time+60*60*1000<=Date.now());
+      const candles = resampleFourHours(hourly).filter(candle=>candle.time+4*60*60*1000<=Date.now());
       if (candles.length < 60) throw new Error(`Not enough Coinbase history for ${coin}`);
+      if (Date.now()-candles.at(-1).time>12*60*60*1000) throw new Error(`Stale Coinbase candles for ${coin}`);
       return scoreMarket(`${coin}-PERP`, candles, 'Coinbase');
     }
 
@@ -443,12 +593,47 @@
       const consensusReason = opinions.length === 1
         ? `Only ${opinions[0].source} responded—no live trade without confirmation`
         : direction ? `${agreeVotes} of ${opinions.length} independent feeds show a ${direction} setup` : `Feeds do not agree strongly enough on a long or short`;
+      let quant = MarketEdgeQuant.evaluateSetup({
+        timeframes: { h4: reference.candles },
+        social: MarketEdgeQuant.aggregateSocial(socialRecords, coin),
+        settings: { ...currentSettings(), requireMTF:false }
+      });
+      const opinionDirections = opinions.map(item=>item.longScore > item.shortScore ? 'long' : item.shortScore > item.longScore ? 'short' : 'neutral');
+      const matchingFeeds = quant.direction ? opinionDirections.filter(side=>side===quant.direction).length : 0;
+      const prices=opinions.map(item=>item.price).sort((a,b)=>a-b), medianPrice=prices[Math.floor(prices.length/2)], maxPriceDisagreement=Math.max(...prices.map(price=>Math.abs(price/medianPrice-1)));
+      if (maxPriceDisagreement>.02) quant={...quant,decision:'WAIT',reason:`Exchange prices disagree by up to ${(maxPriceDisagreement*100).toFixed(1)}%`};
+      if (quant.decision === 'TAKE TRADE' && (opinions.length < 2 || matchingFeeds < 2)) {
+        quant = { ...quant, decision:'WAIT', reason:'Quantitative setup exists, but fewer than two independent feeds confirm its direction' };
+      }
       return {
         ...reference,
         score:+score.toFixed(1), action, direction, lean, reasons:[consensusReason, ...directionalReference.reasons],
         buyVotes, shortVotes, agreeVotes, avgLongScore, avgShortScore,
-        sourceCount:opinions.length, sources:opinions.map(item=>item.source), sourceOpinions:opinions
+        sourceCount:opinions.length, sources:opinions.map(item=>item.source), sourceOpinions:opinions,
+        quant, quality:quant.quality, matchingFeeds, maxPriceDisagreement, liquidityScore:Math.min(100, (reference.volumeRatio || 0) * 50)
       };
+    }
+    async function enrichTimeframes(result) {
+      try {
+        const [m5, m15, h1, d1] = await Promise.all([
+          loadHyperliquidCandles(result.symbol, '5m', 500),
+          loadHyperliquidCandles(result.symbol, '15m', 320),
+          loadHyperliquidCandles(result.symbol, '1h', 420),
+          loadHyperliquidCandles(result.symbol, '1d', 260)
+        ]);
+        let quant = MarketEdgeQuant.evaluateSetup({
+          timeframes:{ m5, m15, h1, h4:result.candles, d1 },
+          social:MarketEdgeQuant.aggregateSocial(socialRecords, result.symbol),
+          settings:currentSettings()
+        });
+        const opinionDirections = result.sourceOpinions.map(item=>item.longScore > item.shortScore ? 'long' : item.shortScore > item.longScore ? 'short' : 'neutral');
+        const matchingFeeds = quant.direction ? opinionDirections.filter(side=>side===quant.direction).length : 0;
+        if (result.maxPriceDisagreement>.02) quant={...quant,decision:'WAIT',reason:`Exchange prices disagree by up to ${(result.maxPriceDisagreement*100).toFixed(1)}%`};
+        if (quant.decision === 'TAKE TRADE' && (result.sourceCount < 2 || matchingFeeds < 2)) quant = { ...quant, decision:'WAIT', reason:'Quantitative setup exists, but fewer than two independent feeds confirm its direction' };
+        return { ...result, quant, quality:quant.quality, matchingFeeds, timeframes:{m5,m15,h1,h4:result.candles,d1} };
+      } catch (error) {
+        return result;
+      }
     }
     function signalLabel(action) { return action === 'buy' ? 'Long setup' : action === 'short' ? 'Short setup' : action === 'watch' ? 'Watch' : 'Avoid'; }
     function renderSourceStatus(results) {
@@ -461,166 +646,124 @@
         : 'Only one source responded. The app will show wait instead of forcing a trade.';
     }
     function renderList(results) {
-      els.list.innerHTML = '<div class="market-row table-head"><span>Market</span><span>Price</span><span>24h</span><span>Signal</span></div>' + results.map(r=>`
+      const filter = els.opportunityFilter.value;
+      let visible = [...results];
+      if (filter === 'long') visible = visible.filter(r=>r.quant?.direction==='long');
+      if (filter === 'short') visible = visible.filter(r=>r.quant?.direction==='short');
+      if (filter === 'breakout') visible = visible.filter(r=>r.quant?.strategy==='BREAKOUT');
+      if (filter === 'reversal') visible = visible.filter(r=>r.quant?.strategy==='REVERSAL');
+      if (filter === 'rr') visible.sort((a,b)=>(b.quant?.rr||0)-(a.quant?.rr||0));
+      if (filter === 'trend') visible.sort((a,b)=>Math.abs(b.quant?.frame?.ema20Slope||0)-Math.abs(a.quant?.frame?.ema20Slope||0));
+      if (filter === 'social') visible.sort((a,b)=>MarketEdgeQuant.aggregateSocial(socialRecords,b.symbol).reliability-MarketEdgeQuant.aggregateSocial(socialRecords,a.symbol).reliability);
+      if (filter === 'risk') visible.sort((a,b)=>(a.quant?.risk?.lossAtStop||Infinity)-(b.quant?.risk?.lossAtStop||Infinity));
+      if (filter === 'liquidity') visible.sort((a,b)=>b.liquidityScore-a.liquidityScore);
+      if (['overall','quality'].includes(filter)) visible.sort((a,b)=>(b.quality||0)-(a.quality||0));
+      els.list.innerHTML = '<div class="market-row table-head"><span>Market</span><span>Price</span><span>24h</span><span>Decision</span></div>' + visible.map(r=>{
+        const decision = r.quant?.decision || 'ANALYSIS UNAVAILABLE';
+        const badgeClass = decision === 'TAKE TRADE' ? (r.quant.direction==='short'?'short':'buy') : decision === 'WAIT' ? 'watch' : 'avoid';
+        const label = decision === 'TAKE TRADE' ? `${r.quant.direction.toUpperCase()} · ${r.quality}/100` : `${decision} · ${r.quality||0}/100`;
+        return `
         <div class="market-row">
           <div class="market-asset"><span class="mini-coin">${r.symbol}</span><span><b>${r.symbol}</b><small>${r.name}</small></span></div>
           <span class="num">${formatPrice(r.price)} USDT</span>
           <span class="num ${r.change24>=0?'positive':'negative'}">${r.change24>=0?'+':''}${r.change24.toFixed(1)}%</span>
-          <span><span class="badge ${r.action}">${['buy','short'].includes(r.action)?`${r.agreeVotes}/${r.sourceCount} ${r.direction}`:signalLabel(r.action)}</span></span>
-        </div>`).join('');
-    }
-    function buildTradePlan(result) {
-      const balance = Math.max(0, Number(els.balance.value) || 0);
-      const riskPct = Number(els.risk.value);
-      const leverage = Math.max(1, Number(els.leverage.value) || 1);
-      const isShort = result.action === 'short';
-      const volatilityStop = Math.max(0, isShort ? result.price + result.atr * 1.5 : result.price - result.atr * 1.5);
-      const bufferedLeveragedStop = isShort
-        ? result.price * (1 + 0.65 / leverage)
-        : result.price * (1 - 0.65 / leverage);
-      const stop = leverage > 1
-        ? Math.max(0, isShort ? Math.min(volatilityStop, bufferedLeveragedStop) : Math.max(volatilityStop, bufferedLeveragedStop))
-        : volatilityStop;
-      const stopDistance = Math.abs(result.price - stop);
-      const stopPct = stopDistance / result.price;
-      const selectedRisk = balance * riskPct;
-      const riskSizedNotional = stopPct > 0 ? selectedRisk / stopPct : 0;
-      const maxNotional = balance * leverage;
-      const notional = Math.min(maxNotional, Math.max(MIN_ORDER_NOTIONAL, riskSizedNotional));
-      const margin = notional / leverage;
-      const actualStopLoss = notional * stopPct;
-      const actualRiskPct = balance > 0 ? actualStopLoss / balance : 0;
-      const target = Math.max(0, isShort ? result.price - stopDistance * 2 : result.price + stopDistance * 2);
-      const estimatedLiquidation = Math.max(0, isShort ? result.price * (1 + 1 / leverage) : result.price * (1 - 1 / leverage));
-      const fits = maxNotional >= MIN_ORDER_NOTIONAL && margin <= balance && notional >= MIN_ORDER_NOTIONAL;
-      return { balance, riskPct, leverage, isShort, stop, target, stopPct, selectedRisk, notional, margin, actualStopLoss, actualRiskPct, estimatedLiquidation, fits };
-    }
-    function renderAlternatives(results) {
-      const balance = Math.max(0, Number(els.balance.value) || 0);
-      const candidates = results.slice(1).filter(result=>['buy','short'].includes(result.action)).map(result=>{
-        return { result, ...buildTradePlan(result) };
-      }).filter(plan=>plan.fits).slice(0,2);
-      if (!candidates.length) {
-        const leverage = Math.max(1, Number(els.leverage.value) || 1);
-        els.alternatives.innerHTML = `<div class="empty" style="grid-column:1/-1"><strong>No other qualified live trade fits ${balance.toFixed(2)} USDC at ${leverage}×</strong>The app scanned ${results.length} markets. Your balance × leverage must cover the 10 USDC minimum contract value.</div>`;
-        return;
-      }
-      els.alternatives.innerHTML = candidates.map(({result,isShort,stop,target,margin,notional,leverage,actualStopLoss,actualRiskPct})=>`
-        <article class="alternative">
-          <div class="alternative-head">
-            <div><strong>${result.symbol} ${isShort?'Short':'Long'}</strong><span>${result.agreeVotes}/${result.sourceCount} feeds agree · ${result.score.toFixed(1)}/8</span></div>
-            <span class="badge ${isShort?'short':'buy'}">Qualified</span>
-          </div>
-          <div class="alternative-values">
-            <div class="alternative-value"><span>Entry near</span><b>${formatPrice(result.price)} USDT</b></div>
-            <div class="alternative-value"><span>Invo position size</span><b>${margin.toFixed(2)} USDC</b></div>
-            <div class="alternative-value"><span>Contract value</span><b>${notional.toFixed(2)} USDC</b></div>
-            <div class="alternative-value"><span>Take profit</span><b>${formatPrice(target)} USDT</b></div>
-            <div class="alternative-value"><span>Stop loss</span><b>${formatPrice(stop)} USDT</b></div>
-            <div class="alternative-value"><span>Leverage</span><b>${leverage}×</b></div>
-            <div class="alternative-value"><span>Loss at stop</span><b>${actualStopLoss.toFixed(2)} USDC · ${(actualRiskPct*100).toFixed(1)}%</b></div>
-          </div>
-        </article>`).join('') + (candidates.length < 2 ? `<div class="empty"><strong>Only one backup qualified</strong>A second trade did not pass the same live-data and balance rules.</div>` : '');
-    }
-    function renderRecommendation(best) {
-      const balance = Math.max(0, Number(els.balance.value) || 0), currency = 'USDC', riskPct = Number(els.risk.value);
-      latestBest = best || null;
-      if (!best) {
-        els.title.textContent = 'No live entry'; els.badge.className = 'badge avoid'; els.badge.textContent = 'No data';
-        els.rec.innerHTML = '<div class="empty"><strong>No market data</strong>Do not place a real-money trade without fresh prices.</div>';
-        return;
-      }
-      if (!['buy','short'].includes(best.action)) {
-        const leanShort = best.lean === 'short';
-        const trigger = Math.max(0, leanShort ? best.price - best.atr * .5 : best.price + best.atr * .5);
-        const invalidation = Math.max(0, leanShort ? best.price + best.atr : best.price - best.atr);
-        const side = leanShort ? 'Short' : 'Long';
-        els.title.textContent = `No entry yet—watch ${best.symbol}`; els.badge.className = 'badge watch'; els.badge.textContent = `${side} is closest`;
-        els.rec.innerHTML = `
-          <div class="asset-row">
-            <div class="asset-name"><span class="coin">${best.symbol}</span><span><strong>${best.name}</strong><span>Closest real-money setup · not qualified yet</span></span></div>
-            <div class="price"><strong>${formatPrice(best.price)} USDT</strong><span>${best.change24>=0?'+':''}${best.change24.toFixed(1)}% / 24h</span></div>
-          </div>
-          <div class="score-line"><span>Closest ${side} evidence</span><strong>${best.score.toFixed(1)} / 8</strong></div>
-          <div class="meter"><span style="width:${best.score/8*100}%"></span></div>
-          <div class="order-plan">
-            <div class="plan-box"><span>Set price alert</span><strong>${formatPrice(trigger)} USDT</strong></div>
-            <div class="plan-box"><span>Closest direction</span><strong>${side}</strong></div>
-            <div class="plan-box"><span>Idea invalid above/below</span><strong>${formatPrice(invalidation)} USDT</strong></div>
-            <div class="plan-box"><span>Real money now</span><strong>0.00 USDC</strong></div>
-          </div>
-          <div class="invo-entry">
-            <div class="invo-entry-head"><div><h3>Do this instead of forcing a trade</h3><p>Set the alert above. When it triggers, scan again; only enter if two feeds then confirm ${side}.</p></div><span class="badge watch">Alert</span></div>
-          </div>`;
-        return;
-      }
-      const plan = buildTradePlan(best);
-      const { isShort, leverage, stop, target, selectedRisk, notional, margin, actualStopLoss, actualRiskPct, estimatedLiquidation } = plan;
-      const directionText = isShort ? 'Short' : 'Long';
-      const directionClass = isShort ? 'short' : 'buy';
-      const scorePct = best.score / 8 * 100;
-      if (!plan.fits) {
-        const estimatedBalanceNeeded = Math.ceil(MIN_ORDER_NOTIONAL / leverage);
-        els.title.textContent = 'Setup found—but the order is still too small'; els.badge.className = 'badge watch'; els.badge.textContent = `Too small at ${leverage}×`;
-        els.rec.innerHTML = `
-          <div class="asset-row">
-            <div class="asset-name"><span class="coin">${best.symbol}</span><span><strong>${best.name}</strong><span>${best.agreeVotes}/${best.sourceCount} feeds agree ${directionText} · no live entry</span></span></div>
-            <div class="price"><strong>${balance.toFixed(2)} USDC</strong><span>your entered Invo balance</span></div>
-          </div>
-          <div class="reasons">
-            <div class="reason"><i>✓</i><span>Your ${balance.toFixed(2)} USDC balance creates up to ${(balance*leverage).toFixed(2)} USDC of contract value at ${leverage}×</span></div>
-            <div class="reason"><i>!</i><span>Hyperliquid orders need at least ${MIN_ORDER_NOTIONAL.toFixed(0)} USDC of position value</span></div>
-            <div class="reason"><i>!</i><span>The selected leverage cannot reach that minimum with this balance</span></div>
-          </div>
-          <div class="invo-entry">
-            <div class="invo-entry-head"><div><h3>What to enter in Invo</h3><p>Nothing yet—do not create this live trade with the balance entered above.</p></div><span class="badge watch">Wait</span></div>
-            <p class="fresh-note">At ${leverage}×, you need at least roughly ${estimatedBalanceNeeded} USDC of available margin for the minimum contract value.</p>
-          </div>`;
-        return;
-      }
-      els.title.textContent = `${best.symbol} has the cleanest ${directionText}`; els.badge.className = `badge ${directionClass}`; els.badge.textContent = `Qualified ${directionText}`;
-      els.rec.innerHTML = `
-        <div class="asset-row">
-          <div class="asset-name"><span class="coin">${best.symbol}</span><span><strong>${best.name}</strong><span>${best.instId} · isolated perpetual</span></span></div>
-          <div class="price"><strong>${formatPrice(best.price)} USDT</strong><span>${best.change24>=0?'+':''}${best.change24.toFixed(1)}% / 24h</span></div>
-        </div>
-        <div class="score-line"><span>Evidence quality · ${best.agreeVotes}/${best.sourceCount} feeds agree ${directionText}</span><strong>${best.score.toFixed(1)} / 8</strong></div>
-        <div class="meter"><span style="width:${scorePct}%"></span></div>
-        <div class="reasons">${best.reasons.slice(0,4).map(reason=>`<div class="reason"><i>✓</i><span>${reason}</span></div>`).join('')}</div>
-        <div class="order-plan">
-          <div class="plan-box"><span>Margin to use</span><strong>${margin.toFixed(2)} of ${balance.toFixed(2)} ${currency}</strong></div>
-          <div class="plan-box"><span>Contract value</span><strong>${notional.toFixed(2)} ${currency} at ${leverage}×</strong></div>
-          <div class="plan-box"><span>Loss if stop fills</span><strong>${actualStopLoss.toFixed(2)} ${currency} · ${(actualRiskPct*100).toFixed(1)}%</strong></div>
-          <div class="plan-box"><span>Selected risk target</span><strong>${selectedRisk.toFixed(2)} ${currency}</strong></div>
-          <div class="plan-box"><span>Stop reference</span><strong>${formatPrice(stop)} USDT</strong></div>
-          <div class="plan-box"><span>2R target</span><strong>${formatPrice(target)} USDT</strong></div>
-          <div class="plan-box"><span>Est. liquidation</span><strong>≈ ${formatPrice(estimatedLiquidation)} USDT</strong></div>
-          <div class="plan-box"><span>Mode</span><strong>Isolated ${leverage}×</strong></div>
-        </div>
-        <section class="invo-entry" aria-label="Values to enter in Invo">
-          <div class="invo-entry-head">
-            <div><h3>Enter these exact values in Invo</h3><p>Open Create Trade and copy each line into the matching field.</p></div>
-            <span class="badge ${directionClass}">${directionText}</span>
-          </div>
-          <div class="invo-fields">
-            <div class="invo-field"><b>1</b><span>Coin</span><strong>${best.name} (${best.symbol})</strong></div>
-            <div class="invo-field"><b>2</b><span>Direction</span><strong class="${isShort?'short-value':'long-value'}">${directionText}</strong></div>
-            <div class="invo-field"><b>3</b><span>Take-Profit Price</span><strong>${formatPrice(target)} USDT</strong></div>
-            <div class="invo-field"><b>4</b><span>Stop-Loss Price</span><strong>${formatPrice(stop)} USDT</strong></div>
-            <div class="invo-field"><b>5</b><span>Leverage</span><strong>${leverage}×</strong></div>
-            <div class="invo-field"><b>6</b><span>Position Size (margin)</span><strong>${margin.toFixed(2)} USDC</strong></div>
-          </div>
-          <p class="fresh-note">${actualRiskPct > riskPct * 1.05 ? `High-risk minimum order: losing at the stop is about ${(actualRiskPct*100).toFixed(1)}% of your balance, above your selected ${(riskPct*100).toFixed(1)}% target. ` : ''}Liquidation is only an estimate—check Invo's displayed liquidation price. Only enter near ${formatPrice(best.price)} USDT.</p>
-        </section>
-        <div class="confirm">
-          <label class="confirm-note"><input id="ack" type="checkbox">I understand this can lose money and is not guaranteed.</label>
-          <button id="prepare" class="prepare" type="button" disabled>Copy exact Invo values</button>
+          <span><span class="badge ${badgeClass}">${label}</span></span>
         </div>`;
-      const ack = document.getElementById('ack'), prepare = document.getElementById('prepare');
+      }).join('') || '<div class="empty"><strong>No markets match this filter</strong>Try Best overall or scan again later.</div>';
+    }
+    function renderQuantAlternatives(results) {
+      const candidates = results.slice(1).filter(result=>result.quant?.decision==='TAKE TRADE' && result.quant.risk?.valid).slice(0,2);
+      if (!candidates.length) {
+        els.alternatives.innerHTML = `<div class="empty" style="grid-column:1/-1"><strong>No other validated trade is available</strong>The scanner will not convert WAIT or NO TRADE into a leveraged position merely to provide another choice.</div>`;
+        return;
+      }
+      els.alternatives.innerHTML = candidates.map(result=>{
+        const q=result.quant, risk=q.risk, isShort=q.direction==='short';
+        return `
+          <article class="alternative">
+            <div class="alternative-head"><div><strong>${result.symbol} ${q.direction.toUpperCase()}</strong><span>${q.strategy} · ${q.regime}</span></div><span class="badge ${isShort?'short':'buy'}">${q.quality}/100</span></div>
+            <div class="alternative-values">
+              <div class="alternative-value"><span>Entry near</span><b>${formatPrice(q.entry)} USDT</b></div>
+              <div class="alternative-value"><span>Stop loss</span><b>${formatPrice(q.stop)} USDT</b></div>
+              <div class="alternative-value"><span>TP1 / TP2</span><b>${formatPrice(q.target1)} / ${formatPrice(q.target2)}</b></div>
+              <div class="alternative-value"><span>Contract value</span><b>${risk.notional.toFixed(2)} USDC</b></div>
+              <div class="alternative-value"><span>Margin / leverage</span><b>${risk.margin.toFixed(2)} · ${risk.leverage}×</b></div>
+              <div class="alternative-value"><span>Loss at stop</span><b>${risk.lossAtStop.toFixed(2)} USDC</b></div>
+            </div>
+          </article>`;
+      }).join('') + (candidates.length < 2 ? '<div class="empty"><strong>Only one backup passed</strong>A second market did not satisfy the same evidence and risk rules.</div>' : '');
+    }
+    function renderQuantRecommendation(best) {
+      latestBest = best || null;
+      if (!best || !best.quant) {
+        els.title.textContent='No analysable market'; els.badge.className='badge avoid'; els.badge.textContent='ANALYSIS UNAVAILABLE';
+        els.rec.innerHTML='<div class="empty"><strong>No reliable analysis</strong>Fresh, valid data is required before any trade plan is generated.</div>';
+        return;
+      }
+      const q=best.quant, decision=q.decision, direction=q.direction||best.lean||'neutral';
+      const directionText=direction==='short'?'SHORT':direction==='long'?'LONG':'NEUTRAL';
+      const decisionClass=decision==='TAKE TRADE'?(direction==='short'?'short':'buy'):decision==='WAIT'?'watch':'avoid';
+      els.title.textContent=`${best.symbol} — ${directionText}`;
+      els.badge.className=`badge ${decisionClass}`; els.badge.textContent=decision;
+      const common=`
+        <div class="asset-row">
+          <div class="asset-name"><span class="coin">${best.symbol}</span><span><strong>${best.name}</strong><span>${q.strategy||'No strategy'} · ${q.regime||'Unknown regime'}</span></span></div>
+          <div><div class="quality-score"><strong>${q.quality||0}</strong><span>/100 quality</span></div><div class="price"><span>${formatPrice(best.price)} USDT · ${best.sourceCount} feeds</span></div></div>
+        </div>
+        <div class="score-line"><span>Setup quality—not a win probability</span><strong>${q.quality||0} / 100</strong></div>
+        <div class="meter"><span style="width:${q.quality||0}%"></span></div>
+        <div class="evidence-grid">
+          <div class="evidence-item"><span>Decision</span><strong>${decision}</strong></div>
+          <div class="evidence-item"><span>Regime</span><strong>${q.regime||'Unavailable'}</strong></div>
+          <div class="evidence-item"><span>Strategy</span><strong>${q.strategy||'None qualified'}</strong></div>
+          <div class="evidence-item"><span>Structure</span><strong>${q.frame?.structure?.label||'Unavailable'}</strong></div>
+          <div class="evidence-item"><span>RSI 14</span><strong>${Number.isFinite(q.frame?.rsi)?q.frame.rsi.toFixed(1):'—'}</strong></div>
+          <div class="evidence-item"><span>Relative volume</span><strong>${Number.isFinite(q.frame?.relativeVolume)?q.frame.relativeVolume.toFixed(2)+'×':'Unavailable'}</strong></div>
+        </div>`;
+      if (decision!=='TAKE TRADE' || !q.risk?.valid) {
+        els.rec.innerHTML=common+`
+          <div class="reasons" style="margin-top:18px"><div class="reason"><i>!</i><span>${q.reason}</span></div>${(q.reasons||[]).slice(0,4).map(reason=>`<div class="reason"><i>·</i><span>${reason}</span></div>`).join('')}</div>
+          <div class="invo-entry"><div class="invo-entry-head"><div><h3>Nothing to enter into Invo</h3><p>The setup failed at least one evidence, cost, account-size or liquidation rule.</p></div><span class="badge ${decisionClass}">${decision}</span></div>
+          <p class="fresh-note">${q.reason}. Leverage is not used to bypass the selected loss limit.</p></div>
+          <details class="analysis-details"><summary>What would invalidate or improve this setup?</summary><p class="analysis-copy">Wait for the configured quality threshold, two-feed directional confirmation and a risk-sized notional above the platform minimum. Scan again after a completed candle rather than chasing a move.</p></details>`;
+        return;
+      }
+      const risk=q.risk, isShort=q.direction==='short', currency='USDC';
+      els.rec.innerHTML=common+`
+        <div class="reasons" style="margin-top:18px">${(q.reasons||[]).slice(0,6).map(reason=>`<div class="reason"><i>✓</i><span>${reason}</span></div>`).join('')}</div>
+        <div class="order-plan">
+          <div class="plan-box"><span>Notional position</span><strong>${risk.notional.toFixed(2)} ${currency}</strong></div>
+          <div class="plan-box"><span>Margin required</span><strong>${risk.margin.toFixed(2)} ${currency}</strong></div>
+          <div class="plan-box"><span>Leverage selected</span><strong>${risk.leverage}× · lowest required</strong></div>
+          <div class="plan-box"><span>Loss at stop incl. costs</span><strong>${risk.lossAtStop.toFixed(2)} ${currency}</strong></div>
+          <div class="plan-box"><span>Risk / reward</span><strong>${q.rr1.toFixed(2)}R / ${q.rr2.toFixed(2)}R</strong></div>
+          <div class="plan-box"><span>Liquidation distance</span><strong>${(risk.liquidationDistancePct*100).toFixed(1)}%</strong></div>
+        </div>
+        <section class="invo-entry" aria-label="Exact Invo execution card">
+          <div class="invo-entry-head"><div><h3>Enter this into Invo</h3><p>Position/contract value and margin are deliberately shown as different numbers.</p></div><span class="badge ${isShort?'short':'buy'}">${directionText}</span></div>
+          <div class="invo-fields">
+            <div class="invo-field"><b>1</b><span>Asset</span><strong>${best.name} (${best.symbol})</strong></div>
+            <div class="invo-field"><b>2</b><span>Direction</span><strong class="${isShort?'short-value':'long-value'}">${directionText}</strong></div>
+            <div class="invo-field"><b>3</b><span>Entry zone</span><strong>${formatPrice(q.entryZone.low)}–${formatPrice(q.entryZone.high)} USDT</strong></div>
+            <div class="invo-field"><b>4</b><span>Ideal entry / current reference</span><strong>${formatPrice(q.idealEntry)} / ${formatPrice(q.entry)} USDT</strong></div>
+            <div class="invo-field"><b>5</b><span>Stop-Loss Price</span><strong>${formatPrice(q.stop)} USDT</strong></div>
+            <div class="invo-field"><b>6</b><span>TP1 / TP2</span><strong>${formatPrice(q.target1)} / ${formatPrice(q.target2)} USDT</strong></div>
+            <div class="invo-field"><b>7</b><span>Leverage</span><strong>${risk.leverage}× isolated</strong></div>
+            <div class="invo-field"><b>8</b><span>Position Size / Margin field</span><strong>${risk.margin.toFixed(2)} USDC</strong></div>
+            <div class="invo-field"><b>9</b><span>Contract / Notional value</span><strong>${risk.notional.toFixed(2)} USDC</strong></div>
+            <div class="invo-field"><b>10</b><span>Estimated liquidation</span><strong>≈ ${formatPrice(risk.estimatedLiquidation)} USDT</strong></div>
+            <div class="invo-field"><b>11</b><span>Invalidation</span><strong>${q.invalidationCondition}</strong></div>
+            <div class="invo-field"><b>12</b><span>Trailing rule</span><strong>${q.trailingRule}</strong></div>
+          </div>
+          <p class="fresh-note">Only enter while Invo's mark price is close to ${formatPrice(q.entry)}. Confirm Invo's actual liquidation price and active TP/SL before submitting.</p>
+        </section>
+        <details class="analysis-details"><summary>Why this trade and what invalidates it?</summary><p class="analysis-copy">${q.reason}. A move through ${formatPrice(q.stop)} invalidates the setup. The score is not a probability and historical testing may still be insufficient.</p></details>
+        <div class="confirm"><label class="confirm-note"><input id="ack" type="checkbox">I understand this is research, not guaranteed profit.</label><button id="prepare" class="prepare" type="button" disabled>Copy exact Invo values</button></div>`;
+      const ack=document.getElementById('ack'), prepare=document.getElementById('prepare');
       ack.addEventListener('change',()=>prepare.disabled=!ack.checked);
       prepare.addEventListener('click',async()=>{
-        const text = `INVO CREATE TRADE\nCoin: ${best.name} (${best.symbol})\nDirection: ${directionText}\nTake-Profit Price: ${formatPrice(target)} USDT\nStop-Loss Price: ${formatPrice(stop)} USDT\nLeverage: ${leverage}x\nPosition Size (margin): ${margin.toFixed(2)} USDC\nContract value: ${notional.toFixed(2)} USDC\nEstimated liquidation: ${formatPrice(estimatedLiquidation)} USDT\nLoss if stop fills: ${actualStopLoss.toFixed(2)} USDC (${(actualRiskPct*100).toFixed(1)}% of balance)\nOnly enter near: ${formatPrice(best.price)} USDT`;
-        await navigator.clipboard.writeText(text).catch(()=>{}); showToast('Exact Invo values copied. Check every field before submitting.');
+        const text=`INVO CREATE TRADE\nAsset: ${best.name} (${best.symbol})\nDirection: ${directionText}\nStrategy: ${q.strategy}\nEntry zone: ${formatPrice(q.entryZone.low)}–${formatPrice(q.entryZone.high)} USDT\nIdeal entry: ${formatPrice(q.idealEntry)} USDT\nCurrent reference: ${formatPrice(q.entry)} USDT\nStop-Loss Price: ${formatPrice(q.stop)} USDT\nTP1: ${formatPrice(q.target1)} USDT\nTP2: ${formatPrice(q.target2)} USDT\nLeverage: ${risk.leverage}x isolated\nPosition Size / Margin: ${risk.margin.toFixed(2)} USDC\nContract / Notional Value: ${risk.notional.toFixed(2)} USDC\nEstimated Liquidation: ${formatPrice(risk.estimatedLiquidation)} USDT\nMaximum Planned Loss incl. modeled costs: ${risk.lossAtStop.toFixed(2)} USDC\nRisk/Reward: ${q.rr1.toFixed(2)}R / ${q.rr2.toFixed(2)}R\nInvalidation: ${q.invalidationCondition}\nTrailing rule: ${q.trailingRule}\nSetup Quality: ${q.quality}/100`;
+        await navigator.clipboard.writeText(text).catch(()=>{}); showToast('Exact Invo card copied. Verify every live field before submitting.');
       });
     }
     function checkInvoTrader() {
@@ -637,16 +780,151 @@
       if (pnl <= 0) issues.push('P&amp;L is not positive');
       const selectedLeverage = Math.max(1, Number(els.leverage.value) || 1);
       if (leverage > selectedLeverage) issues.push(`${leverage}× is above your selected ${selectedLeverage}× limit`);
-      if (!latestBest || !['buy','short'].includes(latestBest.action)) issues.push('the market scan has no qualified live direction');
-      else if (side !== latestBest.direction) issues.push(`the trader is ${side}, but the qualified scan is ${latestBest.direction} ${latestBest.symbol}`);
-      if (balance * selectedLeverage < MIN_ORDER_NOTIONAL) issues.push(`${balance.toFixed(2)} USDC at ${selectedLeverage}× cannot reach the 10 USDC minimum contract value`);
+      if (!latestBest || latestBest.quant?.decision !== 'TAKE TRADE') issues.push('the market scan has no validated TAKE TRADE decision');
+      else if (side !== latestBest.quant.direction) issues.push(`the trader is ${side}, but the validated scan is ${latestBest.quant.direction} ${latestBest.symbol}`);
+      if (balance * Number(els.maxExposure.value) < MIN_ORDER_NOTIONAL) issues.push(`${balance.toFixed(2)} USDC cannot reach the minimum risk-sized contract value under the selected exposure limit`);
       if (issues.length) {
         els.traderResult.className = 'trader-result skip';
         els.traderResult.innerHTML = `<strong>Skip this mimic.</strong> ${issues.join('; ')}. A high win rate cannot cancel these risks.`;
       } else {
         els.traderResult.className = 'trader-result pass';
-        els.traderResult.innerHTML = `<strong>Passes the first filter—not an automatic buy.</strong> ${winRate.toFixed(1)}% across ${total} closed trades, positive P&amp;L, leverage within your selected ${selectedLeverage}× limit and direction aligned with the scan. Use Market Edge's calculated margin and stop instead of copying the trader's size.`;
+        const reliability=MarketEdgeQuant.traderReliability({wins,losses,trades:total,expectancy:pnl/100,leverage});
+        els.traderResult.innerHTML = `<strong>Reliability estimate: ${reliability}/100—not an automatic trade.</strong> ${winRate.toFixed(1)}% across ${total} closed trades, positive P&amp;L, leverage within your selected limit and direction aligned with the scan. Use Market Edge's risk-sized plan instead of copying the trader's size.`;
       }
+    }
+    function parseSocialInput(text) {
+      const trimmed=text.trim();
+      if (!trimmed) return [];
+      if (trimmed.startsWith('[') || trimmed.startsWith('{')) {
+        const value=JSON.parse(trimmed);
+        return Array.isArray(value)?value:[value];
+      }
+      const lines=trimmed.split(/\r?\n/).filter(Boolean), headers=lines.shift().split(',').map(value=>value.trim());
+      return lines.map(line=>{
+        const values=line.split(',').map(value=>value.trim()), record={};
+        headers.forEach((header,index)=>record[header]=values[index]);
+        return record;
+      });
+    }
+    function renderSocialSummary() {
+      if (!socialRecords.length) {
+        els.socialSummary.innerHTML='<strong>No authorised social data imported.</strong> Social weighting is zero; the technical engine does not invent trader positioning.';
+        return;
+      }
+      const reliabilities=socialRecords.map(MarketEdgeQuant.traderReliability), average=MarketEdgeQuant.mean(reliabilities);
+      const assets=[...new Set(socialRecords.map(record=>String(record.asset||'').toUpperCase()).filter(Boolean))];
+      els.socialSummary.innerHTML=`<strong>${socialRecords.length} authorised records loaded · average reliability ${average.toFixed(0)}/100.</strong> Assets covered: ${assets.join(', ')||'none'}. Small samples and excessive leverage are automatically penalised.`;
+    }
+    function forwardLedger() {
+      try { return JSON.parse(localStorage.getItem('market-edge-forward')||'[]'); } catch { return []; }
+    }
+    function saveForward(records) { localStorage.setItem('market-edge-forward',JSON.stringify(records.slice(-250))); }
+    function updateForward(results) {
+      const records=forwardLedger();
+      records.forEach(record=>{
+        if (record.status!=='open') return;
+        const market=results.find(result=>result.symbol===record.symbol);
+        if (!market?.candles) return;
+        const future=market.candles.filter(candle=>candle.time>record.timestamp);
+        for (const candle of future) {
+          const stopHit=record.direction==='long'?candle.low<=record.stop:candle.high>=record.stop;
+          const targetHit=record.direction==='long'?candle.high>=record.target1:candle.low<=record.target1;
+          if (stopHit || targetHit) { record.status=stopHit?'loss':'win'; record.resultR=stopHit?-1:record.rr1; record.closedAt=candle.time; break; }
+        }
+      });
+      const best=results.find(result=>result.quant?.decision==='TAKE TRADE'&&result.quant.risk?.valid);
+      if (best && els.forwardMode.value==='on') {
+        const q=best.quant, key=`${best.symbol}-${q.direction}-${q.frame.timestamp}`;
+        if (!records.some(record=>record.key===key)) records.push({
+          key,symbol:best.symbol,direction:q.direction,strategy:q.strategy,quality:q.quality,entry:q.entry,idealEntry:q.idealEntry,entryZone:q.entryZone,
+          stop:q.stop,target1:q.target1,target2:q.target2,rr1:q.rr1,rr2:q.rr2,leverage:q.risk.leverage,regime:q.regime,macroRegime:q.macroRegime,
+          alignment:q.alignment,features:{rsi:q.frame.rsi,relativeVolume:q.frame.relativeVolume,atrPct:q.frame.atrPct,ema20Slope:q.frame.ema20Slope,structure:q.frame.structure.label},
+          timestamp:q.frame.timestamp,status:'open',resultR:null
+        });
+      }
+      saveForward(records); renderForward();
+    }
+    function renderForward() {
+      const records=forwardLedger(), wins=records.filter(record=>record.status==='win').length, losses=records.filter(record=>record.status==='loss').length, open=records.filter(record=>record.status==='open').length;
+      const completed=records.filter(record=>Number.isFinite(record.resultR)), averageR=completed.length?MarketEdgeQuant.mean(completed.map(record=>record.resultR)):0;
+      els.forwardBadge.textContent=`${records.length} recorded`;
+      els.forwardResult.innerHTML=records.length
+        ? `<strong>${open} open · ${wins} wins · ${losses} losses · ${averageR.toFixed(2)}R average completed result.</strong> Original signal fields remain immutable; only outcome fields are added. These observations are not mixed with historical backtests. ${wins+losses<20?'Sample is still too small for a live-readiness conclusion.':''}`
+        : '<strong>No forward setups recorded.</strong> Historical backtests and forward observations remain separate.';
+    }
+    function renderBacktest(result, symbol) {
+      const rows=[['Training 60%',result.training],['Validation 20%',result.validation],['Untouched test 20%',result.test],['Rolling unseen windows',result.walkForward.aggregate]];
+      const enough=result.test.trades>=20, positive=result.validation.expectancy>0&&result.test.expectancy>0;
+      const verdict=positive&&result.walkForward.aggregate.expectancy>0&&result.walkForward.stability.stable&&result.overall.trades>=10?'PAPER TRADE ONLY':'NOT READY';
+      const groupBy=key=>Object.entries(result.trades.reduce((groups,trade)=>{ (groups[trade[key]]||=[]).push(trade); return groups; },{}))
+        .map(([name,trades])=>`${name}: ${trades.length} trades, ${MarketEdgeQuant.performanceStats(trades).expectancy.toFixed(2)}R expectancy`).join(' · ')||'No qualifying trades';
+      const formatGroups=groups=>Object.entries(groups).map(([name,stats])=>`${name}: ${stats.trades} trades, ${(stats.winRate*100).toFixed(1)}% wins, ${stats.expectancy.toFixed(2)}R`).join(' · ')||'No sample';
+      els.backtestResult.innerHTML=`
+        <strong>${symbol} · ${result.overall.trades} total historical trades · deployment verdict: ${verdict}</strong>
+        <div class="metric-grid" style="margin-top:12px">
+          <div class="metric"><span>Average win</span><strong>${result.overall.averageWin.toFixed(2)}R</strong></div>
+          <div class="metric"><span>Average loss</span><strong>${result.overall.averageLoss.toFixed(2)}R</strong></div>
+          <div class="metric"><span>Sharpe</span><strong>${result.overall.sharpe?result.overall.sharpe.toFixed(2):'—'}</strong></div>
+          <div class="metric"><span>Sortino</span><strong>${result.overall.sortino?result.overall.sortino.toFixed(2):'—'}</strong></div>
+        </div>
+        <table class="split-table"><thead><tr><th>Split</th><th>Trades</th><th>Win rate</th><th>Expectancy</th><th>Profit factor</th><th>Max DD</th></tr></thead><tbody>
+        ${rows.map(([label,stats])=>`<tr><td>${label}</td><td>${stats.trades}</td><td>${(stats.winRate*100).toFixed(1)}%</td><td>${stats.expectancy.toFixed(2)}R</td><td>${stats.profitFactor?stats.profitFactor.toFixed(2):'—'}</td><td>${stats.maxDrawdownR.toFixed(2)}R</td></tr>`).join('')}
+        </tbody></table>
+        <p class="analysis-copy"><strong>Strategy breakdown:</strong> ${groupBy('strategy')}</p>
+        <p class="analysis-copy"><strong>Regime breakdown:</strong> ${groupBy('regime')}</p>
+        <p class="analysis-copy"><strong>LONG vs SHORT:</strong> ${formatGroups(result.byDirection)}</p>
+        <p class="analysis-copy"><strong>Unseen quality buckets (not probabilities):</strong> ${formatGroups(result.byQuality)}</p>
+        <p class="analysis-copy"><strong>Parameter stability:</strong> ${result.walkForward.stability.positive}/${result.walkForward.stability.tested} neighbouring settings had positive later-period expectancy · ${result.walkForward.stability.stable?'stable region':'unstable / insufficient'}.</p>
+        <div class="verdict">${verdict}. Next-bar entries, partial TP1/TP2 exits, conservative same-candle stop handling, maximum holding time and 0.16% round-trip fees/slippage were modeled. Funding is omitted because reliable historical funding was not loaded. Rolling walk-forward parameters are selected only from earlier training/validation data, then evaluated on the next unseen window. This browser test is still 4h-only, so it cannot unlock the five-timeframe live engine. ${!enough?'The untouched test sample is below 20 trades. ':''}${positive?'Fixed-split validation and test expectancy were positive.':'Positive out-of-sample expectancy was not demonstrated.'}</div>`;
+    }
+    async function runBacktest() {
+      if (!latestBest?.candles?.length) return;
+      els.runBacktest.disabled=true; els.runBacktest.textContent='Testing…';
+      await new Promise(resolve=>setTimeout(resolve,30));
+      try {
+        const result=MarketEdgeQuant.backtest(latestBest.candles,currentSettings());
+        renderBacktest(result,latestBest.symbol);
+        const key=`${latestBest.symbol}-${latestBest.quant?.strategy||'UNKNOWN'}-${latestBest.quant?.direction||'none'}`;
+        const evidence=JSON.parse(localStorage.getItem('market-edge-evidence')||'{}');
+        evidence[key]={
+          timestamp:Date.now(),validation:result.validation,test:result.test,walkForward:result.walkForward.aggregate,
+          stability:result.walkForward.stability,exactMultiTimeframe:false,
+          positive:result.validation.trades>=5&&result.validation.expectancy>0&&result.test.trades>=10&&result.test.expectancy>0&&result.walkForward.aggregate.expectancy>0&&result.walkForward.stability.stable
+        };
+        localStorage.setItem('market-edge-evidence',JSON.stringify(evidence));
+      } catch (error) {
+        els.backtestResult.innerHTML=`<strong>Backtest unavailable.</strong> ${error.message}. No result was fabricated.`;
+      } finally { els.runBacktest.disabled=false; els.runBacktest.textContent='Backtest best scanned market'; }
+    }
+    function applyPortfolioGuard(result) {
+      const settings=currentSettings(), q=result.quant;
+      if (!q || q.decision!=='TAKE TRADE') return result;
+      if (settings.openDirection!=='none' && settings.maxConcurrent<=1) return {...result,quant:{...q,decision:'NO TRADE',reason:'Maximum concurrent trades reached by the existing position'}};
+      if (settings.openDirection===q.direction) return {...result,quant:{...q,decision:'NO TRADE',reason:`Portfolio already has correlated ${q.direction.toUpperCase()} crypto exposure`}};
+      return result;
+    }
+    function applyHistoricalEvidenceGuard(result) {
+      const q=result.quant;
+      if (!q||q.decision!=='TAKE TRADE') return result;
+      let evidence={};
+      try { evidence=JSON.parse(localStorage.getItem('market-edge-evidence')||'{}'); } catch {}
+      const record=evidence[`${result.symbol}-${q.strategy}-${q.direction}`];
+      if (!record) return {...result,quant:{...q,decision:'WAIT',reason:'No stored out-of-sample evidence for this asset, strategy and direction; run the backtest'}};
+      if (!record.positive) return {...result,quant:{...q,decision:'NO TRADE',reason:'Stored validation/test evidence does not demonstrate positive expectancy'}};
+      if (!record.exactMultiTimeframe) return {...result,quant:{...q,decision:'WAIT',reason:'Historical test is 4h-only and does not exactly reproduce the live five-timeframe logic'}};
+      return result;
+    }
+    function applyDirectionResearchGuard(result) {
+      const q=result.quant, finding=RESEARCH_GATES[result.symbol];
+      if (!q||!finding||!['TAKE TRADE','WAIT'].includes(q.decision)) return result;
+      return {...result,quant:{...q,decision:'NO TRADE',reason:`Historical gate disabled ${result.symbol}: ${finding}`}};
+    }
+    async function promisePool(items, worker, concurrency=4) {
+      const output=new Array(items.length), queue=[...items.keys()];
+      await Promise.all(Array.from({length:Math.min(concurrency,items.length)},async()=>{
+        while (queue.length) { const index=queue.shift(); try { output[index]=await worker(items[index]); } catch (error) { output[index]=null; } }
+      }));
+      return output;
     }
     function showToast(message) {
       els.toast.textContent = message; els.toast.classList.add('show');
@@ -655,17 +933,25 @@
     async function scan() {
       els.scan.disabled = true; els.scan.textContent = 'Scanning…';
       els.status.className = 'status'; els.status.querySelector('span:last-child').textContent = 'Loading live candles';
-      els.list.innerHTML = '<div class="market-row table-head"><span>Market</span><span>Price</span><span>24h</span><span>Signal</span></div><div class="empty"><strong>Analyzing twenty markets across three feeds</strong>Checking agreement, trend, RSI, MACD, volume and volatility.</div>';
+      els.list.innerHTML = '<div class="market-row table-head"><span>Market</span><span>Price</span><span>24h</span><span>Decision</span></div><div class="empty"><strong>Analyzing twenty markets across three feeds</strong>Checking strategies, regime, structure, multi-timeframe context, costs and account constraints.</div>';
       try {
-        const settled = await Promise.allSettled(MARKETS.map(loadMarket));
-        const results = settled.filter(x=>x.status==='fulfilled').map(x=>x.value).sort((a,b)=>{
-          const aQualified = ['buy','short'].includes(a.action) ? 1 : 0, bQualified = ['buy','short'].includes(b.action) ? 1 : 0;
-          return bQualified - aQualified || b.score - a.score;
-        });
+        const base=(await promisePool(MARKETS,loadMarket,4)).filter(Boolean);
+        const leaders=[...base].sort((a,b)=>(b.quality||0)-(a.quality||0)).slice(0,8);
+        els.status.querySelector('span:last-child').textContent='Validating leading markets across 5m, 15m, 1h, 4h and 1d';
+        const enriched=(await promisePool(leaders,enrichTimeframes,3)).filter(Boolean);
+        const enrichedMap=new Map(enriched.map(result=>[result.symbol,result]));
+        const decisionRank={'TAKE TRADE':3,'WAIT':2,'NO TRADE':1,'ANALYSIS UNAVAILABLE':0};
+        const results=base.map(result=>applyHistoricalEvidenceGuard(applyDirectionResearchGuard(applyPortfolioGuard(enrichedMap.get(result.symbol)||result)))).sort((a,b)=>
+          (decisionRank[b.quant?.decision]||0)-(decisionRank[a.quant?.decision]||0) || (b.quality||0)-(a.quality||0)
+        );
         if (!results.length) throw new Error('Live market data could not be reached from this browser.');
-        renderSourceStatus(results); renderList(results); renderRecommendation(results[0]); renderAlternatives(results);
+        latestResults=results; renderSourceStatus(results); renderList(results); renderQuantRecommendation(results[0]); renderQuantAlternatives(results);
+        updateForward(results); els.runBacktest.disabled=!results[0]?.candles?.length;
         els.status.className = 'status live'; els.status.querySelector('span:last-child').textContent = `Live · ${new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}`;
-        localStorage.setItem('market-edge-balance', els.balance.value); localStorage.setItem('market-edge-risk', els.risk.value); localStorage.setItem('market-edge-leverage', els.leverage.value);
+        localStorage.setItem('market-edge-settings',JSON.stringify({
+          balance:els.balance.value,risk:els.risk.value,leverage:els.leverage.value,minQuality:els.minQuality.value,minRR:els.minRR.value,
+          maxConcurrent:els.maxConcurrent.value,maxExposure:els.maxExposure.value,openDirection:els.openDirection.value,maxDailyLoss:els.maxDailyLoss.value,maxDrawdown:els.maxDrawdown.value,forwardMode:els.forwardMode.value
+        }));
       } catch (error) {
         els.status.className = 'status'; els.status.querySelector('span:last-child').textContent = 'Feed unavailable';
         els.list.innerHTML = '<div class="market-row table-head"><span>Market</span><span>Price</span><span>24h</span><span>Signal</span></div><div class="empty"><strong>Could not reach the market feed</strong>Check your connection or try again shortly. No recommendation was generated.</div>';
@@ -677,10 +963,23 @@
     }
     els.scan.addEventListener('click', scan);
     els.checkTrader.addEventListener('click', checkInvoTrader);
-    const savedBalance = localStorage.getItem('market-edge-balance'), savedRisk = localStorage.getItem('market-edge-risk'), savedLeverage = localStorage.getItem('market-edge-leverage');
-    if (savedBalance) els.balance.value = savedBalance;
-    if (savedRisk) els.risk.value = savedRisk;
-    if (savedLeverage) els.leverage.value = savedLeverage;
+    els.opportunityFilter.addEventListener('change',()=>renderList(latestResults));
+    els.runBacktest.addEventListener('click',runBacktest);
+    els.importSocial.addEventListener('click',()=>{
+      try {
+        socialRecords=parseSocialInput(els.socialData.value).filter(record=>record&&record.asset&&record.direction);
+        localStorage.setItem('market-edge-social',JSON.stringify(socialRecords)); renderSocialSummary(); showToast(`${socialRecords.length} authorised social records imported. Scan again to apply them.`);
+      } catch (error) { els.socialSummary.innerHTML=`<strong>Import failed.</strong> ${error.message}. No social score was applied.`; }
+    });
+    els.clearSocial.addEventListener('click',()=>{ socialRecords=[]; els.socialData.value=''; localStorage.removeItem('market-edge-social'); renderSocialSummary(); });
+    els.clearForward.addEventListener('click',()=>{ localStorage.removeItem('market-edge-forward'); renderForward(); });
+    try {
+      const saved=JSON.parse(localStorage.getItem('market-edge-settings')||'{}');
+      const mapping={balance:'balance',risk:'risk',leverage:'leverage',minQuality:'minQuality',minRR:'minRR',maxConcurrent:'maxConcurrent',maxExposure:'maxExposure',openDirection:'openDirection',maxDailyLoss:'maxDailyLoss',maxDrawdown:'maxDrawdown',forwardMode:'forwardMode'};
+      Object.entries(mapping).forEach(([key,element])=>{ if(saved[key]!=null) els[element].value=saved[key]; });
+      socialRecords=JSON.parse(localStorage.getItem('market-edge-social')||'[]');
+    } catch {}
+    renderSocialSummary(); renderForward();
     if ('serviceWorker' in navigator) window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
   </script>
 </body>
