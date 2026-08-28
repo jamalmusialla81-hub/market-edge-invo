@@ -41,7 +41,7 @@
     h1 { margin: 0; max-width: 720px; font-size: clamp(42px, 7vw, 82px); line-height: .96; letter-spacing: -.065em; font-weight: 760; }
     h1 span { color: var(--accent); }
     .hero-copy { color: var(--muted); font-size: 15px; line-height: 1.6; max-width: 430px; margin: 0 0 6px; }
-    .control-panel { background: linear-gradient(145deg, rgba(255,255,255,.025), transparent 48%), var(--panel); border: 1px solid var(--line); border-radius: 24px; padding: 18px; box-shadow: var(--shadow); display: grid; grid-template-columns: 1.15fr .8fr 1fr auto; gap: 12px; margin-bottom: 12px; }
+    .control-panel { background: linear-gradient(145deg, rgba(255,255,255,.025), transparent 48%), var(--panel); border: 1px solid var(--line); border-radius: 24px; padding: 18px; box-shadow: var(--shadow); display: grid; grid-template-columns: 1.15fr .8fr 1fr .8fr auto; gap: 12px; margin-bottom: 12px; }
     .field { display: grid; gap: 8px; }
     .field label { font-size: 12px; color: var(--muted); }
     input, select { width: 100%; min-height: 48px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel-2); color: var(--text); padding: 0 14px; outline: none; }
@@ -201,6 +201,16 @@
           <option value="0.015">Aggressive · 1.5% risk</option>
         </select>
       </div>
+      <div class="field">
+        <label for="leverage">Leverage</label>
+        <select id="leverage">
+          <option value="1">1×</option>
+          <option value="2">2×</option>
+          <option value="3">3×</option>
+          <option value="5">5×</option>
+          <option value="10" selected>10× · high risk</option>
+        </select>
+      </div>
       <button id="scanButton" class="scan" type="button">Scan markets</button>
     </section>
 
@@ -269,7 +279,7 @@
       <div class="method-item"><span>Consensus</span><strong>Hyperliquid + Binance + Coinbase</strong></div>
       <div class="method-item"><span>Trend</span><strong>EMA20 + EMA50 alignment</strong></div>
       <div class="method-item"><span>Momentum</span><strong>RSI + MACD confirmation</strong></div>
-      <div class="method-item"><span>Guardrail</span><strong>1× only · balance hard cap</strong></div>
+      <div class="method-item"><span>Leverage</span><strong>User-selected · up to 10×</strong></div>
     </section>
 
     <footer class="footer">
@@ -286,7 +296,7 @@
     const MIN_ORDER_NOTIONAL = 10;
     let latestBest = null;
     const els = {
-      scan: document.getElementById('scanButton'), balance: document.getElementById('balance'), risk: document.getElementById('riskMode'),
+      scan: document.getElementById('scanButton'), balance: document.getElementById('balance'), risk: document.getElementById('riskMode'), leverage: document.getElementById('leverage'),
       status: document.getElementById('feedStatus'), list: document.getElementById('marketList'), rec: document.getElementById('recommendation'),
       title: document.getElementById('decisionTitle'), badge: document.getElementById('decisionBadge'), toast: document.getElementById('toast'),
       alternatives: document.getElementById('alternatives'),
@@ -459,21 +469,43 @@
           <span><span class="badge ${r.action}">${['buy','short'].includes(r.action)?`${r.agreeVotes}/${r.sourceCount} ${r.direction}`:signalLabel(r.action)}</span></span>
         </div>`).join('');
     }
+    function buildTradePlan(result) {
+      const balance = Math.max(0, Number(els.balance.value) || 0);
+      const riskPct = Number(els.risk.value);
+      const leverage = Math.max(1, Number(els.leverage.value) || 1);
+      const isShort = result.action === 'short';
+      const volatilityStop = Math.max(0, isShort ? result.price + result.atr * 1.5 : result.price - result.atr * 1.5);
+      const bufferedLeveragedStop = isShort
+        ? result.price * (1 + 0.65 / leverage)
+        : result.price * (1 - 0.65 / leverage);
+      const stop = leverage > 1
+        ? Math.max(0, isShort ? Math.min(volatilityStop, bufferedLeveragedStop) : Math.max(volatilityStop, bufferedLeveragedStop))
+        : volatilityStop;
+      const stopDistance = Math.abs(result.price - stop);
+      const stopPct = stopDistance / result.price;
+      const selectedRisk = balance * riskPct;
+      const riskSizedNotional = stopPct > 0 ? selectedRisk / stopPct : 0;
+      const maxNotional = balance * leverage;
+      const notional = Math.min(maxNotional, Math.max(MIN_ORDER_NOTIONAL, riskSizedNotional));
+      const margin = notional / leverage;
+      const actualStopLoss = notional * stopPct;
+      const actualRiskPct = balance > 0 ? actualStopLoss / balance : 0;
+      const target = Math.max(0, isShort ? result.price - stopDistance * 2 : result.price + stopDistance * 2);
+      const estimatedLiquidation = Math.max(0, isShort ? result.price * (1 + 1 / leverage) : result.price * (1 - 1 / leverage));
+      const fits = maxNotional >= MIN_ORDER_NOTIONAL && margin <= balance && notional >= MIN_ORDER_NOTIONAL;
+      return { balance, riskPct, leverage, isShort, stop, target, stopPct, selectedRisk, notional, margin, actualStopLoss, actualRiskPct, estimatedLiquidation, fits };
+    }
     function renderAlternatives(results) {
-      const balance = Math.max(0, Number(els.balance.value) || 0), riskPct = Number(els.risk.value);
+      const balance = Math.max(0, Number(els.balance.value) || 0);
       const candidates = results.slice(1).filter(result=>['buy','short'].includes(result.action)).map(result=>{
-        const isShort = result.action === 'short';
-        const stop = Math.max(0, isShort ? result.price + result.atr * 1.5 : result.price - result.atr * 1.5);
-        const target = Math.max(0, isShort ? result.price - result.atr * 3 : result.price + result.atr * 3);
-        const stopPct = Math.abs(result.price - stop) / result.price;
-        const allocation = Math.min(balance, stopPct > 0 ? balance * riskPct / stopPct : 0);
-        return { result, isShort, stop, target, allocation };
-      }).filter(plan=>plan.allocation >= MIN_ORDER_NOTIONAL).slice(0,2);
+        return { result, ...buildTradePlan(result) };
+      }).filter(plan=>plan.fits).slice(0,2);
       if (!candidates.length) {
-        els.alternatives.innerHTML = `<div class="empty" style="grid-column:1/-1"><strong>No other qualified live trade fits ${balance.toFixed(2)} USDC</strong>The app scanned ${results.length} markets. A cheaper coin does not bypass the 10 USDC minimum order value.</div>`;
+        const leverage = Math.max(1, Number(els.leverage.value) || 1);
+        els.alternatives.innerHTML = `<div class="empty" style="grid-column:1/-1"><strong>No other qualified live trade fits ${balance.toFixed(2)} USDC at ${leverage}×</strong>The app scanned ${results.length} markets. Your balance × leverage must cover the 10 USDC minimum contract value.</div>`;
         return;
       }
-      els.alternatives.innerHTML = candidates.map(({result,isShort,stop,target,allocation})=>`
+      els.alternatives.innerHTML = candidates.map(({result,isShort,stop,target,margin,notional,leverage,actualStopLoss,actualRiskPct})=>`
         <article class="alternative">
           <div class="alternative-head">
             <div><strong>${result.symbol} ${isShort?'Short':'Long'}</strong><span>${result.agreeVotes}/${result.sourceCount} feeds agree · ${result.score.toFixed(1)}/8</span></div>
@@ -481,11 +513,12 @@
           </div>
           <div class="alternative-values">
             <div class="alternative-value"><span>Entry near</span><b>${formatPrice(result.price)} USDT</b></div>
-            <div class="alternative-value"><span>Position size</span><b>${allocation.toFixed(2)} USDC</b></div>
+            <div class="alternative-value"><span>Invo position size</span><b>${margin.toFixed(2)} USDC</b></div>
+            <div class="alternative-value"><span>Contract value</span><b>${notional.toFixed(2)} USDC</b></div>
             <div class="alternative-value"><span>Take profit</span><b>${formatPrice(target)} USDT</b></div>
             <div class="alternative-value"><span>Stop loss</span><b>${formatPrice(stop)} USDT</b></div>
-            <div class="alternative-value"><span>Leverage</span><b>1×</b></div>
-            <div class="alternative-value"><span>Action</span><b>${isShort?'Short':'Long'}</b></div>
+            <div class="alternative-value"><span>Leverage</span><b>${leverage}×</b></div>
+            <div class="alternative-value"><span>Loss at stop</span><b>${actualStopLoss.toFixed(2)} USDC · ${(actualRiskPct*100).toFixed(1)}%</b></div>
           </div>
         </article>`).join('') + (candidates.length < 2 ? `<div class="empty"><strong>Only one backup qualified</strong>A second trade did not pass the same live-data and balance rules.</div>` : '');
     }
@@ -521,32 +554,27 @@
           </div>`;
         return;
       }
-      const isShort = best.action === 'short';
+      const plan = buildTradePlan(best);
+      const { isShort, leverage, stop, target, selectedRisk, notional, margin, actualStopLoss, actualRiskPct, estimatedLiquidation } = plan;
       const directionText = isShort ? 'Short' : 'Long';
       const directionClass = isShort ? 'short' : 'buy';
-      const stop = Math.max(0, isShort ? best.price + best.atr * 1.5 : best.price - best.atr * 1.5);
-      const target = Math.max(0, isShort ? best.price - best.atr * 3 : best.price + best.atr * 3);
-      const stopPct = Math.abs(best.price - stop) / best.price;
-      const maxLoss = balance * riskPct;
-      const riskSizedAllocation = stopPct > 0 ? maxLoss / stopPct : 0;
-      const allocation = Math.min(balance, riskSizedAllocation);
       const scorePct = best.score / 8 * 100;
-      if (allocation < MIN_ORDER_NOTIONAL) {
-        const estimatedBalanceNeeded = Math.ceil(Math.max(MIN_ORDER_NOTIONAL, MIN_ORDER_NOTIONAL * stopPct / riskPct));
-        els.title.textContent = 'Setup found—but your balance says wait'; els.badge.className = 'badge watch'; els.badge.textContent = 'Too small at 1×';
+      if (!plan.fits) {
+        const estimatedBalanceNeeded = Math.ceil(MIN_ORDER_NOTIONAL / leverage);
+        els.title.textContent = 'Setup found—but the order is still too small'; els.badge.className = 'badge watch'; els.badge.textContent = `Too small at ${leverage}×`;
         els.rec.innerHTML = `
           <div class="asset-row">
             <div class="asset-name"><span class="coin">${best.symbol}</span><span><strong>${best.name}</strong><span>${best.agreeVotes}/${best.sourceCount} feeds agree ${directionText} · no live entry</span></span></div>
             <div class="price"><strong>${balance.toFixed(2)} USDC</strong><span>your entered Invo balance</span></div>
           </div>
           <div class="reasons">
-            <div class="reason"><i>✓</i><span>The risk-sized position is ${allocation.toFixed(2)} USDC</span></div>
+            <div class="reason"><i>✓</i><span>Your ${balance.toFixed(2)} USDC balance creates up to ${(balance*leverage).toFixed(2)} USDC of contract value at ${leverage}×</span></div>
             <div class="reason"><i>!</i><span>Hyperliquid orders need at least ${MIN_ORDER_NOTIONAL.toFixed(0)} USDC of position value</span></div>
-            <div class="reason"><i>!</i><span>Using high leverage only to reach the minimum would put too much of this small balance at risk</span></div>
+            <div class="reason"><i>!</i><span>The selected leverage cannot reach that minimum with this balance</span></div>
           </div>
           <div class="invo-entry">
             <div class="invo-entry-head"><div><h3>What to enter in Invo</h3><p>Nothing yet—do not create this live trade with the balance entered above.</p></div><span class="badge watch">Wait</span></div>
-            <p class="fresh-note">At the selected risk limit, this setup would need roughly ${estimatedBalanceNeeded} USDC before a 1× order reaches the platform minimum. Do not raise leverage just to force a real trade.</p>
+            <p class="fresh-note">At ${leverage}×, you need at least roughly ${estimatedBalanceNeeded} USDC of available margin for the minimum contract value.</p>
           </div>`;
         return;
       }
@@ -560,10 +588,14 @@
         <div class="meter"><span style="width:${scorePct}%"></span></div>
         <div class="reasons">${best.reasons.slice(0,4).map(reason=>`<div class="reason"><i>✓</i><span>${reason}</span></div>`).join('')}</div>
         <div class="order-plan">
-          <div class="plan-box"><span>Use</span><strong>${allocation.toFixed(2)} of ${balance.toFixed(2)} ${currency}</strong></div>
-          <div class="plan-box"><span>Max planned loss</span><strong>${maxLoss.toFixed(2)} ${currency}</strong></div>
+          <div class="plan-box"><span>Margin to use</span><strong>${margin.toFixed(2)} of ${balance.toFixed(2)} ${currency}</strong></div>
+          <div class="plan-box"><span>Contract value</span><strong>${notional.toFixed(2)} ${currency} at ${leverage}×</strong></div>
+          <div class="plan-box"><span>Loss if stop fills</span><strong>${actualStopLoss.toFixed(2)} ${currency} · ${(actualRiskPct*100).toFixed(1)}%</strong></div>
+          <div class="plan-box"><span>Selected risk target</span><strong>${selectedRisk.toFixed(2)} ${currency}</strong></div>
           <div class="plan-box"><span>Stop reference</span><strong>${formatPrice(stop)} USDT</strong></div>
           <div class="plan-box"><span>2R target</span><strong>${formatPrice(target)} USDT</strong></div>
+          <div class="plan-box"><span>Est. liquidation</span><strong>≈ ${formatPrice(estimatedLiquidation)} USDT</strong></div>
+          <div class="plan-box"><span>Mode</span><strong>Isolated ${leverage}×</strong></div>
         </div>
         <section class="invo-entry" aria-label="Values to enter in Invo">
           <div class="invo-entry-head">
@@ -575,10 +607,10 @@
             <div class="invo-field"><b>2</b><span>Direction</span><strong class="${isShort?'short-value':'long-value'}">${directionText}</strong></div>
             <div class="invo-field"><b>3</b><span>Take-Profit Price</span><strong>${formatPrice(target)} USDT</strong></div>
             <div class="invo-field"><b>4</b><span>Stop-Loss Price</span><strong>${formatPrice(stop)} USDT</strong></div>
-            <div class="invo-field"><b>5</b><span>Leverage</span><strong>1×</strong></div>
-            <div class="invo-field"><b>6</b><span>Position Size</span><strong>${allocation.toFixed(2)} USDC</strong></div>
+            <div class="invo-field"><b>5</b><span>Leverage</span><strong>${leverage}×</strong></div>
+            <div class="invo-field"><b>6</b><span>Position Size (margin)</span><strong>${margin.toFixed(2)} USDC</strong></div>
           </div>
-          <p class="fresh-note">Only enter this while Invo's current price is close to ${formatPrice(best.price)} USDT. If it has moved noticeably, scan again.</p>
+          <p class="fresh-note">${actualRiskPct > riskPct * 1.05 ? `High-risk minimum order: losing at the stop is about ${(actualRiskPct*100).toFixed(1)}% of your balance, above your selected ${(riskPct*100).toFixed(1)}% target. ` : ''}Liquidation is only an estimate—check Invo's displayed liquidation price. Only enter near ${formatPrice(best.price)} USDT.</p>
         </section>
         <div class="confirm">
           <label class="confirm-note"><input id="ack" type="checkbox">I understand this can lose money and is not guaranteed.</label>
@@ -587,7 +619,7 @@
       const ack = document.getElementById('ack'), prepare = document.getElementById('prepare');
       ack.addEventListener('change',()=>prepare.disabled=!ack.checked);
       prepare.addEventListener('click',async()=>{
-        const text = `INVO CREATE TRADE\nCoin: ${best.name} (${best.symbol})\nDirection: ${directionText}\nTake-Profit Price: ${formatPrice(target)} USDT\nStop-Loss Price: ${formatPrice(stop)} USDT\nLeverage: 1x\nPosition Size: ${allocation.toFixed(2)} USDC\nOnly enter near: ${formatPrice(best.price)} USDT`;
+        const text = `INVO CREATE TRADE\nCoin: ${best.name} (${best.symbol})\nDirection: ${directionText}\nTake-Profit Price: ${formatPrice(target)} USDT\nStop-Loss Price: ${formatPrice(stop)} USDT\nLeverage: ${leverage}x\nPosition Size (margin): ${margin.toFixed(2)} USDC\nContract value: ${notional.toFixed(2)} USDC\nEstimated liquidation: ${formatPrice(estimatedLiquidation)} USDT\nLoss if stop fills: ${actualStopLoss.toFixed(2)} USDC (${(actualRiskPct*100).toFixed(1)}% of balance)\nOnly enter near: ${formatPrice(best.price)} USDT`;
         await navigator.clipboard.writeText(text).catch(()=>{}); showToast('Exact Invo values copied. Check every field before submitting.');
       });
     }
@@ -603,16 +635,17 @@
       if (total < 50) issues.push(`only ${total} closed trades`);
       if (winRate < 60) issues.push(`${winRate.toFixed(1)}% calculated win rate`);
       if (pnl <= 0) issues.push('P&amp;L is not positive');
-      if (leverage > 3) issues.push(`${leverage}× leverage is too aggressive for this balance`);
+      const selectedLeverage = Math.max(1, Number(els.leverage.value) || 1);
+      if (leverage > selectedLeverage) issues.push(`${leverage}× is above your selected ${selectedLeverage}× limit`);
       if (!latestBest || !['buy','short'].includes(latestBest.action)) issues.push('the market scan has no qualified live direction');
       else if (side !== latestBest.direction) issues.push(`the trader is ${side}, but the qualified scan is ${latestBest.direction} ${latestBest.symbol}`);
-      if (balance < MIN_ORDER_NOTIONAL) issues.push(`${balance.toFixed(2)} USDC is below a safe 1× minimum-size trade`);
+      if (balance * selectedLeverage < MIN_ORDER_NOTIONAL) issues.push(`${balance.toFixed(2)} USDC at ${selectedLeverage}× cannot reach the 10 USDC minimum contract value`);
       if (issues.length) {
         els.traderResult.className = 'trader-result skip';
         els.traderResult.innerHTML = `<strong>Skip this mimic.</strong> ${issues.join('; ')}. A high win rate cannot cancel these risks.`;
       } else {
         els.traderResult.className = 'trader-result pass';
-        els.traderResult.innerHTML = `<strong>Passes the first filter—not an automatic buy.</strong> ${winRate.toFixed(1)}% across ${total} closed trades, positive P&amp;L, leverage no higher than 3× and direction aligned with the scan. Still use Market Edge's smaller 1× position size.`;
+        els.traderResult.innerHTML = `<strong>Passes the first filter—not an automatic buy.</strong> ${winRate.toFixed(1)}% across ${total} closed trades, positive P&amp;L, leverage within your selected ${selectedLeverage}× limit and direction aligned with the scan. Use Market Edge's calculated margin and stop instead of copying the trader's size.`;
       }
     }
     function showToast(message) {
@@ -632,7 +665,7 @@
         if (!results.length) throw new Error('Live market data could not be reached from this browser.');
         renderSourceStatus(results); renderList(results); renderRecommendation(results[0]); renderAlternatives(results);
         els.status.className = 'status live'; els.status.querySelector('span:last-child').textContent = `Live · ${new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}`;
-        localStorage.setItem('market-edge-balance', els.balance.value); localStorage.setItem('market-edge-risk', els.risk.value);
+        localStorage.setItem('market-edge-balance', els.balance.value); localStorage.setItem('market-edge-risk', els.risk.value); localStorage.setItem('market-edge-leverage', els.leverage.value);
       } catch (error) {
         els.status.className = 'status'; els.status.querySelector('span:last-child').textContent = 'Feed unavailable';
         els.list.innerHTML = '<div class="market-row table-head"><span>Market</span><span>Price</span><span>24h</span><span>Signal</span></div><div class="empty"><strong>Could not reach the market feed</strong>Check your connection or try again shortly. No recommendation was generated.</div>';
@@ -644,9 +677,10 @@
     }
     els.scan.addEventListener('click', scan);
     els.checkTrader.addEventListener('click', checkInvoTrader);
-    const savedBalance = localStorage.getItem('market-edge-balance'), savedRisk = localStorage.getItem('market-edge-risk');
+    const savedBalance = localStorage.getItem('market-edge-balance'), savedRisk = localStorage.getItem('market-edge-risk'), savedLeverage = localStorage.getItem('market-edge-leverage');
     if (savedBalance) els.balance.value = savedBalance;
     if (savedRisk) els.risk.value = savedRisk;
+    if (savedLeverage) els.leverage.value = savedLeverage;
     if ('serviceWorker' in navigator) window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
   </script>
 </body>
