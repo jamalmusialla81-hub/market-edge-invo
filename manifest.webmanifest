@@ -1,0 +1,10 @@
+{
+  "name": "Market Edge for Invo",
+  "short_name": "Market Edge",
+  "description": "Multi-source crypto market consensus and balance-first Invo trade plans.",
+  "start_url": "./market-edge.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#090b0d",
+  "theme_color": "#090b0d"
+}
