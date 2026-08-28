@@ -63,6 +63,7 @@
     h2 { margin: 0; font-size: 19px; letter-spacing: -.025em; }
     .badge { display: inline-flex; align-items: center; min-height: 26px; border-radius: 999px; padding: 0 10px; font-size: 11px; font-weight: 740; background: var(--panel-2); color: var(--muted); border: 1px solid var(--line); }
     .badge.buy { color: var(--green); background: rgba(100,230,173,.08); border-color: rgba(100,230,173,.2); }
+    .badge.short { color: #ff9f73; background: rgba(255,159,115,.08); border-color: rgba(255,159,115,.2); }
     .badge.watch { color: var(--yellow); background: rgba(243,201,105,.08); border-color: rgba(243,201,105,.2); }
     .badge.avoid { color: var(--red); background: rgba(255,125,120,.08); border-color: rgba(255,125,120,.2); }
     .recommendation { padding: 22px 20px 20px; }
@@ -95,6 +96,7 @@
     .invo-field span { color: var(--muted); font-size: 11px; }
     .invo-field strong { color: var(--text); font-size: 14px; text-align: right; font-variant-numeric: tabular-nums; }
     .invo-field .long-value { color: var(--green); }
+    .invo-field .short-value { color: #ff9f73; }
     .fresh-note { margin: 11px 0 0; color: var(--yellow); font-size: 10px; line-height: 1.45; }
     .confirm { margin-top: 14px; display: grid; grid-template-columns: 1fr auto; gap: 10px; }
     .confirm-note { display: flex; align-items: center; gap: 9px; color: var(--muted); font-size: 11px; }
@@ -308,21 +310,37 @@
       const trendUp = last > e20.at(-1) && e20.at(-1) > e50.at(-1);
       const trendDown = last < e20.at(-1) && e20.at(-1) < e50.at(-1);
       const momentumUp = macd.at(-1) > signal.at(-1);
-      let score = 0, reasons = [];
-      if (trendUp) { score += 3; reasons.push('Price and moving averages are aligned upward'); }
-      else if (trendDown) { score -= 2; reasons.push('Primary trend is still pointing down'); }
-      else reasons.push('Trend is mixed and needs confirmation');
-      if (currentRsi >= 48 && currentRsi <= 67) { score += 2; reasons.push(`RSI ${currentRsi.toFixed(0)} shows healthy momentum`); }
-      else if (currentRsi > 74) { score -= 2; reasons.push(`RSI ${currentRsi.toFixed(0)} warns against chasing`); }
-      else if (currentRsi < 40) reasons.push(`RSI ${currentRsi.toFixed(0)} shows weak momentum`);
-      if (momentumUp) { score += 1; reasons.push('MACD momentum is improving'); }
-      else { score -= 1; reasons.push('MACD momentum is fading'); }
-      if (volumeRatio >= 1.15) { score += 1; reasons.push(`Volume is ${volumeRatio.toFixed(1)}× its 20-bar average`); }
-      if (change24 > 12) { score -= 2; reasons.push(`Already up ${change24.toFixed(1)}%—pullback risk is high`); }
-      else if (change24 > 0 && change24 <= 8) score += 1;
-      score = Math.max(0, Math.min(8, score));
-      const action = score >= 6 ? 'buy' : score >= 4 ? 'watch' : 'avoid';
-      return { instId, symbol: instId.split('-')[0], name: LABELS[instId.split('-')[0]], price:last, change24, rsi:currentRsi, atr:currentAtr, volumeRatio, score, action, reasons, source };
+      let longScore = 0, shortScore = 0, longReasons = [], shortReasons = [];
+      if (trendUp) { longScore += 3; longReasons.push('Price and moving averages are aligned upward'); }
+      else if (trendDown) { longScore -= 2; longReasons.push('Primary trend is pointing down'); }
+      else longReasons.push('Trend is mixed and needs confirmation');
+      if (currentRsi >= 48 && currentRsi <= 67) { longScore += 2; longReasons.push(`RSI ${currentRsi.toFixed(0)} supports upward momentum`); }
+      else if (currentRsi > 74) { longScore -= 2; longReasons.push(`RSI ${currentRsi.toFixed(0)} warns against chasing higher`); }
+      else if (currentRsi < 40) longReasons.push(`RSI ${currentRsi.toFixed(0)} shows weak upward momentum`);
+      if (momentumUp) { longScore += 1; longReasons.push('MACD momentum is improving'); }
+      else { longScore -= 1; longReasons.push('MACD momentum is fading'); }
+      if (volumeRatio >= 1.15) { longScore += 1; longReasons.push(`Volume is ${volumeRatio.toFixed(1)}× its 20-bar average`); }
+      if (change24 > 12) { longScore -= 2; longReasons.push(`Already up ${change24.toFixed(1)}%—pullback risk is high`); }
+      else if (change24 > 0 && change24 <= 8) longScore += 1;
+
+      if (trendDown) { shortScore += 3; shortReasons.push('Price and moving averages are aligned downward'); }
+      else if (trendUp) { shortScore -= 2; shortReasons.push('Primary trend is still pointing up'); }
+      else shortReasons.push('Trend is mixed and needs confirmation');
+      if (currentRsi >= 33 && currentRsi <= 52) { shortScore += 2; shortReasons.push(`RSI ${currentRsi.toFixed(0)} supports downward momentum`); }
+      else if (currentRsi < 26) { shortScore -= 2; shortReasons.push(`RSI ${currentRsi.toFixed(0)} warns against chasing lower`); }
+      else if (currentRsi > 60) shortReasons.push(`RSI ${currentRsi.toFixed(0)} is too strong for a clean short`);
+      if (!momentumUp) { shortScore += 1; shortReasons.push('MACD momentum is weakening'); }
+      else { shortScore -= 1; shortReasons.push('MACD momentum is improving'); }
+      if (volumeRatio >= 1.15) { shortScore += 1; shortReasons.push(`Volume is ${volumeRatio.toFixed(1)}× its 20-bar average`); }
+      if (change24 < -12) { shortScore -= 2; shortReasons.push(`Already down ${Math.abs(change24).toFixed(1)}%—bounce risk is high`); }
+      else if (change24 < 0 && change24 >= -8) shortScore += 1;
+
+      longScore = Math.max(0, Math.min(8, longScore)); shortScore = Math.max(0, Math.min(8, shortScore));
+      const direction = longScore >= 6 && longScore > shortScore ? 'long' : shortScore >= 6 && shortScore > longScore ? 'short' : null;
+      const score = direction === 'short' ? shortScore : direction === 'long' ? longScore : Math.max(longScore, shortScore);
+      const action = direction === 'long' ? 'buy' : direction === 'short' ? 'short' : score >= 4 ? 'watch' : 'avoid';
+      const reasons = direction === 'short' ? shortReasons : longReasons;
+      return { instId, symbol: instId.split('-')[0], name: LABELS[instId.split('-')[0]], price:last, change24, rsi:currentRsi, atr:currentAtr, volumeRatio, score, action, direction, reasons, source, longScore, shortScore };
     }
 
     async function loadHyperliquid(coin) {
@@ -378,20 +396,29 @@
       const opinions = settled.filter(item=>item.status==='fulfilled').map(item=>item.value);
       if (!opinions.length) throw new Error(`All feeds unavailable for ${coin}`);
       const reference = opinions.find(item=>item.source==='Hyperliquid') || opinions[0];
-      const avgScore = opinions.reduce((sum,item)=>sum+item.score,0) / opinions.length;
+      const avgLongScore = opinions.reduce((sum,item)=>sum+item.longScore,0) / opinions.length;
+      const avgShortScore = opinions.reduce((sum,item)=>sum+item.shortScore,0) / opinions.length;
       const buyVotes = opinions.filter(item=>item.action==='buy').length;
-      const avoidVotes = opinions.filter(item=>item.action==='avoid').length;
-      const action = opinions.length >= 2 && buyVotes >= 2 && avgScore >= 6 && avoidVotes === 0 ? 'buy' : avgScore >= 4 ? 'watch' : 'avoid';
+      const shortVotes = opinions.filter(item=>item.action==='short').length;
+      const qualifiedLong = opinions.length >= 2 && buyVotes >= 2 && shortVotes === 0 && avgLongScore >= 6;
+      const qualifiedShort = opinions.length >= 2 && shortVotes >= 2 && buyVotes === 0 && avgShortScore >= 6;
+      const action = qualifiedLong ? 'buy' : qualifiedShort ? 'short' : Math.max(avgLongScore,avgShortScore) >= 4 ? 'watch' : 'avoid';
+      const direction = action === 'buy' ? 'long' : action === 'short' ? 'short' : null;
+      const lean = avgLongScore >= avgShortScore ? 'long' : 'short';
+      const agreeVotes = direction === 'long' ? buyVotes : direction === 'short' ? shortVotes : Math.max(buyVotes,shortVotes);
+      const directionalReference = opinions.find(item=>item.source==='Hyperliquid' && item.direction===direction) || opinions.find(item=>item.direction===direction) || reference;
+      const score = direction === 'long' ? avgLongScore : direction === 'short' ? avgShortScore : Math.max(avgLongScore,avgShortScore);
       const consensusReason = opinions.length === 1
         ? `Only ${opinions[0].source} responded—no live trade without confirmation`
-        : `${buyVotes} of ${opinions.length} independent feeds show a buy setup`;
+        : direction ? `${agreeVotes} of ${opinions.length} independent feeds show a ${direction} setup` : `Feeds do not agree strongly enough on a long or short`;
       return {
         ...reference,
-        score:+avgScore.toFixed(1), action, reasons:[consensusReason, ...reference.reasons],
-        buyVotes, sourceCount:opinions.length, sources:opinions.map(item=>item.source), sourceOpinions:opinions
+        score:+score.toFixed(1), action, direction, lean, reasons:[consensusReason, ...directionalReference.reasons],
+        buyVotes, shortVotes, agreeVotes, avgLongScore, avgShortScore,
+        sourceCount:opinions.length, sources:opinions.map(item=>item.source), sourceOpinions:opinions
       };
     }
-    function signalLabel(action) { return action === 'buy' ? 'Buy setup' : action === 'watch' ? 'Wait' : 'Avoid'; }
+    function signalLabel(action) { return action === 'buy' ? 'Long setup' : action === 'short' ? 'Short setup' : action === 'watch' ? 'Watch' : 'Avoid'; }
     function renderSourceStatus(results) {
       const names = ['Hyperliquid','Binance','Coinbase'];
       const counts = Object.fromEntries(names.map(name=>[name, results.filter(result=>result.sources.includes(name)).length]));
@@ -407,19 +434,47 @@
           <div class="market-asset"><span class="mini-coin">${r.symbol}</span><span><b>${r.symbol}</b><small>${r.name}</small></span></div>
           <span class="num">${formatPrice(r.price)} USDT</span>
           <span class="num ${r.change24>=0?'positive':'negative'}">${r.change24>=0?'+':''}${r.change24.toFixed(1)}%</span>
-          <span><span class="badge ${r.action}">${r.action==='buy'?`${r.buyVotes}/${r.sourceCount} agree`:signalLabel(r.action)}</span></span>
+          <span><span class="badge ${r.action}">${['buy','short'].includes(r.action)?`${r.agreeVotes}/${r.sourceCount} ${r.direction}`:signalLabel(r.action)}</span></span>
         </div>`).join('');
     }
     function renderRecommendation(best) {
       const balance = Math.max(0, Number(els.balance.value) || 0), currency = 'USDC', riskPct = Number(els.risk.value);
       latestBest = best || null;
-      if (!best || best.action !== 'buy') {
-        els.title.textContent = 'Wait—no clean entry'; els.badge.className = 'badge watch'; els.badge.textContent = 'Cash is a position';
-        els.rec.innerHTML = `<div class="empty"><strong>The scan found no high-quality setup</strong>The app will not force a trade just because money is available. Preserve the balance and scan again after the next 4-hour candle.</div>`;
+      if (!best) {
+        els.title.textContent = 'No live entry'; els.badge.className = 'badge avoid'; els.badge.textContent = 'No data';
+        els.rec.innerHTML = '<div class="empty"><strong>No market data</strong>Do not place a real-money trade without fresh prices.</div>';
         return;
       }
-      const stop = Math.max(0, best.price - best.atr * 1.5), target = best.price + best.atr * 3;
-      const stopPct = (best.price - stop) / best.price;
+      if (!['buy','short'].includes(best.action)) {
+        const leanShort = best.lean === 'short';
+        const trigger = Math.max(0, leanShort ? best.price - best.atr * .5 : best.price + best.atr * .5);
+        const invalidation = Math.max(0, leanShort ? best.price + best.atr : best.price - best.atr);
+        const side = leanShort ? 'Short' : 'Long';
+        els.title.textContent = `No entry yet—watch ${best.symbol}`; els.badge.className = 'badge watch'; els.badge.textContent = `${side} is closest`;
+        els.rec.innerHTML = `
+          <div class="asset-row">
+            <div class="asset-name"><span class="coin">${best.symbol}</span><span><strong>${best.name}</strong><span>Closest real-money setup · not qualified yet</span></span></div>
+            <div class="price"><strong>${formatPrice(best.price)} USDT</strong><span>${best.change24>=0?'+':''}${best.change24.toFixed(1)}% / 24h</span></div>
+          </div>
+          <div class="score-line"><span>Closest ${side} evidence</span><strong>${best.score.toFixed(1)} / 8</strong></div>
+          <div class="meter"><span style="width:${best.score/8*100}%"></span></div>
+          <div class="order-plan">
+            <div class="plan-box"><span>Set price alert</span><strong>${formatPrice(trigger)} USDT</strong></div>
+            <div class="plan-box"><span>Closest direction</span><strong>${side}</strong></div>
+            <div class="plan-box"><span>Idea invalid above/below</span><strong>${formatPrice(invalidation)} USDT</strong></div>
+            <div class="plan-box"><span>Real money now</span><strong>0.00 USDC</strong></div>
+          </div>
+          <div class="invo-entry">
+            <div class="invo-entry-head"><div><h3>Do this instead of forcing a trade</h3><p>Set the alert above. When it triggers, scan again; only enter if two feeds then confirm ${side}.</p></div><span class="badge watch">Alert</span></div>
+          </div>`;
+        return;
+      }
+      const isShort = best.action === 'short';
+      const directionText = isShort ? 'Short' : 'Long';
+      const directionClass = isShort ? 'short' : 'buy';
+      const stop = Math.max(0, isShort ? best.price + best.atr * 1.5 : best.price - best.atr * 1.5);
+      const target = Math.max(0, isShort ? best.price - best.atr * 3 : best.price + best.atr * 3);
+      const stopPct = Math.abs(best.price - stop) / best.price;
       const maxLoss = balance * riskPct;
       const riskSizedAllocation = stopPct > 0 ? maxLoss / stopPct : 0;
       const allocation = Math.min(balance, riskSizedAllocation);
@@ -429,7 +484,7 @@
         els.title.textContent = 'Setup found—but your balance says wait'; els.badge.className = 'badge watch'; els.badge.textContent = 'Too small at 1×';
         els.rec.innerHTML = `
           <div class="asset-row">
-            <div class="asset-name"><span class="coin">${best.symbol}</span><span><strong>${best.name}</strong><span>${best.buyVotes}/${best.sourceCount} feeds agree · no live entry</span></span></div>
+            <div class="asset-name"><span class="coin">${best.symbol}</span><span><strong>${best.name}</strong><span>${best.agreeVotes}/${best.sourceCount} feeds agree ${directionText} · no live entry</span></span></div>
             <div class="price"><strong>${balance.toFixed(2)} USDC</strong><span>your entered Invo balance</span></div>
           </div>
           <div class="reasons">
@@ -439,17 +494,17 @@
           </div>
           <div class="invo-entry">
             <div class="invo-entry-head"><div><h3>What to enter in Invo</h3><p>Nothing yet—do not create this live trade with the balance entered above.</p></div><span class="badge watch">Wait</span></div>
-            <p class="fresh-note">At the selected risk limit, this setup would need roughly ${estimatedBalanceNeeded} USDC before a 1× order reaches the platform minimum. Do not deposit more just to force a trade; paper trade it instead.</p>
+            <p class="fresh-note">At the selected risk limit, this setup would need roughly ${estimatedBalanceNeeded} USDC before a 1× order reaches the platform minimum. Do not raise leverage just to force a real trade.</p>
           </div>`;
         return;
       }
-      els.title.textContent = `${best.symbol} has the cleanest setup`; els.badge.className = 'badge buy'; els.badge.textContent = 'Qualified setup';
+      els.title.textContent = `${best.symbol} has the cleanest ${directionText}`; els.badge.className = `badge ${directionClass}`; els.badge.textContent = `Qualified ${directionText}`;
       els.rec.innerHTML = `
         <div class="asset-row">
           <div class="asset-name"><span class="coin">${best.symbol}</span><span><strong>${best.name}</strong><span>${best.instId} · isolated perpetual</span></span></div>
           <div class="price"><strong>${formatPrice(best.price)} USDT</strong><span>${best.change24>=0?'+':''}${best.change24.toFixed(1)}% / 24h</span></div>
         </div>
-        <div class="score-line"><span>Evidence quality · ${best.buyVotes}/${best.sourceCount} feeds agree</span><strong>${best.score.toFixed(1)} / 8</strong></div>
+        <div class="score-line"><span>Evidence quality · ${best.agreeVotes}/${best.sourceCount} feeds agree ${directionText}</span><strong>${best.score.toFixed(1)} / 8</strong></div>
         <div class="meter"><span style="width:${scorePct}%"></span></div>
         <div class="reasons">${best.reasons.slice(0,4).map(reason=>`<div class="reason"><i>✓</i><span>${reason}</span></div>`).join('')}</div>
         <div class="order-plan">
@@ -461,11 +516,11 @@
         <section class="invo-entry" aria-label="Values to enter in Invo">
           <div class="invo-entry-head">
             <div><h3>Enter these exact values in Invo</h3><p>Open Create Trade and copy each line into the matching field.</p></div>
-            <span class="badge buy">Manual entry</span>
+            <span class="badge ${directionClass}">${directionText}</span>
           </div>
           <div class="invo-fields">
             <div class="invo-field"><b>1</b><span>Coin</span><strong>${best.name} (${best.symbol})</strong></div>
-            <div class="invo-field"><b>2</b><span>Direction</span><strong class="long-value">Long</strong></div>
+            <div class="invo-field"><b>2</b><span>Direction</span><strong class="${isShort?'short-value':'long-value'}">${directionText}</strong></div>
             <div class="invo-field"><b>3</b><span>Take-Profit Price</span><strong>${formatPrice(target)} USDT</strong></div>
             <div class="invo-field"><b>4</b><span>Stop-Loss Price</span><strong>${formatPrice(stop)} USDT</strong></div>
             <div class="invo-field"><b>5</b><span>Leverage</span><strong>1×</strong></div>
@@ -480,7 +535,7 @@
       const ack = document.getElementById('ack'), prepare = document.getElementById('prepare');
       ack.addEventListener('change',()=>prepare.disabled=!ack.checked);
       prepare.addEventListener('click',async()=>{
-        const text = `INVO CREATE TRADE\nCoin: ${best.name} (${best.symbol})\nDirection: Long\nTake-Profit Price: ${formatPrice(target)} USDT\nStop-Loss Price: ${formatPrice(stop)} USDT\nLeverage: 1x\nPosition Size: ${allocation.toFixed(2)} USDC\nOnly enter near: ${formatPrice(best.price)} USDT`;
+        const text = `INVO CREATE TRADE\nCoin: ${best.name} (${best.symbol})\nDirection: ${directionText}\nTake-Profit Price: ${formatPrice(target)} USDT\nStop-Loss Price: ${formatPrice(stop)} USDT\nLeverage: 1x\nPosition Size: ${allocation.toFixed(2)} USDC\nOnly enter near: ${formatPrice(best.price)} USDT`;
         await navigator.clipboard.writeText(text).catch(()=>{}); showToast('Exact Invo values copied. Check every field before submitting.');
       });
     }
@@ -497,8 +552,8 @@
       if (winRate < 60) issues.push(`${winRate.toFixed(1)}% calculated win rate`);
       if (pnl <= 0) issues.push('P&amp;L is not positive');
       if (leverage > 3) issues.push(`${leverage}× leverage is too aggressive for this balance`);
-      if (!latestBest || latestBest.action !== 'buy') issues.push('the market scan currently says wait');
-      else if (side !== 'long') issues.push(`the trader is ${side}, but the qualified scan is long ${latestBest.symbol}`);
+      if (!latestBest || !['buy','short'].includes(latestBest.action)) issues.push('the market scan has no qualified live direction');
+      else if (side !== latestBest.direction) issues.push(`the trader is ${side}, but the qualified scan is ${latestBest.direction} ${latestBest.symbol}`);
       if (balance < MIN_ORDER_NOTIONAL) issues.push(`${balance.toFixed(2)} USDC is below a safe 1× minimum-size trade`);
       if (issues.length) {
         els.traderResult.className = 'trader-result skip';
@@ -518,7 +573,10 @@
       els.list.innerHTML = '<div class="market-row table-head"><span>Market</span><span>Price</span><span>24h</span><span>Signal</span></div><div class="empty"><strong>Analyzing ten markets across three feeds</strong>Checking agreement, trend, RSI, MACD, volume and volatility.</div>';
       try {
         const settled = await Promise.allSettled(MARKETS.map(loadMarket));
-        const results = settled.filter(x=>x.status==='fulfilled').map(x=>x.value).sort((a,b)=>b.score-a.score);
+        const results = settled.filter(x=>x.status==='fulfilled').map(x=>x.value).sort((a,b)=>{
+          const aQualified = ['buy','short'].includes(a.action) ? 1 : 0, bQualified = ['buy','short'].includes(b.action) ? 1 : 0;
+          return bQualified - aQualified || b.score - a.score;
+        });
         if (!results.length) throw new Error('Live market data could not be reached from this browser.');
         renderSourceStatus(results); renderList(results); renderRecommendation(results[0]);
         els.status.className = 'status live'; els.status.querySelector('span:last-child').textContent = `Live · ${new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}`;

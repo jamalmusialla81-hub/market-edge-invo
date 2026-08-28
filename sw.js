@@ -1,4 +1,4 @@
-const CACHE = 'market-edge-v3';
+const CACHE = 'market-edge-v4';
 const APP_SHELL = ['./', './index.html', './market-edge.html', './manifest.webmanifest'];
 
 self.addEventListener('install', event => {
