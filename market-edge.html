@@ -537,9 +537,9 @@
   </main>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
-  <script src="ai-config.js"></script>
-  <script src="quant-engine.js"></script>
-  <script src="ai-engine.js"></script>
+  <script src="ai-config.js?v=12"></script>
+  <script src="quant-engine.js?v=12"></script>
+  <script src="ai-engine.js?v=12"></script>
   <script>
     const MARKETS = ['BTC','ETH','SOL','XRP','DOGE','ADA','AVAX','LINK','SUI','PENGU','BNB','LTC','DOT','NEAR','APT','ARB','OP','UNI','AAVE','INJ'];
     const LABELS = { BTC:'Bitcoin', ETH:'Ethereum', SOL:'Solana', XRP:'XRP', DOGE:'Dogecoin', ADA:'Cardano', AVAX:'Avalanche', LINK:'Chainlink', SUI:'Sui', PENGU:'Pudgy Penguins', BNB:'BNB', LTC:'Litecoin', DOT:'Polkadot', NEAR:'NEAR', APT:'Aptos', ARB:'Arbitrum', OP:'Optimism', UNI:'Uniswap', AAVE:'Aave', INJ:'Injective' };
@@ -1123,8 +1123,8 @@
       socialRecords=JSON.parse(localStorage.getItem('market-edge-social')||'[]');
     } catch {}
     renderSocialSummary(); renderForward();
-    if ('serviceWorker' in navigator) window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
+    if ('serviceWorker' in navigator) window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js?v=12').catch(()=>{}));
   </script>
-  <script src="ai-ui.js"></script>
+  <script src="ai-ui.js?v=12"></script>
 </body>
 </html>
