@@ -23,20 +23,24 @@
   }
   function setBackend(text,kind='') { if(!els.backend)return;els.backend.textContent=text;els.backend.className=`badge ${kind}`.trim(); }
   function apiError(error) { return error?.message||'AI request failed'; }
+  function showBackendError(error) {
+    const labels={AI_CREDITS_EXHAUSTED:'AI credits required',AI_SPEND_LIMIT:'AI spend limit reached',AI_QUOTA_REQUIRED:'AI billing required',AI_RATE_LIMITED:'AI rate limit reached',AI_AUTH_FAILED:'AI key needs replacing',AI_ACCESS_DENIED:'AI model access denied'};
+    setBackend(labels[error?.code]||apiError(error),'avoid');
+  }
   async function fetchJSON(path,payload,timeoutMs=30000) {
     if(!API_BASE) throw new Error('AI backend is not connected yet. The quantitative scanner and paper portfolio still work.');
     const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),timeoutMs);
     try {
       const response=await fetch(`${API_BASE}${path}`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload),signal:controller.signal});
       const data=await response.json().catch(()=>({}));
-      if(!response.ok) throw new Error(data?.error?.message||`AI backend returned ${response.status}`);
+      if(!response.ok) {const error=new Error(data?.error?.message||`AI backend returned ${response.status}`);error.code=data?.error?.code||'AI_REQUEST_FAILED';throw error;}
       return data;
     } catch(error) { if(error.name==='AbortError') throw new Error('AI request timed out. No trade decision was changed.'); throw error; }
     finally { clearTimeout(timer); }
   }
   async function checkBackend() {
     if(!API_BASE) {setBackend('AI backend setup required','watch');return;}
-    try { const response=await fetch(`${API_BASE}/health`,{cache:'no-store'}),data=await response.json(); setBackend(data.configured?'AI backend ready':'Backend missing API secret',data.configured?'take':'watch'); }
+    try { const response=await fetch(`${API_BASE}/health`,{cache:'no-store'}),data=await response.json(); setBackend(data.configured?'AI backend connected':'Backend missing API secret',data.configured?'take':'watch'); }
     catch { setBackend('AI backend unavailable','avoid'); }
   }
   function selectQuant(asset) {
@@ -115,7 +119,7 @@
       const images=state.uploads.map(({dataUrl,type,size,timeframe,name})=>({dataUrl,type,size,timeframe,name}));AI.validateImageMeta(images);
       const data=await fetchJSON('/v1/analyze',{asset:state.quant?.asset||els.asset.value,question:els.question.value,quant:state.quant,images,paperContext:AI.portfolioStats(state.portfolio)},35000);
       state.analysis=AI.normalizeAIAnalysis(data.analysis);state.fusion=AI.fuseDecision(state.quant,state.analysis);renderAnalysis();renderPaperButton();setBackend(`AI ready · ${data.model}`,'take');toast('AI chart analysis complete');
-    } catch(error) {state.analysis=null;state.fusion=AI.fuseDecision(state.quant,null);renderAnalysis();setBackend(apiError(error),'avoid');toast(apiError(error));}
+    } catch(error) {state.analysis=null;state.fusion=AI.fuseDecision(state.quant,null);renderAnalysis();showBackendError(error);toast(apiError(error));}
     finally {state.busy=false;els.analyze.disabled=false;els.analyze.textContent='Analyse with AI';}
   }
   function renderChat() {
@@ -127,7 +131,7 @@
     try {
       const data=await fetchJSON('/v1/chat',{question,quant:state.quant,analysis:state.analysis,history:state.chat.slice(-7,-1),paperContext:{stats:AI.portfolioStats(state.portfolio),feedback:AI.historyFeedback(state.portfolio)},level:els.level.value},25000);
       const answer=String(data.message?.answer||'No answer returned');state.chat.push({role:'assistant',content:answer});setBackend(`AI ready · ${data.model}`,'take');
-    } catch(error){state.chat.push({role:'assistant',content:`Unavailable: ${apiError(error)} The quantitative verdict was not changed.`});}
+    } catch(error){state.chat.push({role:'assistant',content:`Unavailable: ${apiError(error)} The quantitative verdict was not changed.`});showBackendError(error);}
     finally{state.busy=false;els.chatSend.disabled=false;renderChat();}
   }
   function renderPaperButton() {

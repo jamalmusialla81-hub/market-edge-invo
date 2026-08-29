@@ -36,6 +36,15 @@ assert.equal(response.status,413);
 response=await handleRequest(request('/v1/analyze',{asset:'ETH',quant,images:[]}),env,{}, {fetch:async()=>new Response('unavailable',{status:503})});
 assert.equal(response.status,503);assert.equal((await response.json()).error.code,'AI_UNAVAILABLE');
 
+response=await handleRequest(request('/v1/analyze',{asset:'ETH',quant,images:[]}),env,{}, {fetch:async()=>new Response(JSON.stringify({error:{code:'credit_balance_exhausted'}}),{status:429,headers:{'content-type':'application/json'}})});
+assert.equal(response.status,503);body=await response.json();assert.equal(body.error.code,'AI_CREDITS_EXHAUSTED');assert.match(body.error.message,/credits are exhausted/i);
+
+response=await handleRequest(request('/v1/analyze',{asset:'ETH',quant,images:[]}),env,{}, {fetch:async()=>new Response(JSON.stringify({error:{code:'rate_limit_exceeded'}}),{status:429,headers:{'content-type':'application/json'}})});
+assert.equal(response.status,503);assert.equal((await response.json()).error.code,'AI_RATE_LIMITED');
+
+response=await handleRequest(request('/v1/analyze',{asset:'ETH',quant,images:[]}),env,{}, {fetch:async()=>new Response(JSON.stringify({error:{code:'invalid_api_key'}}),{status:401,headers:{'content-type':'application/json'}})});
+assert.equal(response.status,503);assert.equal((await response.json()).error.code,'AI_AUTH_FAILED');
+
 response=await handleRequest(request('/v1/analyze',{asset:'ETH',quant,images:[]}),env,{}, {fetch:async()=>new Response(JSON.stringify({id:'bad',output:[{type:'message',content:[{type:'output_text',text:'not-json'}]}]}),{status:200,headers:{'content-type':'application/json'}})});
 assert.equal(response.status,502);assert.equal((await response.json()).error.code,'AI_MALFORMED');
 

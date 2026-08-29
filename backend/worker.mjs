@@ -101,6 +101,19 @@ function extractOutputText(response) {
   for(const item of response?.output||[]) for(const content of item?.content||[]) if(content?.type==='output_text'&&typeof content.text==='string') return content.text;
   throw new Error('The model returned no structured text');
 }
+async function classifyOpenAIError(response) {
+  const payload=await response.json().catch(()=>({})),upstreamCode=safeText(payload?.error?.code,100).toLowerCase();
+  if(response.status===429) {
+    if(upstreamCode==='credit_balance_exhausted') return {message:'OpenAI API credits are exhausted. Add credits in OpenAI billing, then try again.',code:'AI_CREDITS_EXHAUSTED'};
+    if(['organization_spend_limit_exceeded','project_spend_limit_exceeded','organization_usage_limit_exceeded'].includes(upstreamCode)) return {message:'The OpenAI API spend or usage limit has been reached. Raise the relevant limit, then try again.',code:'AI_SPEND_LIMIT'};
+    if(upstreamCode==='insufficient_quota') return {message:'OpenAI API billing or quota needs attention before AI analysis can run.',code:'AI_QUOTA_REQUIRED'};
+    return {message:'OpenAI API rate limit reached. Wait briefly, then try again.',code:'AI_RATE_LIMITED'};
+  }
+  if(response.status===401) return {message:'The OpenAI API key is invalid or inactive. Replace the Worker secret, then try again.',code:'AI_AUTH_FAILED'};
+  if(response.status===403) return {message:'The OpenAI project or API key does not have access to this model.',code:'AI_ACCESS_DENIED'};
+  if([408,409,500,502,503,504].includes(response.status)) return {message:'AI service is temporarily unavailable. Try again shortly.',code:'AI_UNAVAILABLE'};
+  return {message:'AI request could not be completed.',code:'AI_REQUEST_FAILED'};
+}
 async function safetyIdentifier(request) {
   const source=`${request.headers.get('cf-connecting-ip')||''}|${request.headers.get('user-agent')||''}`;
   const hash=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(source));
@@ -115,8 +128,8 @@ async function openAIRequest({request,env,body,model,schema,name,instructions,fe
       body:JSON.stringify({model,instructions,input:body,store:false,max_output_tokens:3000,reasoning:{effort:'low'},safety_identifier:await safetyIdentifier(request),text:{verbosity:'low',format:{type:'json_schema',name,strict:true,schema}}})
     });
     if(!response.ok) {
-      const retryable=[408,409,429,500,502,503,504].includes(response.status);
-      throw Object.assign(new Error(retryable?'AI service is temporarily unavailable':'AI request could not be completed'),{status:retryable?503:502,code:retryable?'AI_UNAVAILABLE':'AI_REQUEST_FAILED'});
+      const classified=await classifyOpenAIError(response);
+      throw Object.assign(new Error(classified.message),{status:classified.code==='AI_REQUEST_FAILED'?502:503,code:classified.code});
     }
     const data=await response.json(),text=extractOutputText(data); let parsed;
     try { parsed=JSON.parse(text); } catch { throw Object.assign(new Error('AI returned malformed structured output'),{status:502,code:'AI_MALFORMED'}); }
