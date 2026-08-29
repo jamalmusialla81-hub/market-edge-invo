@@ -56,10 +56,11 @@ export function canonicalState(report,now=Date.now()){
 }
 
 function pause(milliseconds){return new Promise(resolve=>setTimeout(resolve,milliseconds));}
+async function timedFetch(fetchImpl,url,options,timeoutMs=12_000){const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),timeoutMs);try{return await fetchImpl(url,{...options,signal:controller.signal});}finally{clearTimeout(timer);}}
 async function fetchJsonWithRetry(fetchImpl,url,options,{provider,asset,attempts=2}={}){
   let failure='';
   for(let attempt=0;attempt<attempts;attempt++){
-    const response=await fetchImpl(url,options);
+    let response;try{response=await timedFetch(fetchImpl,url,options);}catch(error){failure=`${asset} ${provider} request timeout or network error: ${String(error?.message||error).slice(0,90)}`;if(attempt===attempts-1)break;await pause(1_000*(attempt+1));continue;}
     if(response.ok)return response.json();
     const body=(await response.text().catch(()=>'' )).replace(/\s+/g,' ').slice(0,120);
     failure=`${asset} ${provider} HTTP ${response.status}${body?`: ${body}`:''}`;
