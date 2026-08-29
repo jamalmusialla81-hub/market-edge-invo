@@ -84,7 +84,7 @@ export async function persistAsset(db,runId,asset,report,state,now=Date.now()){
   return report.candles.length;
 }
 
-export async function runMonitor({db,fetchImpl=fetch,now=Date.now(),watchlist=WATCHLIST,runId=id('run',[now,watchlist.map(item=>item.asset)]),throttleMs=450,delay=milliseconds=>new Promise(resolve=>setTimeout(resolve,milliseconds))}={}){
+export async function runMonitor({db,fetchImpl=fetch,now=Date.now(),watchlist=WATCHLIST,runId=id('run',[now,watchlist.map(item=>item.asset)]),throttleMs=1200,delay=milliseconds=>new Promise(resolve=>setTimeout(resolve,milliseconds))}={}){
   if(!db)return {runId,status:'STORAGE_UNAVAILABLE',assetsRequested:watchlist.length,assetsCompleted:0,candlesWritten:0,errors:['D1 binding is unavailable'],executionDisabled:true};
   await db.prepare(`INSERT INTO monitor_runs (id,started_at,status,assets_requested,engine_version,execution_disabled) VALUES (?,?,?,?,?,1)`).bind(runId,now,'RUNNING',watchlist.length,MONITOR_VERSION).run();
   const errors=[];let completed=0,written=0;
