@@ -802,7 +802,7 @@
         score:+score.toFixed(1), action, direction, lean, reasons:[consensusReason, ...directionalReference.reasons],
         buyVotes, shortVotes, agreeVotes, avgLongScore, avgShortScore,
         sourceCount:opinions.length, sources:opinions.map(item=>item.source), sourceOpinions:opinions,
-        quant, quality:quant.quality, matchingFeeds, maxPriceDisagreement, liquidityScore:Math.min(100, (reference.volumeRatio || 0) * 50)
+        quant, quality:quant.setupQuality, opportunity:quant.opportunity?.score??null, matchingFeeds, maxPriceDisagreement, liquidityScore:Math.min(100, (reference.volumeRatio || 0) * 50)
       };
     }
     async function enrichTimeframes(result) {
@@ -849,11 +849,12 @@
       if (filter === 'social') visible.sort((a,b)=>MarketEdgeQuant.aggregateSocial(socialRecords,b.symbol).reliability-MarketEdgeQuant.aggregateSocial(socialRecords,a.symbol).reliability);
       if (filter === 'risk') visible.sort((a,b)=>(a.quant?.risk?.lossAtStop||Infinity)-(b.quant?.risk?.lossAtStop||Infinity));
       if (filter === 'liquidity') visible.sort((a,b)=>b.liquidityScore-a.liquidityScore);
-      if (['overall','quality'].includes(filter)) visible.sort((a,b)=>(b.quality||0)-(a.quality||0));
+      if (['overall','quality'].includes(filter)) visible.sort((a,b)=>(b.opportunity??-1)-(a.opportunity??-1));
       els.list.innerHTML = '<div class="market-row table-head"><span>Market</span><span>Price</span><span>24h</span><span>Decision</span></div>' + visible.map(r=>{
         const decision = r.quant?.decision || 'ANALYSIS UNAVAILABLE';
         const badgeClass = decision === 'TAKE TRADE' ? (r.quant.direction==='short'?'short':'buy') : decision === 'WAIT' ? 'watch' : 'avoid';
-        const label = decision === 'TAKE TRADE' ? `${r.quant.direction.toUpperCase()} · ${r.quality}/100` : `${decision} · ${r.quality||0}/100`;
+        const setup=Number.isFinite(r.quality)?`${r.quality}/100`:'—';
+        const label = decision === 'TAKE TRADE' ? `${r.quant.direction.toUpperCase()} · ${setup}` : `${decision} · opportunity ${r.opportunity??'—'} · setup ${setup}`;
         return `
         <div class="market-row">
           <div class="market-asset"><span class="mini-coin">${r.symbol}</span><span><b>${r.symbol}</b><small>${r.name}</small></span></div>
@@ -924,10 +925,10 @@
       const common=`
         <div class="asset-row">
           <div class="asset-name"><span class="coin">${best.symbol}</span><span><strong>${best.name}</strong><span>${q.strategy||'No strategy'} · ${q.regime||'Unknown regime'}</span></span></div>
-          <div><div class="quality-score"><strong>${q.quality||0}</strong><span>/100 quality</span></div><div class="price"><span>${formatPrice(best.price)} USDT · ${best.sourceCount} feeds</span></div></div>
+          <div><div class="quality-score"><strong>${Number.isFinite(q.setupQuality)?q.setupQuality:'—'}</strong><span>/100 setup · ${q.opportunity?.score??'—'}/100 opportunity</span></div><div class="price"><span>${formatPrice(best.price)} USDT · ${best.sourceCount} feeds</span></div></div>
         </div>
-        <div class="score-line"><span>Setup quality—not a win probability</span><strong>${q.quality||0} / 100</strong></div>
-        <div class="meter"><span style="width:${q.quality||0}%"></span></div>
+        <div class="score-line"><span>Setup quality—not a win probability</span><strong>${Number.isFinite(q.setupQuality)?q.setupQuality+' / 100':'NO SETUP'}</strong></div>
+        <div class="meter"><span style="width:${Number.isFinite(q.setupQuality)?q.setupQuality:0}%"></span></div>
         <div class="evidence-grid">
           <div class="evidence-item"><span>Decision</span><strong>${decision}</strong></div>
           <div class="evidence-item"><span>Regime</span><strong>${q.regime||'Unavailable'}</strong></div>

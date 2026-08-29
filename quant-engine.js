@@ -243,6 +243,7 @@
     }
     return { valid: true, maxLoss, notional, margin, leverage, lossAtStop, stopPct, estimatedLiquidation: rawLiquidation, liquidationDistancePct, roundTripCostPct };
   }
+  function opportunityScore(frames){const h4=frames.h4,h1=frames.h1,m15=frames.m15,m5=frames.m5,d1=frames.d1;if(!h4?.available)return {score:null,components:{data:0}};let trend=0,structure=0,momentum=0,volume=0,regime=0,location=0,conflict=0,extension=0,data=0;const bias=frame=>frame.price>frame.ema20&&frame.ema20>frame.ema50?'long':frame.price<frame.ema20&&frame.ema20<frame.ema50?'short':'neutral',biases=[bias(d1),bias(h4),bias(h1),bias(m15),bias(m5)],active=biases.filter(v=>v!=='neutral');trend=active.length?Math.round(active.filter(v=>v===active[0]).length/active.length*24):8;structure=h1.structure?.trend!=='neutral'?14:6;momentum=Math.round(clamp(12-Math.abs((h1.rsi||50)-50)*.22+Math.min(4,Math.abs(h1.roc5||0)),0,16));volume=Math.round(clamp((m15.relativeVolume||0)*8,0,12));regime=['COMPRESSION','HIGH-VOLATILITY RANGE'].includes(classifyRegime(h4))?5:12;location=Math.abs(m5.price-m5.ema20)<m5.atr*1.5?10:4;conflict=(new Set(active).size>1)?-12:0;extension=Math.abs(m5.price-m5.ema20)>m5.atr*2.2?-10:0;data=h4.dataQuality?.warnings?.length?-8:6;const components={trend,structure,momentum,volume,regime,location,conflict,extension,data};return{score:Math.round(clamp(Object.values(components).reduce((a,b)=>a+b,0),0,100)),components};}
   function evaluateSetup(input) {
     const settings=Object.assign({minQuality:72,minRR:1.8,balance:7,riskPct:.01,maxLeverage:10,minNotional:10,maxExposurePct:1,requireMTF:true},input.settings||{});
     const frames=input.timeframes||{}, tf={
@@ -256,7 +257,8 @@
     const setup=tf.h1.available?tf.h1:primary, confirmation=tf.m15.available?tf.m15:setup, execution=tf.m5.available?tf.m5:confirmation;
     const regime=classifyRegime(primary), macroRegime=tf.d1.available?classifyRegime(tf.d1):'UNAVAILABLE';
     const candidates=strategyCandidates(setup);
-    if (!candidates.length) return {decision:'NO TRADE',quality:35,reason:'No independent strategy satisfies its entry rules',regime,macroRegime,frame:primary,timeframes:tf};
+    const opportunity=opportunityScore(tf);
+    if (!candidates.length) return {decision:'NO TRADE',quality:null,setupQuality:null,opportunity,reason:'No independent strategy satisfies its entry rules',regime,macroRegime,frame:primary,timeframes:tf};
     const best=candidates[0], opposite=candidates.find(candidate=>candidate.direction!==best.direction);
     if (opposite&&Math.abs(best.score-opposite.score)<10) return {decision:'NO TRADE',quality:Math.round(best.score),reason:`Contradictory ${best.strategy} and ${opposite.strategy} signals`,regime,macroRegime,frame:primary,timeframes:tf};
     const direction=best.direction, macroBias=timeframeBias(tf.d1), primaryBias=timeframeBias(primary), setupBias=timeframeBias(setup), confirmationBias=timeframeBias(confirmation), executionBias=timeframeBias(execution);
@@ -288,7 +290,7 @@
     const risk=riskPlan({balance:settings.balance,riskPct:settings.riskPct,maxLeverage:settings.maxLeverage,entry,stop,direction,minNotional:settings.minNotional,maxExposurePct:settings.maxExposurePct});
     const alignment={m5:executionBias,m15:confirmationBias,h1:setupBias,h4:primaryBias,d1:macroBias,aligned,opposed};
     const reasons=[...best.reasons,`Timeframes aligned ${aligned}/5; opposed ${opposed}/5`,social.text];
-    const base={quality,direction,strategy:best.strategy,regime,macroRegime,entry,idealEntry,entryZone,stop,target:target1,target1,target2,rr:rr1,rr1,rr2,risk,reasons,frame:primary,timeframes:tf,alignment,entryReason:best.entryReason,invalidationCondition:best.invalidationReason,trailingRule:'After TP1, move the stop only after a new confirmed 15m swing; trail beyond that swing with a 0.25 ATR buffer',chaseDistance};
+    const base={quality,setupQuality:quality,opportunity,direction,strategy:best.strategy,regime,macroRegime,entry,idealEntry,entryZone,stop,target:target1,target1,target2,rr:rr1,rr1,rr2,risk,reasons,frame:primary,timeframes:tf,alignment,entryReason:best.entryReason,invalidationCondition:best.invalidationReason,trailingRule:'After TP1, move the stop only after a new confirmed 15m swing; trail beyond that swing with a 0.25 ATR buffer',chaseDistance};
     if (chased) return {...base,decision:'WAIT',reason:'Current price has moved beyond the intended entry zone; do not chase'};
     if (quality<settings.minQuality) return {...base,decision:quality>=settings.minQuality-10?'WAIT':'NO TRADE',reason:`Setup quality is below the configured ${settings.minQuality}/100 research threshold`};
     if (!risk.valid) return {...base,decision:'NO TRADE',reason:risk.reason};
@@ -420,5 +422,5 @@
     const total = longWeight + shortWeight;
     return { sample: relevant.length, reliability: relevant.length ? mean(relevant.map(traderReliability)) : 0, weightedLong: total ? longWeight / total : 0.5, weightedShort: total ? shortWeight / total : 0.5 };
   }
-  return { VERSION, LEVERAGE_CHOICES, clamp, mean, median, std, ema, sma, rsi, atr, rollingVwap, validateCandles, validateFreshness, swingPoints, features, recentStructure, classifyRegime, strategyCandidates, riskPlan, evaluateSetup, performanceStats, simulateBacktest, walkForwardTest, backtest, traderReliability, aggregateSocial };
+  return { VERSION, LEVERAGE_CHOICES, clamp, mean, median, std, ema, sma, rsi, atr, rollingVwap, validateCandles, validateFreshness, swingPoints, features, recentStructure, classifyRegime, strategyCandidates, riskPlan, opportunityScore, evaluateSetup, performanceStats, simulateBacktest, walkForwardTest, backtest, traderReliability, aggregateSocial };
 });
