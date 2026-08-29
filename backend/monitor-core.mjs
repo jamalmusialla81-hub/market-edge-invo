@@ -1,4 +1,4 @@
-export const MONITOR_VERSION='1.1.0';
+export const MONITOR_VERSION='1.2.0';
 export const INTERVAL_MS={'5m':300_000,'15m':900_000,'1h':3_600_000,'4h':14_400_000,'1d':86_400_000};
 const COINBASE_PRODUCTS={BTC:'BTC-USD',ETH:'ETH-USD',SOL:'SOL-USD',XRP:'XRP-USD',DOGE:'DOGE-USD',LTC:'LTC-USD',ADA:'ADA-USD',AVAX:'AVAX-USD',LINK:'LINK-USD',SUI:'SUI-USD',BCH:'BCH-USD',AAVE:'AAVE-USD',ICP:'ICP-USD'};
 export const WATCHLIST=[
@@ -13,21 +13,24 @@ function ema(values,period){if(!values.length)return[];const alpha=2/(period+1),
 export function normalizeBinanceKlines(rows,{asset='UNKNOWN',symbol='UNKNOWN',now=Date.now(),interval='5m'}={}){
   const errors=[],candles=[],seen=new Set(),duration=INTERVAL_MS[interval];
   if(!duration)throw new Error(`Unsupported interval ${interval}`);
+  let partial=0;
   (Array.isArray(rows)?rows:[]).forEach((row,index)=>{
     const candle={time:finite(row?.[0]),open:finite(row?.[1]),high:finite(row?.[2]),low:finite(row?.[3]),close:finite(row?.[4]),volume:finite(row?.[5]),closeTime:finite(row?.[6])};
     if(!Object.values(candle).every(Number.isFinite)){errors.push(`row ${index+1}: missing numeric field`);return;}
-    if(candle.time>now+60_000||candle.closeTime>now+60_000){errors.push(`row ${index+1}: future timestamp`);return;}
+    if(candle.time>now+60_000){errors.push(`row ${index+1}: future timestamp`);return;}
     if(seen.has(candle.time)){errors.push(`row ${index+1}: duplicate timestamp`);return;}
     if(candle.closeTime<candle.time+duration-1||candle.closeTime>candle.time+duration+60_000){errors.push(`row ${index+1}: invalid close time`);return;}
     if([candle.open,candle.high,candle.low,candle.close].some(value=>value<=0)||candle.volume<0||candle.high<Math.max(candle.open,candle.close)||candle.low>Math.min(candle.open,candle.close)||candle.low>candle.high){errors.push(`row ${index+1}: invalid OHLCV`);return;}
-    seen.add(candle.time);if(candle.closeTime<=now)candles.push(candle);
+    seen.add(candle.time);
+    if(candle.closeTime>now){partial++;return;}
+    candles.push(candle);
   });
   candles.sort((a,b)=>a.time-b.time);let gaps=0,missing=0;
   for(let index=1;index<candles.length;index++){const delta=candles[index].time-candles[index-1].time;if(delta!==duration){gaps++;if(delta>duration)missing+=Math.round(delta/duration)-1;else errors.push(`non-monotonic interval at ${candles[index].time}`);}}
   const expected=candles.length?Math.round((candles.at(-1).time-candles[0].time)/duration)+1:0,coverage=expected?candles.length/expected:0;
   const status=errors.length?'INVALID':candles.length<60?'LOW':coverage>=.995?'HIGH':coverage>=.98?'MEDIUM':'LOW';
   const datasetHash=hash(candles.map(c=>[c.time,c.open,c.high,c.low,c.close,c.volume]));
-  return {asset,symbol,interval,candles,errors,gaps,missing,coverage,status,datasetHash,firstTime:candles[0]?.time||null,lastTime:candles.at(-1)?.time||null};
+  return {asset,symbol,interval,candles,errors,gaps,missing,partial,coverage,status,datasetHash,firstTime:candles[0]?.time||null,lastTime:candles.at(-1)?.time||null};
 }
 
 export function normalizeHyperliquidCandles(rows,options={}){
@@ -52,18 +55,28 @@ export function canonicalState(report,now=Date.now()){
   return {status,dataHealth:report.status,sourceStatus:stale?'STALE':report.providerStatus||'LIVE',referencePrice:price,referenceTime:last?.closeTime||null,staleAfter:last?.closeTime?last.closeTime+INTERVAL_MS['5m']*3:null,disagreementPct:null,bias,ema20:ema20||null,ema50:ema50||null,candleCount:candles.length,coverage:report.coverage,datasetHash:report.datasetHash,executionDisabled:true,reason:status==='ACTIVE'?'Monitor ingestion is healthy; server-side deterministic five-timeframe strategy evaluation is pending a deep canonical dataset.':'Data quality or depth prevents research qualification.'};
 }
 
+function pause(milliseconds){return new Promise(resolve=>setTimeout(resolve,milliseconds));}
+async function fetchJsonWithRetry(fetchImpl,url,options,{provider,asset,attempts=2}={}){
+  let failure='';
+  for(let attempt=0;attempt<attempts;attempt++){
+    const response=await fetchImpl(url,options);
+    if(response.ok)return response.json();
+    const body=(await response.text().catch(()=>'' )).replace(/\s+/g,' ').slice(0,120);
+    failure=`${asset} ${provider} HTTP ${response.status}${body?`: ${body}`:''}`;
+    if(![400,408,425,429,500,502,503,504].includes(response.status)||attempt===attempts-1)break;
+    await pause(350*(attempt+1));
+  }
+  throw new Error(failure||`${asset} ${provider} request failed`);
+}
 async function fetchHyperliquidCandles(asset,fetchImpl,now){
   const started=Date.now(),startTime=now-101*INTERVAL_MS['5m'];
-  const response=await fetchImpl('https://api.hyperliquid.xyz/info',{method:'POST',headers:{'content-type':'application/json',accept:'application/json'},body:JSON.stringify({type:'candleSnapshot',req:{coin:asset.asset,interval:'5m',startTime,endTime:now}})});
-  if(!response.ok)throw new Error(`${asset.asset} Hyperliquid HTTP ${response.status}`);
-  const rows=await response.json(),report=normalizeHyperliquidCandles(rows,{asset:asset.asset,symbol:asset.symbol,now,interval:'5m'});
+  const rows=await fetchJsonWithRetry(fetchImpl,'https://api.hyperliquid.xyz/info',{method:'POST',headers:{'content-type':'application/json',accept:'application/json'},body:JSON.stringify({type:'candleSnapshot',req:{coin:asset.asset,interval:'5m',startTime,endTime:now}})},{provider:'Hyperliquid',asset:asset.asset}),report=normalizeHyperliquidCandles(rows,{asset:asset.asset,symbol:asset.symbol,now,interval:'5m'});
   return {...report,exchange:'HYPERLIQUID',sourceLatencyMs:Date.now()-started,providerStatus:'LIVE · HYPERLIQUID FALLBACK'};
 }
 async function fetchCoinbaseCandles(asset,fetchImpl,now){
   const product=asset.coinbaseProduct;if(!product)throw new Error(`${asset.asset} has no approved Coinbase product mapping`);
   const started=Date.now(),start=new Date(now-101*INTERVAL_MS['5m']).toISOString(),end=new Date(now).toISOString(),url=`https://api.exchange.coinbase.com/products/${encodeURIComponent(product)}/candles?granularity=300&start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`;
-  const response=await fetchImpl(url,{headers:{accept:'application/json'}});if(!response.ok)throw new Error(`${asset.asset} Coinbase HTTP ${response.status}`);
-  const rows=await response.json(),adapted=(Array.isArray(rows)?rows:[]).map(row=>[Number(row?.[0])*1000,row?.[3],row?.[2],row?.[1],row?.[4],row?.[5],Number(row?.[0])*1000+INTERVAL_MS['5m']-1]);
+  const rows=await fetchJsonWithRetry(fetchImpl,url,{headers:{accept:'application/json'}},{provider:'Coinbase',asset:asset.asset}),adapted=(Array.isArray(rows)?rows:[]).map(row=>[Number(row?.[0])*1000,row?.[3],row?.[2],row?.[1],row?.[4],row?.[5],Number(row?.[0])*1000+INTERVAL_MS['5m']-1]);
   const report=normalizeBinanceKlines(adapted,{asset:asset.asset,symbol:product,now,interval:'5m'});return {...report,exchange:'COINBASE',sourceLatencyMs:Date.now()-started,providerStatus:'LIVE · COINBASE'};
 }
 export async function fetchAssetCandles(asset,fetchImpl,now=Date.now()){
@@ -90,18 +103,25 @@ async function writeStatements(db,statements){if(!statements.length)return;for(l
 export async function persistAsset(db,runId,asset,report,state,now=Date.now()){
   const exchange=report.exchange||asset.exchange,symbol=report.symbol||asset.symbol;
   const candles=report.candles.map(candle=>db.prepare(`INSERT OR IGNORE INTO canonical_candles (asset,exchange,symbol,interval,open_time,close_time,open,high,low,close,volume,source_latency_ms,received_at,dataset_hash) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(asset.asset,exchange,symbol,'5m',candle.time,candle.closeTime,candle.open,candle.high,candle.low,candle.close,candle.volume,report.sourceLatencyMs,now,report.datasetHash));
-  candles.push(db.prepare(`INSERT OR REPLACE INTO market_states (asset,exchange,symbol,status,data_health,source_status,reference_price,reference_time,stale_after,disagreement_pct,state_json,dataset_hash,engine_version,updated_at,execution_disabled) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,1)`).bind(asset.asset,exchange,symbol,state.status,state.dataHealth,state.sourceStatus,state.referencePrice,state.referenceTime,state.staleAfter,state.disagreementPct,JSON.stringify(state),report.datasetHash,MONITOR_VERSION,now));
+  const source={canonicalSource:`${exchange}:${symbol}`,backupSource:(asset.backupSources||[]).join(','),quoteCurrency:symbol.endsWith('USDT')?'USDT':'USD',lastSuccessAt:now,lastFailureAt:null,failureReason:null};
+  candles.push(db.prepare(`INSERT INTO market_states (asset,exchange,symbol,status,data_health,source_status,reference_price,reference_time,stale_after,disagreement_pct,state_json,dataset_hash,engine_version,updated_at,execution_disabled,quote_currency,canonical_source,backup_source,last_success_at,last_failure_at,failure_reason) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?,?,?,?,?,?) ON CONFLICT(asset) DO UPDATE SET exchange=excluded.exchange,symbol=excluded.symbol,status=excluded.status,data_health=excluded.data_health,source_status=excluded.source_status,reference_price=excluded.reference_price,reference_time=excluded.reference_time,stale_after=excluded.stale_after,disagreement_pct=excluded.disagreement_pct,state_json=excluded.state_json,dataset_hash=excluded.dataset_hash,engine_version=excluded.engine_version,updated_at=excluded.updated_at,quote_currency=excluded.quote_currency,canonical_source=excluded.canonical_source,backup_source=excluded.backup_source,last_success_at=excluded.last_success_at,last_failure_at=NULL,failure_reason=NULL`).bind(asset.asset,exchange,symbol,state.status,state.dataHealth,state.sourceStatus,state.referencePrice,state.referenceTime,state.staleAfter,state.disagreementPct,JSON.stringify({...state,source}),report.datasetHash,MONITOR_VERSION,now,source.quoteCurrency,source.canonicalSource,source.backupSource,now,null,null));
   candles.push(db.prepare(`INSERT OR IGNORE INTO monitor_events (id,run_id,asset,event_type,severity,payload_json,created_at,immutable) VALUES (?,?,?,?,?,?,?,1)`).bind(id('event',[runId,asset.asset,report.datasetHash]),runId,asset.asset,'CANONICAL_STATE_UPDATED',state.status==='BAD DATA'?'ERROR':'INFO',JSON.stringify({state,errors:report.errors.slice(0,5),gaps:report.gaps}),now));
   await writeStatements(db,candles);
   return report.candles.length;
+}
+export async function persistFailure(db,runId,asset,error,now=Date.now()){
+  const failureReason=String(error?.message||error).slice(0,360),source={canonicalSource:`${asset.exchange}:${asset.coinbaseProduct||asset.symbol}`,backupSource:(asset.backupSources||[]).join(','),lastSuccessAt:null,lastFailureAt:now,failureReason};
+  const state={status:'DEGRADED',dataHealth:'UNAVAILABLE',sourceStatus:'FAILED',executionDisabled:true,source};
+  await db.prepare(`INSERT INTO market_states (asset,exchange,symbol,status,data_health,source_status,reference_price,reference_time,stale_after,disagreement_pct,state_json,dataset_hash,engine_version,updated_at,execution_disabled,quote_currency,canonical_source,backup_source,last_success_at,last_failure_at,failure_reason) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?,?,?,?,?,?) ON CONFLICT(asset) DO UPDATE SET status=excluded.status,data_health=excluded.data_health,source_status=excluded.source_status,state_json=excluded.state_json,engine_version=excluded.engine_version,updated_at=excluded.updated_at,backup_source=excluded.backup_source,last_failure_at=excluded.last_failure_at,failure_reason=excluded.failure_reason`).bind(asset.asset,asset.exchange,asset.coinbaseProduct||asset.symbol,'DEGRADED','UNAVAILABLE','FAILED',null,null,null,null,JSON.stringify(state),'',MONITOR_VERSION,now,asset.coinbaseProduct?.endsWith('USDT')?'USDT':'USD',source.canonicalSource,source.backupSource,null,now,failureReason).run();
+  await db.prepare(`INSERT OR IGNORE INTO monitor_events (id,run_id,asset,event_type,severity,payload_json,created_at,immutable) VALUES (?,?,?,?,?,?,?,1)`).bind(id('event',[runId,asset.asset,'provider-failure',failureReason]),runId,asset.asset,'PROVIDER_FAILURE','ERROR',JSON.stringify(state),now).run();
 }
 
 export async function runMonitor({db,fetchImpl=fetch,now=Date.now(),watchlist=WATCHLIST,runId=id('run',[now,watchlist.map(item=>item.asset)]),throttleMs=700,delay=milliseconds=>new Promise(resolve=>setTimeout(resolve,milliseconds))}={}){
   if(!db)return {runId,status:'STORAGE_UNAVAILABLE',assetsRequested:watchlist.length,assetsCompleted:0,candlesWritten:0,errors:['D1 binding is unavailable'],executionDisabled:true};
   await db.prepare(`INSERT INTO monitor_runs (id,started_at,status,assets_requested,engine_version,execution_disabled) VALUES (?,?,?,?,?,1)`).bind(runId,now,'RUNNING',watchlist.length,MONITOR_VERSION).run();
   const errors=[];let completed=0,written=0;
-  for(let index=0;index<watchlist.length;index++){const asset=watchlist[index];if(index&&throttleMs>0)await delay(throttleMs);try{const report=await fetchAssetCandles(asset,fetchImpl,now),state=canonicalState(report,now);written+=await persistAsset(db,runId,asset,report,state,now);completed++;}catch(error){errors.push(`${asset.asset}: ${String(error.message||error).slice(0,180)}`);}}
-  const status=completed?'COMPLETE':'FAILED';
+  for(let index=0;index<watchlist.length;index++){const asset=watchlist[index];if(index&&throttleMs>0)await delay(throttleMs);try{const report=await fetchAssetCandles(asset,fetchImpl,now),state=canonicalState(report,now);written+=await persistAsset(db,runId,asset,report,state,now);completed++;}catch(error){errors.push(`${asset.asset}: ${String(error.message||error).slice(0,180)}`);try{await persistFailure(db,runId,asset,error,now);}catch(storageError){errors.push(`${asset.asset}: failure state not persisted: ${String(storageError.message||storageError).slice(0,100)}`);}}}
+  const status=completed===watchlist.length?'COMPLETE':completed?'DEGRADED':'FAILED';
   await db.prepare(`UPDATE monitor_runs SET completed_at=?,status=?,assets_completed=?,candles_written=?,errors_json=? WHERE id=?`).bind(now,status,completed,written,JSON.stringify(errors),runId).run();
   return {runId,status,assetsRequested:watchlist.length,assetsCompleted:completed,candlesWritten:written,errors,executionDisabled:true};
 }
@@ -110,7 +130,7 @@ export async function latestMonitor(db){
   if(!db)return {storage:'unavailable',latestRun:null,states:[],events:[]};
   const [run,states,events]=await Promise.all([
     db.prepare(`SELECT id,started_at,completed_at,status,assets_requested,assets_completed,candles_written,errors_json,engine_version,execution_disabled FROM monitor_runs ORDER BY started_at DESC LIMIT 1`).first(),
-    db.prepare(`SELECT asset,exchange,symbol,status,data_health,source_status,reference_price,reference_time,stale_after,disagreement_pct,state_json,dataset_hash,engine_version,updated_at,execution_disabled FROM market_states ORDER BY asset LIMIT 100`).all(),
+    db.prepare(`SELECT asset,exchange,symbol,status,data_health,source_status,reference_price,reference_time,stale_after,disagreement_pct,state_json,dataset_hash,engine_version,updated_at,execution_disabled,quote_currency,canonical_source,backup_source,last_success_at,last_failure_at,failure_reason FROM market_states ORDER BY asset LIMIT 100`).all(),
     db.prepare(`SELECT id,asset,event_type,severity,payload_json,created_at FROM monitor_events ORDER BY created_at DESC LIMIT 50`).all()
   ]);
   return {storage:'connected',latestRun:run||null,states:states.results||[],events:events.results||[],executionDisabled:true};

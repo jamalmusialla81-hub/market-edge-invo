@@ -10,6 +10,7 @@ assert.equal(aggregateCompleted(report.candles,'5m','1h',now).length,25);
 assert.equal(canonicalState(report,now).status,'ACTIVE');assert.equal(canonicalState(report,now).executionDisabled,true);
 report=normalizeBinanceKlines([...rows,rows[0]],{now});assert.equal(report.status,'INVALID');assert.match(report.errors[0],/duplicate/);
 report=normalizeBinanceKlines([[now+1000000,'1','2','0.5','1','1',now+1300000]],{now});assert.equal(report.status,'INVALID');
+report=normalizeBinanceKlines([...rows,[now,'101','102','100','101.5','20',now+INTERVAL_MS['5m']-1]],{now});assert.equal(report.status,'HIGH');assert.equal(report.partial,1);assert.equal(report.errors.length,0);
 report=normalizeBinanceKlines(rows.slice(-10),{now});assert.equal(canonicalState(report,now).status,'INSUFFICIENT DATA');
 const hyperRows=rows.map(row=>({t:row[0],T:row[6],o:row[1],h:row[2],l:row[3],c:row[4],v:row[5]}));
 assert.equal(normalizeHyperliquidCandles(hyperRows,{now}).status,'HIGH');
@@ -23,6 +24,7 @@ class FakeStatement{constructor(db,sql){this.db=db;this.sql=sql;}bind(...args){t
 class FakeDb{constructor(){this.calls=[];this.run=null;this.states=[];}prepare(sql){return new FakeStatement(this,sql);}async batch(items){for(const item of items)await item.run();}}
 const db=new FakeDb();const monitor=await runMonitor({db,now,watchlist:[{asset:'BTC',symbol:'BTCUSDT',exchange:'HYPERLIQUID'}],fetchImpl:async()=>new Response(JSON.stringify(hyperRows),{status:200}),throttleMs:0});
 assert.equal(monitor.status,'COMPLETE');assert.equal(monitor.assetsCompleted,1);assert.equal(monitor.executionDisabled,true);assert.ok(db.calls.some(call=>call.sql.includes('canonical_candles')));assert.ok(db.calls.some(call=>call.sql.includes('market_states')));
+const degraded=await runMonitor({db:new FakeDb(),now,watchlist:[{asset:'BTC',symbol:'BTCUSDT',exchange:'HYPERLIQUID'},{asset:'NOPE',symbol:'NOPEUSDT',exchange:'HYPERLIQUID'}],fetchImpl:async(_url,options)=>String(options?.body||'').includes('NOPE')?new Response('busy',{status:429}):new Response(JSON.stringify(hyperRows),{status:200}),throttleMs:0});assert.equal(degraded.status,'DEGRADED');assert.equal(degraded.assetsCompleted,1);
 const unavailable=await runMonitor({db:null,now,watchlist:[]});assert.equal(unavailable.status,'STORAGE_UNAVAILABLE');
 db.run={id:'run',status:'COMPLETE'};db.states=[{asset:'BTC'}];const latest=await latestMonitor(db);assert.equal(latest.storage,'connected');assert.equal(latest.states.length,1);
 console.log('Background monitor and canonical-state tests passed');
