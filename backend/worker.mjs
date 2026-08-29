@@ -1,5 +1,5 @@
-import {runMonitor, latestMonitor, MONITOR_VERSION} from './monitor-core.mjs';
-import {runHistoricalBackfill,latestHistorical,HISTORICAL_VERSION} from './historical-core.mjs';
+import {runMonitor, latestMonitor, MONITOR_VERSION, WATCHLIST} from './monitor-core.mjs';
+import {runHistoricalBackfill,latestHistorical,HISTORICAL_VERSION,PRIORITY_ASSETS} from './historical-core.mjs';
 
 const DEFAULT_ORIGINS = ['https://jamalmusialla81-hub.github.io', 'http://127.0.0.1:4173', 'http://127.0.0.1:4174', 'http://localhost:4173'];
 const MAX_BODY_BYTES = 8_500_000;
@@ -232,7 +232,7 @@ export async function handleRequest(request,env={},ctx={},deps={}) {
 }
 
 export async function handleScheduled(controller,env={},ctx={},deps={}) {
-  const now=Number(controller?.scheduledTime)||Date.now(),operation=(async()=>{const monitor=await runMonitor({db:env.MARKET_EDGE_DB,fetchImpl:deps.fetch||fetch,now,watchlist:deps.watchlist});const historical=await runHistoricalBackfill({db:env.MARKET_EDGE_DB,fetchImpl:deps.fetch||fetch,now,assets:deps.historicalAssets,days:deps.historicalDays,delay:deps.delay});return{...monitor,historical};})();
+  const now=Number(controller?.scheduledTime)||Date.now(),slot=Math.floor(now/300_000),monitorWatchlist=deps.watchlist||WATCHLIST.slice((slot*4)%WATCHLIST.length,(slot*4)%WATCHLIST.length+4),historicalAssets=deps.historicalAssets||PRIORITY_ASSETS.slice((slot*2)%PRIORITY_ASSETS.length,(slot*2)%PRIORITY_ASSETS.length+2),operation=(async()=>{const monitor=await runMonitor({db:env.MARKET_EDGE_DB,fetchImpl:deps.fetch||fetch,now,watchlist:monitorWatchlist,throttleMs:deps.throttleMs??700});const historical=await runHistoricalBackfill({db:env.MARKET_EDGE_DB,fetchImpl:deps.fetch||fetch,now,assets:historicalAssets,days:deps.historicalDays,delay:deps.delay});return{...monitor,historical,scheduledScope:{monitorAssets:monitorWatchlist.map(item=>item.asset),historicalAssets}};})();
   if(ctx?.waitUntil) { ctx.waitUntil(operation); return {accepted:true,scheduledAt:now,execution:'disabled'}; }
   return operation;
 }
