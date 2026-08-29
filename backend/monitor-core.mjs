@@ -56,7 +56,7 @@ export function canonicalState(report,now=Date.now()){
 }
 
 function pause(milliseconds){return new Promise(resolve=>setTimeout(resolve,milliseconds));}
-async function timedFetch(fetchImpl,url,options,timeoutMs=4_000){const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),timeoutMs);try{return await fetchImpl(url,{...options,signal:controller.signal});}finally{clearTimeout(timer);}}
+async function timedFetch(fetchImpl,url,options,timeoutMs=4_000){const controller=new AbortController();let timer;const request=Promise.resolve().then(()=>fetchImpl(url,{...options,signal:controller.signal}));request.catch(()=>{});const timeout=new Promise((_,reject)=>{timer=setTimeout(()=>{controller.abort();reject(new Error(`request exceeded ${timeoutMs}ms`));},timeoutMs);});try{return await Promise.race([request,timeout]);}finally{clearTimeout(timer);}}
 async function fetchJsonWithRetry(fetchImpl,url,options,{provider,asset,attempts=1}={}){
   let failure='';
   for(let attempt=0;attempt<attempts;attempt++){
@@ -119,6 +119,7 @@ export async function persistFailure(db,runId,asset,error,now=Date.now()){
 
 export async function runMonitor({db,fetchImpl=fetch,now=Date.now(),watchlist=WATCHLIST,runId=id('run',[now,watchlist.map(item=>item.asset)]),throttleMs=1200,delay=milliseconds=>new Promise(resolve=>setTimeout(resolve,milliseconds))}={}){
   if(!db)return {runId,status:'STORAGE_UNAVAILABLE',assetsRequested:watchlist.length,assetsCompleted:0,candlesWritten:0,errors:['D1 binding is unavailable'],executionDisabled:true};
+  await db.prepare(`UPDATE monitor_runs SET status='ABANDONED',completed_at=?,errors_json='["Run exceeded its bounded scheduler window"]' WHERE status='RUNNING' AND started_at<?`).bind(now,now-300_000).run();
   await db.prepare(`INSERT INTO monitor_runs (id,started_at,status,assets_requested,engine_version,execution_disabled) VALUES (?,?,?,?,?,1)`).bind(runId,now,'RUNNING',watchlist.length,MONITOR_VERSION).run();
   const errors=[];let completed=0,written=0;
   for(let index=0;index<watchlist.length;index++){const asset=watchlist[index];if(index&&throttleMs>0)await delay(throttleMs);try{const report=await fetchAssetCandles(asset,fetchImpl,now),state=canonicalState(report,now);written+=await persistAsset(db,runId,asset,report,state,now);completed++;}catch(error){errors.push(`${asset.asset}: ${String(error.message||error).slice(0,180)}`);try{await persistFailure(db,runId,asset,error,now);}catch(storageError){errors.push(`${asset.asset}: failure state not persisted: ${String(storageError.message||storageError).slice(0,100)}`);}}}

@@ -5,6 +5,7 @@ export const PRIORITY_ASSETS=['BTC','ETH','SOL','XRP','DOGE','LTC'];
 const BASE_INTERVAL='5m',PAGE_CANDLES=300,DAY_MS=86_400_000;
 
 function hash(value){const text=JSON.stringify(value);let h=2166136261;for(let i=0;i<text.length;i++){h^=text.charCodeAt(i);h=Math.imul(h,16777619);}return(h>>>0).toString(16).padStart(8,'0');}
+async function timedFetch(fetchImpl,url,options,timeoutMs=6_000){const controller=new AbortController();let timer;const request=Promise.resolve().then(()=>fetchImpl(url,{...options,signal:controller.signal}));request.catch(()=>{});const timeout=new Promise((_,reject)=>{timer=setTimeout(()=>{controller.abort();reject(new Error(`historical request exceeded ${timeoutMs}ms`));},timeoutMs);});try{return await Promise.race([request,timeout]);}finally{clearTimeout(timer);}}
 function utcFloor(time,interval){return Math.floor(time/interval)*interval;}
 function statementRows(db,sql,args=[]){return db.prepare(sql).bind(...args).all().then(result=>result.results||[]);}
 function stateFor(asset,now,days){const interval=INTERVAL_MS[BASE_INTERVAL],end=utcFloor(now,interval),start=utcFloor(end-days*DAY_MS,interval),product=COINBASE_PRODUCTS[asset];if(!product)throw new Error(`${asset} has no approved historical source`);return{asset,exchange:'COINBASE',symbol:product,quoteCurrency:'USD',baseInterval:BASE_INTERVAL,targetStart:start,targetEnd:end,cursorStart:start,status:'BUILDING'};}
@@ -12,7 +13,7 @@ async function coinbasePage(state,fetchImpl,now){
   const interval=INTERVAL_MS[BASE_INTERVAL],from=Math.max(state.targetStart,Number(state.cursorStart)||state.targetStart),to=Math.min(state.targetEnd-interval,from+(PAGE_CANDLES-1)*interval),url=`https://api.exchange.coinbase.com/products/${encodeURIComponent(state.symbol)}/candles?granularity=300&start=${encodeURIComponent(new Date(from).toISOString())}&end=${encodeURIComponent(new Date(to).toISOString())}`;
   let failure='';
   for(let attempt=0;attempt<2;attempt++){
-    const response=await fetchImpl(url,{headers:{accept:'application/json','user-agent':'MarketEdgeResearch/1.2 (historical cache)'}});
+    let response;try{response=await timedFetch(fetchImpl,url,{headers:{accept:'application/json','user-agent':'MarketEdgeResearch/1.2 (historical cache)'}});}catch(error){failure=`${state.asset} Coinbase ${String(error.message||error)}`;if(attempt)break;await new Promise(resolve=>setTimeout(resolve,800));continue;}
     if(response.ok){const rows=await response.json(),adapted=(Array.isArray(rows)?rows:[]).map(row=>[Number(row?.[0])*1000,row?.[3],row?.[2],row?.[1],row?.[4],row?.[5],Number(row?.[0])*1000+interval-1]);const report=normalizeBinanceKlines(adapted,{asset:state.asset,symbol:state.symbol,interval:BASE_INTERVAL,now});if(report.status==='INVALID')throw new Error(`${state.asset} historical page rejected: ${report.errors.slice(0,2).join('; ')}`);return{report,from,to,url};}
     failure=`${state.asset} Coinbase HTTP ${response.status}: ${(await response.text().catch(()=>'' )).replace(/\s+/g,' ').slice(0,100)}`;
     if(![400,408,425,429,500,502,503,504].includes(response.status)||attempt)break;
