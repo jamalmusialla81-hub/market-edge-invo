@@ -244,6 +244,10 @@
     .paper-row b { font-size: 11px; }
     .paper-row select { min-height: 38px; padding: 0 9px; font-size: 9px; }
     .paper-row.closed { grid-template-columns: 1.2fr .55fr .7fr .8fr; }
+    .evidence-links { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 13px; }
+    .evidence-link { display: inline-flex; align-items: center; min-height: 38px; padding: 0 12px; border: 1px solid var(--line); border-radius: 11px; color: var(--text); background: var(--panel-2); font-size: 10px; font-weight: 720; text-decoration: none; }
+    .evidence-link:hover { border-color: rgba(216,255,99,.35); color: var(--accent); }
+    .research-status-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 13px; }
     .footer { display: flex; justify-content: space-between; gap: 18px; margin-top: 28px; color: var(--muted); font-size: 11px; line-height: 1.55; }
     .toast { position: fixed; right: 22px; bottom: 22px; max-width: 340px; padding: 13px 15px; border-radius: 13px; background: var(--text); color: var(--bg); font-size: 12px; font-weight: 680; transform: translateY(120px); opacity: 0; transition: .25s ease; box-shadow: var(--shadow); }
     .toast.show { transform: translateY(0); opacity: 1; }
@@ -290,6 +294,7 @@
       .chat-compose { grid-template-columns: 1fr; }
       .chat-compose button { min-height: 42px; }
       .paper-row, .paper-row.closed { grid-template-columns: 1fr 1fr; }
+      .research-status-grid { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -523,6 +528,30 @@
       </div>
     </section>
 
+    <section class="card" style="margin-top:22px" aria-label="Research evidence dashboard">
+      <div class="card-head"><div><p class="eyebrow">Evidence before confidence</p><h2>Research integrity dashboard</h2></div><span class="badge watch">PAPER TRADE ONLY</span></div>
+      <div class="research-body">
+        <div class="metric-grid">
+          <div class="metric"><span>Data boundary</span><strong>Canonical + hashed</strong></div>
+          <div class="metric"><span>Leakage tests</span><strong>Future rows rejected</strong></div>
+          <div class="metric"><span>Execution model</span><strong>Next bar · stop first</strong></div>
+          <div class="metric"><span>Historical depth</span><strong>900 × 4h · insufficient</strong></div>
+        </div>
+        <div class="research-status-grid">
+          <div id="dataHealth" class="social-summary"><strong>Scan to inspect the selected live dataset.</strong> Completed candles, gaps, source coverage and a deterministic hash will appear here.</div>
+          <div id="costSensitivity" class="social-summary"><strong>Run a backtest to inspect cost sensitivity.</strong> Expectancy will be compared at 0.08%, 0.16%, 0.25% and 0.40% round-trip cost.</div>
+        </div>
+        <div class="field" style="margin-top:14px;max-width:260px"><label for="tvExchange">TradingView visual venue</label><select id="tvExchange"><option value="BINANCE">Binance · USDT</option><option value="COINBASE">Coinbase · USD</option><option value="KRAKEN">Kraken · USD</option><option value="BYBIT">Bybit · USDT</option></select></div>
+        <div class="evidence-links">
+          <a id="tradingViewChart" class="evidence-link" href="https://www.tradingview.com/chart/?symbol=BINANCE%3ABTCUSDT" target="_blank" rel="noopener noreferrer">Open BTC on TradingView</a>
+          <a class="evidence-link" href="tradingview/market-edge-companion.pine" target="_blank" rel="noopener">Open Pine companion</a>
+          <a class="evidence-link" href="TRADINGVIEW_INTEGRATION.md" target="_blank" rel="noopener">TradingView setup notes</a>
+          <a class="evidence-link" href="RESEARCH_ARCHITECTURE.md" target="_blank" rel="noopener">Research architecture</a>
+        </div>
+        <p class="analysis-copy">TradingView is independent visual evidence only. Its companion says CANDIDATE—not BUY/SELL—and cannot override source disagreement, stale data, account constraints or failed historical gates.</p>
+      </div>
+    </section>
+
     <section class="method" aria-label="Decision method">
       <div class="method-item"><span>Consensus</span><strong>Hyperliquid + Binance + Coinbase</strong></div>
       <div class="method-item"><span>Strategies</span><strong>Trend · breakout · momentum · range · reversal</strong></div>
@@ -537,9 +566,12 @@
   </main>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
-  <script src="ai-config.js?v=13"></script>
-  <script src="quant-engine.js?v=13"></script>
-  <script src="ai-engine.js?v=13"></script>
+  <script src="ai-config.js?v=14"></script>
+  <script src="research-engine.js?v=14"></script>
+  <script src="quant-engine.js?v=14"></script>
+  <script src="tradingview-compat.js?v=14"></script>
+  <script src="forward-engine.js?v=14"></script>
+  <script src="ai-engine.js?v=14"></script>
   <script>
     const MARKETS = ['BTC','ETH','SOL','XRP','DOGE','ADA','AVAX','LINK','SUI','PENGU','BNB','LTC','DOT','NEAR','APT','ARB','OP','UNI','AAVE','INJ'];
     const LABELS = { BTC:'Bitcoin', ETH:'Ethereum', SOL:'Solana', XRP:'XRP', DOGE:'Dogecoin', ADA:'Cardano', AVAX:'Avalanche', LINK:'Chainlink', SUI:'Sui', PENGU:'Pudgy Penguins', BNB:'BNB', LTC:'Litecoin', DOT:'Polkadot', NEAR:'NEAR', APT:'Aptos', ARB:'Arbitrum', OP:'Optimism', UNI:'Uniswap', AAVE:'Aave', INJ:'Injective' };
@@ -566,7 +598,8 @@
       checkTrader: document.getElementById('checkTrader'), traderResult: document.getElementById('traderResult'),
       socialData: document.getElementById('socialData'), importSocial: document.getElementById('importSocial'), clearSocial: document.getElementById('clearSocial'), socialSummary: document.getElementById('socialSummary'),
       runBacktest: document.getElementById('runBacktest'), backtestResult: document.getElementById('backtestResult'),
-      forwardBadge: document.getElementById('forwardBadge'), forwardResult: document.getElementById('forwardResult'), clearForward: document.getElementById('clearForward')
+      forwardBadge: document.getElementById('forwardBadge'), forwardResult: document.getElementById('forwardResult'), clearForward: document.getElementById('clearForward'),
+      dataHealth:document.getElementById('dataHealth'),costSensitivity:document.getElementById('costSensitivity'),tvExchange:document.getElementById('tvExchange'),tradingViewChart:document.getElementById('tradingViewChart')
     };
     function currentSettings() {
       return {
@@ -833,8 +866,20 @@
           </article>`;
       }).join('') + (candidates.length < 2 ? '<div class="empty"><strong>Only one backup passed</strong>A second market did not satisfy the same evidence and risk rules.</div>' : '');
     }
+    function updateTradingViewLink(best=latestBest) {
+      const exchange=els.tvExchange.value,quote=['COINBASE','KRAKEN'].includes(exchange)?'USD':'USDT',asset=best?.symbol||'BTC';
+      els.tradingViewChart.href=MarketEdgeTradingView.chartUrl(exchange,asset,quote);
+      els.tradingViewChart.textContent=`Open ${asset} on TradingView`;
+    }
+    function renderResearchEvidence(best) {
+      updateTradingViewLink(best);
+      if(!best?.candles?.length){els.dataHealth.innerHTML='<strong>No selected dataset.</strong> A scan must return completed candles before data health can be measured.';return;}
+      const report=MarketEdgeResearch.inspectDataset(best.candles,{interval:'4h',asOf:Date.now(),asset:best.symbol,symbol:`${best.symbol}USDT`,exchange:'MULTI-FEED',source:(best.sources||[]).join(' + ')}),meta=report.meta;
+      els.dataHealth.innerHTML=`<strong>${best.symbol} 4h · ${meta.dataQualityStatus} · ${meta.dataHealthScore.toFixed(0)}/100.</strong> ${meta.candleCount}/${meta.expectedCandleCount} completed candles · ${(meta.coverage*100).toFixed(2)}% coverage · ${meta.gapCount} gaps · ${meta.partialCandleCount} partial excluded · hash ${meta.datasetHash}. ${report.errors.length?`Rejected: ${report.errors[0]}`:'This verifies the browser sample, not multi-year depth.'}`;
+    }
     function renderQuantRecommendation(best) {
       latestBest = best || null;
+      renderResearchEvidence(best);
       if (!best || !best.quant) {
         els.title.textContent='No analysable market'; els.badge.className='badge avoid'; els.badge.textContent='ANALYSIS UNAVAILABLE';
         els.rec.innerHTML='<div class="empty"><strong>No reliable analysis</strong>Fresh, valid data is required before any trade plan is generated.</div>';
@@ -859,7 +904,8 @@
           <div class="evidence-item"><span>Structure</span><strong>${q.frame?.structure?.label||'Unavailable'}</strong></div>
           <div class="evidence-item"><span>RSI 14</span><strong>${Number.isFinite(q.frame?.rsi)?q.frame.rsi.toFixed(1):'—'}</strong></div>
           <div class="evidence-item"><span>Relative volume</span><strong>${Number.isFinite(q.frame?.relativeVolume)?q.frame.relativeVolume.toFixed(2)+'×':'Unavailable'}</strong></div>
-        </div>`;
+        </div>
+        <div class="evidence-links"><a class="evidence-link" href="${MarketEdgeTradingView.chartUrl('BINANCE',best.symbol,'USDT')}" target="_blank" rel="noopener noreferrer">Verify ${best.symbol} on TradingView</a></div>`;
       if (decision!=='TAKE TRADE' || !q.risk?.valid) {
         els.rec.innerHTML=common+`
           <div class="reasons" style="margin-top:18px"><div class="reason"><i>!</i><span>${q.reason}</span></div>${(q.reasons||[]).slice(0,4).map(reason=>`<div class="reason"><i>·</i><span>${reason}</span></div>`).join('')}</div>
@@ -956,40 +1002,28 @@
       els.socialSummary.innerHTML=`<strong>${socialRecords.length} authorised records loaded · average reliability ${average.toFixed(0)}/100.</strong> Assets covered: ${assets.join(', ')||'none'}. Small samples and excessive leverage are automatically penalised.`;
     }
     function forwardLedger() {
-      try { return JSON.parse(localStorage.getItem('market-edge-forward')||'[]'); } catch { return []; }
+      try { return MarketEdgeForward.migrate(JSON.parse(localStorage.getItem('market-edge-forward')||'null')); } catch { return MarketEdgeForward.blankLedger(); }
     }
-    function saveForward(records) { localStorage.setItem('market-edge-forward',JSON.stringify(records.slice(-250))); }
+    function saveForward(ledger) { localStorage.setItem('market-edge-forward',JSON.stringify(MarketEdgeForward.migrate(ledger))); }
     function updateForward(results) {
-      const records=forwardLedger();
-      records.forEach(record=>{
-        if (record.status!=='open') return;
-        const market=results.find(result=>result.symbol===record.symbol);
-        if (!market?.candles) return;
-        const future=market.candles.filter(candle=>candle.time>record.timestamp);
-        for (const candle of future) {
-          const stopHit=record.direction==='long'?candle.low<=record.stop:candle.high>=record.stop;
-          const targetHit=record.direction==='long'?candle.high>=record.target1:candle.low<=record.target1;
-          if (stopHit || targetHit) { record.status=stopHit?'loss':'win'; record.resultR=stopHit?-1:record.rr1; record.closedAt=candle.time; break; }
-        }
-      });
-      const best=results.find(result=>result.quant?.decision==='TAKE TRADE'&&result.quant.risk?.valid);
-      if (best && els.forwardMode.value==='on') {
-        const q=best.quant, key=`${best.symbol}-${q.direction}-${q.frame.timestamp}`;
-        if (!records.some(record=>record.key===key)) records.push({
-          key,symbol:best.symbol,direction:q.direction,strategy:q.strategy,quality:q.quality,entry:q.entry,idealEntry:q.idealEntry,entryZone:q.entryZone,
+      const candleMap=Object.fromEntries(results.filter(result=>result?.symbol).map(result=>[result.symbol,result.candles||[]]));
+      let ledger=MarketEdgeForward.settle(forwardLedger(),candleMap,{feePct:.0005,slippagePct:.0003,maxBars:30});
+      if (els.forwardMode.value==='on') results.filter(result=>result.quant?.decision==='TAKE TRADE'&&result.quant?.risk?.valid).forEach(result=>{
+        const q=result.quant,report=MarketEdgeResearch.inspectDataset(result.candles||[],{interval:'4h',asOf:Date.now(),asset:result.symbol,symbol:`${result.symbol}USDT`,exchange:'MULTI-FEED'});
+        ledger=MarketEdgeForward.appendSignal(ledger,{
+          symbol:result.symbol,direction:q.direction,strategy:q.strategy,quality:q.quality,entry:q.entry,idealEntry:q.idealEntry,entryZone:q.entryZone,
           stop:q.stop,target1:q.target1,target2:q.target2,rr1:q.rr1,rr2:q.rr2,leverage:q.risk.leverage,regime:q.regime,macroRegime:q.macroRegime,
           alignment:q.alignment,features:{rsi:q.frame.rsi,relativeVolume:q.frame.relativeVolume,atrPct:q.frame.atrPct,ema20Slope:q.frame.ema20Slope,structure:q.frame.structure.label},
-          timestamp:q.frame.timestamp,status:'open',resultR:null
-        });
-      }
-      saveForward(records); renderForward();
+          timestamp:q.frame.timestamp,datasetHash:report.meta.datasetHash,datasetVersion:report.meta.datasetVersion,engineVersion:MarketEdgeQuant.VERSION,appVersion:'14',sourceCount:result.sourceCount,executionCostPct:.0016
+        }).ledger;
+      });
+      saveForward(ledger); renderForward();
     }
     function renderForward() {
-      const records=forwardLedger(), wins=records.filter(record=>record.status==='win').length, losses=records.filter(record=>record.status==='loss').length, open=records.filter(record=>record.status==='open').length;
-      const completed=records.filter(record=>Number.isFinite(record.resultR)), averageR=completed.length?MarketEdgeQuant.mean(completed.map(record=>record.resultR)):0;
-      els.forwardBadge.textContent=`${records.length} recorded`;
-      els.forwardResult.innerHTML=records.length
-        ? `<strong>${open} open · ${wins} wins · ${losses} losses · ${averageR.toFixed(2)}R average completed result.</strong> Original signal fields remain immutable; only outcome fields are added. These observations are not mixed with historical backtests. ${wins+losses<20?'Sample is still too small for a live-readiness conclusion.':''}`
+      const ledger=forwardLedger(),summary=MarketEdgeForward.stats(ledger);
+      els.forwardBadge.textContent=`${summary.signals} recorded`;
+      els.forwardResult.innerHTML=summary.signals
+        ? `<strong>${summary.open} open · ${summary.wins} positive · ${summary.losses} non-positive · ${summary.averageR.toFixed(2)}R average · ${summary.sampleTier} sample.</strong> Signal snapshots and outcomes are stored separately. Every qualified setup is recorded automatically; these observations are never mixed with historical backtests. ${summary.completed<30?'The completed sample is too small for optimization or a live-readiness conclusion.':''}`
         : '<strong>No forward setups recorded.</strong> Historical backtests and forward observations remain separate.';
     }
     function renderBacktest(result, symbol) {
@@ -999,6 +1033,7 @@
       const groupBy=key=>Object.entries(result.trades.reduce((groups,trade)=>{ (groups[trade[key]]||=[]).push(trade); return groups; },{}))
         .map(([name,trades])=>`${name}: ${trades.length} trades, ${MarketEdgeQuant.performanceStats(trades).expectancy.toFixed(2)}R expectancy`).join(' · ')||'No qualifying trades';
       const formatGroups=groups=>Object.entries(groups).map(([name,stats])=>`${name}: ${stats.trades} trades, ${(stats.winRate*100).toFixed(1)}% wins, ${stats.expectancy.toFixed(2)}R`).join(' · ')||'No sample';
+      els.costSensitivity.innerHTML=`<strong>${symbol} cost sensitivity · predeclared scenarios.</strong> ${result.costSensitivity.map(row=>`${(row.roundTripCostPct*100).toFixed(2)}%: ${row.stats.expectancy.toFixed(2)}R (${row.stats.trades} trades)`).join(' · ')}. Funding remains unmodeled, so these are still optimistic where funding is material.`;
       els.backtestResult.innerHTML=`
         <strong>${symbol} · ${result.overall.trades} total historical trades · deployment verdict: ${verdict}</strong>
         <div class="metric-grid" style="margin-top:12px">
@@ -1022,12 +1057,18 @@
       els.runBacktest.disabled=true; els.runBacktest.textContent='Testing…';
       await new Promise(resolve=>setTimeout(resolve,30));
       try {
-        const result=MarketEdgeQuant.backtest(latestBest.candles,currentSettings());
+        const report=MarketEdgeResearch.inspectDataset(latestBest.candles,{interval:'4h',asOf:Date.now(),asset:latestBest.symbol,symbol:`${latestBest.symbol}USDT`,exchange:'MULTI-FEED'});
+        if(report.errors.length) throw new Error(`Dataset rejected: ${report.errors[0]}`);
+        const partition=MarketEdgeResearch.chronologicalPartition(report.candles,{datasetHash:report.meta.datasetHash,engineVersion:MarketEdgeQuant.VERSION});
+        const consumed=JSON.parse(localStorage.getItem('market-edge-consumed-tests')||'{}');
+        if(consumed[partition.generationId]) throw new Error(`Untouched test ${partition.generationId} was already consumed on ${new Date(consumed[partition.generationId]).toLocaleString()}. A new dataset or engine version is required.`);
+        const result=MarketEdgeQuant.backtest(report.candles,currentSettings());
+        consumed[partition.generationId]=Date.now();localStorage.setItem('market-edge-consumed-tests',JSON.stringify(consumed));
         renderBacktest(result,latestBest.symbol);
         const key=`${latestBest.symbol}-${latestBest.quant?.strategy||'UNKNOWN'}-${latestBest.quant?.direction||'none'}`;
         const evidence=JSON.parse(localStorage.getItem('market-edge-evidence')||'{}');
         evidence[key]={
-          timestamp:Date.now(),validation:result.validation,test:result.test,walkForward:result.walkForward.aggregate,
+          timestamp:Date.now(),generationId:partition.generationId,datasetHash:report.meta.datasetHash,untouchedConsumed:true,validation:result.validation,test:result.test,walkForward:result.walkForward.aggregate,
           stability:result.walkForward.stability,exactMultiTimeframe:false,
           positive:result.validation.trades>=5&&result.validation.expectancy>0&&result.test.trades>=10&&result.test.expectancy>0&&result.walkForward.aggregate.expectancy>0&&result.walkForward.stability.stable
         };
@@ -1107,6 +1148,7 @@
     els.scan.addEventListener('click', scan);
     els.checkTrader.addEventListener('click', checkInvoTrader);
     els.opportunityFilter.addEventListener('change',()=>renderList(latestResults));
+    els.tvExchange.addEventListener('change',()=>updateTradingViewLink());
     els.runBacktest.addEventListener('click',runBacktest);
     els.importSocial.addEventListener('click',()=>{
       try {
@@ -1123,8 +1165,9 @@
       socialRecords=JSON.parse(localStorage.getItem('market-edge-social')||'[]');
     } catch {}
     renderSocialSummary(); renderForward();
-    if ('serviceWorker' in navigator) window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js?v=13').catch(()=>{}));
+    updateTradingViewLink();
+    if ('serviceWorker' in navigator) window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js?v=14').catch(()=>{}));
   </script>
-  <script src="ai-ui.js?v=13"></script>
+  <script src="ai-ui.js?v=14"></script>
 </body>
 </html>

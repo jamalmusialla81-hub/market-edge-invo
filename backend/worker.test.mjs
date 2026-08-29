@@ -61,4 +61,20 @@ assert.equal(response.status,403);
 response=await handleRequest(new Request('https://market-edge-ai.test/v1/chat',{method:'POST',headers:{origin:'https://jamalmusialla81-hub.github.io','content-type':'text/plain'},body:'{}'}),env,{}, {fetch:async()=>openAIResponse(chatOutput)});
 assert.equal(response.status,415);
 
+const tvEnv={...env,TV_WEBHOOK_TOKEN:'test-tv-secret'},tvNow=2_000_000_000_000;
+function tvRequest(payload,token='test-tv-secret') { return new Request(`https://market-edge-ai.test/v1/tradingview-alert?token=${encodeURIComponent(token)}`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload)}); }
+const tvAlert={event_id:'fixture-1',symbol:'ETHUSDT',exchange:'BINANCE',timeframe:'15m',timestamp:tvNow-60_000,close:2500,volume:1200,condition:'EMA alignment candidate',state:'CANDIDATE'};
+response=await handleRequest(tvRequest(tvAlert),tvEnv,{}, {now:tvNow});
+assert.equal(response.status,200);body=await response.json();assert.equal(body.accepted,true);assert.equal(body.execution,'disabled');
+response=await handleRequest(tvRequest(tvAlert),tvEnv,{}, {now:tvNow});
+assert.equal(response.status,409);assert.equal((await response.json()).error.code,'TV_DUPLICATE_ALERT');
+response=await handleRequest(tvRequest({...tvAlert,event_id:'stale',timestamp:tvNow-4_000_000}),tvEnv,{}, {now:tvNow});
+assert.equal(response.status,400);assert.equal((await response.json()).error.code,'TV_STALE_ALERT');
+response=await handleRequest(tvRequest({...tvAlert,event_id:'future',timestamp:tvNow+120_000}),tvEnv,{}, {now:tvNow});
+assert.equal(response.status,400);assert.equal((await response.json()).error.code,'TV_FUTURE_ALERT');
+response=await handleRequest(tvRequest({...tvAlert,event_id:'auth'},'wrong'),tvEnv,{}, {now:tvNow});
+assert.equal(response.status,401);assert.equal((await response.json()).error.code,'TV_AUTH_FAILED');
+response=await handleRequest(tvRequest({...tvAlert,event_id:'disabled'}),env,{}, {now:tvNow});
+assert.equal(response.status,503);assert.equal((await response.json()).error.code,'TV_NOT_CONFIGURED');
+
 console.log('AI backend tests passed');

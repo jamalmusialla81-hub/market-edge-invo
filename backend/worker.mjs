@@ -6,6 +6,8 @@ const MAX_TOTAL_IMAGE_BYTES = 6_000_000;
 const ALLOWED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp'];
 const TIMEFRAMES = ['5m', '15m', '1h', '4h', '1d'];
 const rateBuckets = new Map();
+const tradingViewEvents = new Map();
+const TRADINGVIEW_INTERVAL_MS = {'5m':300_000,'15m':900_000,'1h':3_600_000,'4h':14_400_000,'1d':86_400_000};
 
 const caseSchema = {
   type: 'object', additionalProperties: false,
@@ -50,7 +52,7 @@ function allowedOrigins(env) {
 }
 function corsHeaders(request,env) {
   const origin=request.headers.get('origin')||'';
-  return allowedOrigins(env).includes(origin)?{'access-control-allow-origin':origin,'vary':'Origin','access-control-allow-methods':'GET,POST,OPTIONS','access-control-allow-headers':'content-type','access-control-max-age':'86400'}:{};
+  return allowedOrigins(env).includes(origin)?{'access-control-allow-origin':origin,'vary':'Origin','access-control-allow-methods':'GET,POST,OPTIONS','access-control-allow-headers':'content-type,x-market-edge-token','access-control-max-age':'86400'}:{};
 }
 function isAllowedOrigin(request,env) {
   const origin=request.headers.get('origin');
@@ -95,6 +97,38 @@ function sanitizeImages(input) {
     total+=bytes; if(total>MAX_TOTAL_IMAGE_BYTES) throw new Error('Combined images are too large');
     return {type,timeframe,dataUrl,bytes};
   });
+}
+function constantTimeEqual(left,right) {
+  const a=new TextEncoder().encode(String(left||'')),b=new TextEncoder().encode(String(right||''));
+  let mismatch=a.length^b.length;
+  for(let index=0;index<Math.max(a.length,b.length);index++) mismatch|=(a[index%Math.max(1,a.length)]||0)^(b[index%Math.max(1,b.length)]||0);
+  return mismatch===0;
+}
+function sanitizeTradingViewAlert(payload,env,now=Date.now()) {
+  if(!payload||typeof payload!=='object'||Array.isArray(payload)) throw Object.assign(new Error('Alert must be a JSON object'),{code:'TV_INVALID_ALERT'});
+  const timestamp=Number(payload.timestamp),close=Number(payload.close),volume=Number(payload.volume),timeframe=safeText(payload.timeframe,4),exchange=safeText(payload.exchange,20).toUpperCase(),symbol=safeText(payload.symbol,24).toUpperCase();
+  const alert={event_id:safeText(payload.event_id,120),symbol,exchange,timeframe,timestamp,close,volume,condition:safeText(payload.condition,180),state:safeText(payload.state,20).toUpperCase()};
+  if(!alert.event_id) throw Object.assign(new Error('event_id is required'),{code:'TV_INVALID_ALERT'});
+  if(!/^[A-Z0-9]{2,20}$/.test(symbol)) throw Object.assign(new Error('Invalid TradingView symbol'),{code:'TV_INVALID_ALERT'});
+  const allowedExchanges=(safeText(env.TV_ALLOWED_EXCHANGES,200)||'BINANCE,COINBASE,KRAKEN,BYBIT').split(',').map(value=>value.trim().toUpperCase());
+  if(!allowedExchanges.includes(exchange)) throw Object.assign(new Error('Unsupported TradingView exchange'),{code:'TV_INVALID_ALERT'});
+  if(!TIMEFRAMES.includes(timeframe)) throw Object.assign(new Error('Unsupported TradingView timeframe'),{code:'TV_INVALID_ALERT'});
+  if(!Number.isFinite(timestamp)||!Number.isFinite(close)||close<=0||!Number.isFinite(volume)||volume<0) throw Object.assign(new Error('Invalid TradingView numeric evidence'),{code:'TV_INVALID_ALERT'});
+  if(!['CANDIDATE','WAIT','NO TRADE'].includes(alert.state)) throw Object.assign(new Error('Alert state must be CANDIDATE, WAIT or NO TRADE'),{code:'TV_INVALID_ALERT'});
+  if(timestamp>now+60_000) throw Object.assign(new Error('Future TradingView alert rejected'),{code:'TV_FUTURE_ALERT'});
+  const maxAge=Math.max(TRADINGVIEW_INTERVAL_MS[timeframe]*3,900_000);
+  if(now-timestamp>maxAge) throw Object.assign(new Error('Stale TradingView alert rejected'),{code:'TV_STALE_ALERT'});
+  return alert;
+}
+function acceptTradingViewAlert(request,env,payload,now=Date.now()) {
+  if(!env.TV_WEBHOOK_TOKEN) throw Object.assign(new Error('TradingView webhook is disabled until its Worker secret is configured'),{status:503,code:'TV_NOT_CONFIGURED'});
+  const url=new URL(request.url),provided=request.headers.get('x-market-edge-token')||url.searchParams.get('token')||'';
+  if(!constantTimeEqual(provided,env.TV_WEBHOOK_TOKEN)) throw Object.assign(new Error('TradingView webhook authentication failed'),{status:401,code:'TV_AUTH_FAILED'});
+  const alert=sanitizeTradingViewAlert(payload,env,now),key=`${alert.exchange}:${alert.symbol}:${alert.event_id}`;
+  for(const [id,seenAt] of tradingViewEvents) if(now-seenAt>86_400_000) tradingViewEvents.delete(id);
+  if(tradingViewEvents.has(key)) throw Object.assign(new Error('Duplicate TradingView alert rejected'),{status:409,code:'TV_DUPLICATE_ALERT'});
+  tradingViewEvents.set(key,now);
+  return {accepted:true,evidence:alert,usage:'additional evidence only',execution:'disabled',deployment_verdict:'PAPER TRADE ONLY'};
 }
 function extractOutputText(response) {
   if(typeof response?.output_text==='string') return response.output_text;
@@ -164,8 +198,8 @@ export async function handleRequest(request,env={},ctx={},deps={}) {
   const fetchImpl=deps.fetch||fetch,cors=corsHeaders(request,env),url=new URL(request.url);
   if(request.method==='OPTIONS') return isAllowedOrigin(request,env)?new Response(null,{status:204,headers:cors}):json({error:{code:'ORIGIN_DENIED',message:'Origin is not allowed'}},403);
   if(!isAllowedOrigin(request,env)) return json({error:{code:'ORIGIN_DENIED',message:'Origin is not allowed'}},403,cors);
-  if(request.method==='GET'&&url.pathname==='/health') return json({ok:true,service:'market-edge-ai',configured:!!env.OPENAI_API_KEY,vision_model:env.VISION_MODEL||'gpt-5.6-terra',chat_model:env.CHAT_MODEL||'gpt-5.6-luna'},200,cors);
-  if(request.method!=='POST'||!['/v1/analyze','/v1/chat'].includes(url.pathname)) return json({error:{code:'NOT_FOUND',message:'Endpoint not found'}},404,cors);
+  if(request.method==='GET'&&url.pathname==='/health') return json({ok:true,service:'market-edge-ai',configured:!!env.OPENAI_API_KEY,tradingview_webhook_configured:!!env.TV_WEBHOOK_TOKEN,vision_model:env.VISION_MODEL||'gpt-5.6-terra',chat_model:env.CHAT_MODEL||'gpt-5.6-luna'},200,cors);
+  if(request.method!=='POST'||!['/v1/analyze','/v1/chat','/v1/tradingview-alert'].includes(url.pathname)) return json({error:{code:'NOT_FOUND',message:'Endpoint not found'}},404,cors);
   const rate=rateLimit(request,env); if(!rate.allowed) return json({error:{code:'RATE_LIMITED',message:'Too many requests. Try again shortly.'}},429,{...cors,'retry-after':String(rate.retryAfter)});
   if(!String(request.headers.get('content-type')||'').toLowerCase().includes('application/json')) return json({error:{code:'UNSUPPORTED_MEDIA',message:'Use application/json'}},415,cors);
   const declared=Number(request.headers.get('content-length')||0); if(declared>MAX_BODY_BYTES) return json({error:{code:'REQUEST_TOO_LARGE',message:'Request is too large'}},413,cors);
@@ -173,7 +207,7 @@ export async function handleRequest(request,env={},ctx={},deps={}) {
   try { const text=await request.text(); if(new TextEncoder().encode(text).byteLength>MAX_BODY_BYTES) throw Object.assign(new Error('Request is too large'),{status:413,code:'REQUEST_TOO_LARGE'}); payload=JSON.parse(text); }
   catch(error) { return json({error:{code:error.code||'BAD_JSON',message:error.message==='Request is too large'?error.message:'Request body must be valid JSON'}},error.status||400,cors); }
   try {
-    const data=url.pathname==='/v1/analyze'?await analyze(request,env,payload,fetchImpl):await chat(request,env,payload,fetchImpl);
+    const data=url.pathname==='/v1/analyze'?await analyze(request,env,payload,fetchImpl):url.pathname==='/v1/chat'?await chat(request,env,payload,fetchImpl):acceptTradingViewAlert(request,env,payload,deps.now||Date.now());
     return json(data,200,{...cors,'x-ratelimit-remaining':String(rate.remaining)});
   } catch(error) {
     const status=error.status||(/too large/i.test(error.message)?413:400),code=error.code||(status===413?'REQUEST_TOO_LARGE':'INVALID_REQUEST');
@@ -182,4 +216,4 @@ export async function handleRequest(request,env={},ctx={},deps={}) {
 }
 
 export default {fetch:handleRequest};
-export {analysisSchema,chatSchema,sanitizeImages,sanitizeQuant,extractOutputText,MAX_BODY_BYTES};
+export {analysisSchema,chatSchema,sanitizeImages,sanitizeQuant,sanitizeTradingViewAlert,acceptTradingViewAlert,extractOutputText,MAX_BODY_BYTES};

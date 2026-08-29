@@ -5,11 +5,16 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const VERSION = '2.0.0';
+  const VERSION = '2.1.0';
   const LEVERAGE_CHOICES = [1, 2, 3, 5, 10];
 
   function clamp(value, min, max) { return Math.max(min, Math.min(max, value)); }
   function mean(values) { return values.length ? values.reduce((a, b) => a + b, 0) / values.length : 0; }
+  function median(values) {
+    if (!values.length) return 0;
+    const sorted=[...values].sort((a,b)=>a-b),middle=Math.floor(sorted.length/2);
+    return sorted.length%2?sorted[middle]:(sorted[middle-1]+sorted[middle])/2;
+  }
   function std(values) {
     if (values.length < 2) return 0;
     const avg = mean(values);
@@ -291,17 +296,23 @@
   }
   function performanceStats(trades) {
     const results = trades.map(trade => trade.r).filter(Number.isFinite), wins = results.filter(r => r > 0), losses = results.filter(r => r <= 0);
-    let equity = 0, peak = 0, maxDrawdown = 0;
-    results.forEach(r => { equity += r; peak = Math.max(peak, equity); maxDrawdown = Math.max(maxDrawdown, peak - equity); });
+    let equity = 0, peak = 0, maxDrawdown = 0, compounded=1, compoundedPeak=1, maxDrawdownPct=0;
+    trades.filter(trade=>Number.isFinite(trade.r)).forEach(trade => {
+      equity += trade.r; peak = Math.max(peak, equity); maxDrawdown = Math.max(maxDrawdown, peak - equity);
+      compounded*=Math.max(.0001,1+trade.r*Math.max(.0001,Number(trade.riskPct)||.01));
+      compoundedPeak=Math.max(compoundedPeak,compounded); maxDrawdownPct=Math.max(maxDrawdownPct,compoundedPeak?(compoundedPeak-compounded)/compoundedPeak:0);
+    });
     const averageWin = mean(wins), averageLoss = Math.abs(mean(losses));
-    const variance = std(results), downside = std(losses);
+    const variance = std(results), downside = std(losses), mfe=trades.map(trade=>trade.mfeR).filter(Number.isFinite), mae=trades.map(trade=>trade.maeR).filter(Number.isFinite), duration=trades.map(trade=>trade.barsHeld).filter(Number.isFinite);
     return {
       trades: results.length, wins: wins.length, losses: losses.length,
       winRate: results.length ? wins.length / results.length : 0,
       averageWin, averageLoss,
-      averageR: mean(results), expectancy: mean(results),
+      averageR: mean(results), medianR:median(results), expectancy: mean(results),
       profitFactor: losses.length && averageLoss ? wins.reduce((a, b) => a + b, 0) / Math.abs(losses.reduce((a, b) => a + b, 0)) : null,
-      maxDrawdownR: maxDrawdown, totalR: results.reduce((a, b) => a + b, 0),
+      maxDrawdownR: maxDrawdown, maxDrawdownPct, totalR: results.reduce((a, b) => a + b, 0),
+      averageMfeR:mean(mfe),averageMaeR:mean(mae),averageBarsHeld:mean(duration),
+      sampleTier:results.length>=100?'decision-useful':results.length>=30?'directional':results.length>=10?'early':'tiny',
       sharpe: variance ? mean(results) / variance * Math.sqrt(Math.max(1, results.length)) : null,
       sortino: downside ? mean(results) / downside * Math.sqrt(Math.max(1, results.length)) : null
     };
@@ -318,9 +329,12 @@
       const stop=setup.direction==='long'?entry-stopDistance:entry+stopDistance;
       const tp1=setup.direction==='long'?entry+stopDistance*setup.rr1:entry-stopDistance*setup.rr1;
       const tp2=setup.direction==='long'?entry+stopDistance*setup.rr2:entry-stopDistance*setup.rr2;
-      let exitIndex=Math.min(end,index+30),grossR=0,tp1Hit=false;
+      let exitIndex=Math.min(end,index+30),grossR=0,tp1Hit=false,mfeR=0,maeR=0;
       for (let cursor=index+1;cursor<=Math.min(end,index+30);cursor++) {
         const candle=candles[cursor], activeStop=tp1Hit?entry:stop;
+        const favorable=(setup.direction==='long'?candle.high-entry:entry-candle.low)/stopDistance;
+        const adverse=(setup.direction==='long'?candle.low-entry:entry-candle.high)/stopDistance;
+        mfeR=Math.max(mfeR,favorable); maeR=Math.min(maeR,adverse);
         const hitStop=setup.direction==='long'?candle.low<=activeStop:candle.high>=activeStop;
         const hitFirst=setup.direction==='long'?candle.high>=tp1:candle.low<=tp1;
         const hitSecond=setup.direction==='long'?candle.high>=tp2:candle.low<=tp2;
@@ -332,8 +346,9 @@
           grossR=tp1Hit?setup.rr1*.5+Math.max(0,move)*.5:move;
         }
       }
-      const costR=(.0005*2+.0003*2)/(stopDistance/entry);
-      trades.push({signalIndex:index,entryIndex:index+1,exitIndex,timestamp:candles[index].time,direction:setup.direction,strategy:setup.strategy,regime:setup.regime,quality:setup.quality,r:grossR-costR,tp1Hit});
+      const feePct=Math.max(0,Number(settings.feePct??.0005)),slippagePct=Math.max(0,Number(settings.slippagePct??.0003));
+      const costR=(feePct*2+slippagePct*2)/(stopDistance/entry),riskPct=Math.max(.0001,Number(settings.riskPct)||.01);
+      trades.push({signalIndex:index,entryIndex:index+1,exitIndex,timestamp:candles[index].time,direction:setup.direction,strategy:setup.strategy,regime:setup.regime,quality:setup.quality,r:grossR-costR,grossR,costR,riskPct,mfeR,maeR,barsHeld:exitIndex-index,tp1Hit});
       index=exitIndex;
     }
     return trades;
@@ -373,11 +388,16 @@
     const training=trades.filter(trade=>trade.signalIndex<trainEnd),validation=trades.filter(trade=>trade.signalIndex>=trainEnd&&trade.signalIndex<validationEnd),test=trades.filter(trade=>trade.signalIndex>=validationEnd);
     const qualityBucket=trade=>trade.quality>=90?'90+':trade.quality>=80?'80-89':trade.quality>=70?'70-79':'60-69';
     const period=trade=>new Date(trade.timestamp).getUTCFullYear().toString();
+    const costSensitivity=[.0008,.0016,.0025,.004].map(roundTripCostPct=>{
+      const component=roundTripCostPct/4,scenarioTrades=simulateBacktest(candles,{...settings,feePct:component,slippagePct:component},220,candles.length-1);
+      return {roundTripCostPct,stats:performanceStats(scenarioTrades)};
+    });
     return {
       trades,training:performanceStats(training),validation:performanceStats(validation),test:performanceStats(test),overall:performanceStats(trades),
       byDirection:summarizeGroups(groupedStats(trades,'direction')),byStrategy:summarizeGroups(groupedStats(trades,'strategy')),
       byRegime:summarizeGroups(groupedStats(trades,'regime')),byQuality:summarizeGroups(groupedStats(test,qualityBucket)),
-      byPeriod:summarizeGroups(groupedStats(trades,period)),walkForward:walkForwardTest(candles,settings)
+      byPeriod:summarizeGroups(groupedStats(trades,period)),walkForward:walkForwardTest(candles,settings),costSensitivity,
+      executionModel:{entry:'next-bar open with directional slippage',sameCandle:'stop first',exit:'50% TP1 / 50% TP2; breakeven stop after TP1; 30-bar maximum',feePct:Number(settings.feePct??.0005),slippagePct:Number(settings.slippagePct??.0003),funding:'not modeled'}
     };
   }
   function traderReliability(record) {
@@ -400,5 +420,5 @@
     const total = longWeight + shortWeight;
     return { sample: relevant.length, reliability: relevant.length ? mean(relevant.map(traderReliability)) : 0, weightedLong: total ? longWeight / total : 0.5, weightedShort: total ? shortWeight / total : 0.5 };
   }
-  return { VERSION, LEVERAGE_CHOICES, clamp, mean, std, ema, sma, rsi, atr, rollingVwap, validateCandles, validateFreshness, swingPoints, features, recentStructure, classifyRegime, strategyCandidates, riskPlan, evaluateSetup, performanceStats, simulateBacktest, walkForwardTest, backtest, traderReliability, aggregateSocial };
+  return { VERSION, LEVERAGE_CHOICES, clamp, mean, median, std, ema, sma, rsi, atr, rollingVwap, validateCandles, validateFreshness, swingPoints, features, recentStructure, classifyRegime, strategyCandidates, riskPlan, evaluateSetup, performanceStats, simulateBacktest, walkForwardTest, backtest, traderReliability, aggregateSocial };
 });

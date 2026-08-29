@@ -1,0 +1,66 @@
+//@version=6
+indicator("Market Edge Evidence Companion", "ME Evidence", overlay=true, max_labels_count=100)
+
+// This companion reproduces a documented, deterministic subset of Market Edge.
+// It creates visual/evidence candidates only. It does not place orders or turn a
+// Market Edge WAIT / NO TRADE result into a trade.
+
+qualityFloor = input.int(72, "Candidate quality floor", minval=55, maxval=95)
+volumeFloor = input.float(0.8, "Relative-volume floor", minval=0.0, step=0.1)
+showZones = input.bool(true, "Show structure zones")
+
+f_ema(float source, int length) =>
+    float alpha = 2.0 / (length + 1.0)
+    float result = na
+    result := na(result[1]) ? source : alpha * source + (1.0 - alpha) * result[1]
+    result
+
+f_simple_rsi(float source, int length) =>
+    float change = source - source[1]
+    float gain = ta.sma(math.max(change, 0.0), length)
+    float loss = ta.sma(math.max(-change, 0.0), length)
+    gain == 0.0 and loss == 0.0 ? 50.0 : loss == 0.0 ? 100.0 : 100.0 - 100.0 / (1.0 + gain / loss)
+
+ema9 = f_ema(close, 9)
+ema20 = f_ema(close, 20)
+ema50 = f_ema(close, 50)
+ema12 = f_ema(close, 12)
+ema26 = f_ema(close, 26)
+macd = ema12 - ema26
+macdSignal = f_ema(macd, 9)
+rsi = f_simple_rsi(close, 14)
+atr = ta.sma(ta.tr(true), 14)
+volumeAverage = ta.sma(volume[1], 20)
+relativeVolume = volumeAverage > 0 ? volume / volumeAverage : na
+resistance = ta.highest(high[1], 20)
+support = ta.lowest(low[1], 20)
+
+upTrend = close > ema20 and ema20 > ema50 and ema20 > ema20[5]
+downTrend = close < ema20 and ema20 < ema50 and ema20 < ema20[5]
+volumeOkay = na(relativeVolume) ? false : relativeVolume >= volumeFloor
+longCandidate = barstate.isconfirmed and upTrend and rsi >= 48 and rsi <= 68 and macd > macdSignal and volumeOkay
+shortCandidate = barstate.isconfirmed and downTrend and rsi >= 32 and rsi <= 52 and macd < macdSignal and volumeOkay
+quality = math.round(math.min(100.0, 60.0 + math.abs(ema20 / ema50 - 1.0) * 300.0 + math.min(12.0, relativeVolume * 5.0)))
+qualifiedLong = longCandidate and quality >= qualityFloor
+qualifiedShort = shortCandidate and quality >= qualityFloor
+
+plot(ema9, "EMA 9", color=color.new(color.blue, 35))
+plot(ema20, "EMA 20", color=color.aqua, linewidth=2)
+plot(ema50, "EMA 50", color=color.orange, linewidth=2)
+plot(showZones ? resistance : na, "Prior 20-bar resistance", color=color.new(color.red, 70), style=plot.style_linebr)
+plot(showZones ? support : na, "Prior 20-bar support", color=color.new(color.green, 70), style=plot.style_linebr)
+plotshape(qualifiedLong, title="Long evidence candidate", style=shape.labelup, location=location.belowbar, color=color.new(color.teal, 0), text="ME\nCANDIDATE", textcolor=color.white, size=size.tiny)
+plotshape(qualifiedShort, title="Short evidence candidate", style=shape.labeldown, location=location.abovebar, color=color.new(color.red, 0), text="ME\nCANDIDATE", textcolor=color.white, size=size.tiny)
+
+newLong = qualifiedLong and not qualifiedLong[1]
+newShort = qualifiedShort and not qualifiedShort[1]
+state = newLong or newShort ? "CANDIDATE" : "WAIT"
+condition = newLong ? "deterministic_long_subset" : newShort ? "deterministic_short_subset" : "no_new_candidate"
+marketEdgeTimeframe = timeframe.period == "5" ? "5m" : timeframe.period == "15" ? "15m" : timeframe.period == "60" ? "1h" : timeframe.period == "240" ? "4h" : timeframe.period == "D" ? "1d" : "unsupported"
+eventId = syminfo.prefix + "-" + syminfo.ticker + "-" + marketEdgeTimeframe + "-" + str.tostring(time)
+message = "{\"event_id\":\"" + eventId + "\",\"symbol\":\"" + syminfo.ticker + "\",\"exchange\":\"" + syminfo.prefix + "\",\"timeframe\":\"" + marketEdgeTimeframe + "\",\"timestamp\":" + str.tostring(time) + ",\"close\":" + str.tostring(close) + ",\"volume\":" + str.tostring(volume) + ",\"condition\":\"" + condition + "\",\"state\":\"" + state + "\"}"
+if (newLong or newShort) and marketEdgeTimeframe != "unsupported"
+    alert(message, alert.freq_once_per_bar_close)
+
+alertcondition(newLong, "Market Edge long evidence candidate", "Market Edge long evidence candidate. Use Any alert() function call for the structured webhook JSON.")
+alertcondition(newShort, "Market Edge short evidence candidate", "Market Edge short evidence candidate. Use Any alert() function call for the structured webhook JSON.")

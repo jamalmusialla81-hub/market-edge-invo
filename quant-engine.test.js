@@ -74,13 +74,19 @@ assert.strictEqual(stats.trades, 4);
 assert.strictEqual(stats.winRate, 0.5);
 assert.strictEqual(stats.expectancy, 0.5);
 assert.strictEqual(stats.profitFactor, 2);
+assert.strictEqual(stats.medianR,0.5);
+assert.strictEqual(stats.sampleTier,'tiny');
 
 const historical = Quant.backtest(series(520), { minQuality: 60, minRR: 1.5, maxLeverage: 10 });
 assert(historical.trades.every(trade => trade.entryIndex === trade.signalIndex + 1));
 assert(historical.trades.every(trade => trade.exitIndex >= trade.entryIndex));
+assert(historical.trades.every(trade => Number.isFinite(trade.costR)&&Number.isFinite(trade.mfeR)&&Number.isFinite(trade.maeR)&&trade.barsHeld>=1));
 assert(historical.walkForward.folds.every(fold=>fold.trainEnd<fold.validationEnd&&fold.validationEnd<fold.testEnd));
 assert(historical.walkForward.unseenTrades.every(trade=>historical.walkForward.folds.some(fold=>trade.signalIndex>=fold.validationEnd&&trade.signalIndex<fold.testEnd)));
 assert('long' in historical.byDirection);
 assert('60-69' in historical.byQuality||'70-79' in historical.byQuality||'80-89' in historical.byQuality||'90+' in historical.byQuality||historical.test.trades===0);
+assert.deepStrictEqual(historical.costSensitivity.map(row=>row.roundTripCostPct),[.0008,.0016,.0025,.004]);
+for(let index=1;index<historical.costSensitivity.length;index++) assert(historical.costSensitivity[index].stats.expectancy<=historical.costSensitivity[index-1].stats.expectancy+1e-12);
+assert.match(historical.executionModel.sameCandle,/stop first/);
 
 console.log('Quant engine tests passed');
