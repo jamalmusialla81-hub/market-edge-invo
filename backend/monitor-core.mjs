@@ -64,7 +64,7 @@ async function fetchJsonWithRetry(fetchImpl,url,options,{provider,asset,attempts
     const body=(await response.text().catch(()=>'' )).replace(/\s+/g,' ').slice(0,120);
     failure=`${asset} ${provider} HTTP ${response.status}${body?`: ${body}`:''}`;
     if(![400,408,425,429,500,502,503,504].includes(response.status)||attempt===attempts-1)break;
-    await pause(350*(attempt+1));
+    await pause(1_000*(attempt+1));
   }
   throw new Error(failure||`${asset} ${provider} request failed`);
 }
@@ -116,7 +116,7 @@ export async function persistFailure(db,runId,asset,error,now=Date.now()){
   await db.prepare(`INSERT OR IGNORE INTO monitor_events (id,run_id,asset,event_type,severity,payload_json,created_at,immutable) VALUES (?,?,?,?,?,?,?,1)`).bind(id('event',[runId,asset.asset,'provider-failure',failureReason]),runId,asset.asset,'PROVIDER_FAILURE','ERROR',JSON.stringify(state),now).run();
 }
 
-export async function runMonitor({db,fetchImpl=fetch,now=Date.now(),watchlist=WATCHLIST,runId=id('run',[now,watchlist.map(item=>item.asset)]),throttleMs=700,delay=milliseconds=>new Promise(resolve=>setTimeout(resolve,milliseconds))}={}){
+export async function runMonitor({db,fetchImpl=fetch,now=Date.now(),watchlist=WATCHLIST,runId=id('run',[now,watchlist.map(item=>item.asset)]),throttleMs=1200,delay=milliseconds=>new Promise(resolve=>setTimeout(resolve,milliseconds))}={}){
   if(!db)return {runId,status:'STORAGE_UNAVAILABLE',assetsRequested:watchlist.length,assetsCompleted:0,candlesWritten:0,errors:['D1 binding is unavailable'],executionDisabled:true};
   await db.prepare(`INSERT INTO monitor_runs (id,started_at,status,assets_requested,engine_version,execution_disabled) VALUES (?,?,?,?,?,1)`).bind(runId,now,'RUNNING',watchlist.length,MONITOR_VERSION).run();
   const errors=[];let completed=0,written=0;
