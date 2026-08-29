@@ -1,0 +1,10 @@
+const assert=require('node:assert/strict');
+const Manual=require('./manual-trade-engine.js');
+const signal={asset:'SOL',direction:'long',timestamp:1_000,entry:100,entryZone:{low:99,high:101},maxAcceptableChasePrice:102,stop:95,target1:110,target2:115,rr1:2,rr2:3,notional:20};
+let recorded=Manual.recordTaken(null,signal,{entry:101,size:20,leverage:2,stop:95,target1:110,target2:115},2_000);
+assert.equal(recorded.added,true);assert.equal(recorded.trade.mode,'MANUAL LIVE');assert.equal(recorded.trade.execution.includes('no exchange'),true);assert.equal(recorded.trade.deviation.chased,false);
+const original=JSON.stringify(recorded.trade.recommended),mark=Manual.liveMark(recorded.trade,105);assert.equal(mark.unrealizedR,4/6);assert.equal(JSON.stringify(recorded.trade.recommended),original);
+let closed=Manual.closeTrade(recorded.ledger,recorded.trade.id,{exit:110,reason:'TP1'},3_000);assert.equal(closed.closed,true);assert.equal(closed.outcome.realizedR,1.5);assert.equal(Manual.stats(closed.ledger).wins,1);assert.equal(Manual.closeTrade(closed.ledger,recorded.trade.id,{exit:111}).closed,false);
+recorded=Manual.recordTaken(null,signal,{entry:103,size:25,leverage:2,stop:94,target1:110,target2:115});assert.equal(recorded.trade.deviation.chased,true);assert.equal(recorded.trade.deviation.materialDeviation,true);
+assert.equal(Manual.recordTaken(null,signal,{entry:0,size:1,leverage:1,stop:95,target1:110,target2:115}).added,false);
+console.log('Manual live journal tests passed');

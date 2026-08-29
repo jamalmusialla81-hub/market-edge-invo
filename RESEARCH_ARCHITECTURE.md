@@ -20,6 +20,16 @@ Funding is not modeled because a complete synchronized funding-history dataset i
 
 `forward-engine.js` stores immutable signal snapshots separately from outcome records. It records deterministic IDs, dataset/engine references when supplied, and the conservative execution model. Outcomes are appended to the separate `outcomes` map; original signal fields are never mutated. The browser UI migrates its older ledger on read.
 
+## Background monitor and manual-live boundary
+
+The Cloudflare Worker now has a five-minute Cron Trigger and D1 schema for canonical 5m candles, latest market states, immutable monitor events, TradingView evidence, paper snapshots/outcomes and a model registry. The first server monitor validates Binance public 5m OHLCV, stores only completed candles, derives deterministic completed buckets in memory, marks source/data health and keeps `executionDisabled: true`. It currently records `ACTIVE`, `WAIT`, `INSUFFICIENT DATA` or `BAD DATA`; it does not yet call the complete browser quant engine because a deep server-side canonical history is still being built.
+
+`MANUAL LIVE` is a decision-support mode, not exchange automation. It uses the account balance the user enters locally for risk sizing and lets the user journal a manually placed trade. No exchange API, credentials, order submission, stop modification or balance lookup exists anywhere in the application. Manual-trade recommendations and actual entries are stored separately and never overwrite each other.
+
+## ML research foundation
+
+`ml-engine.js` provides own regularized logistic and ridge-regression baselines, strict feature/target separation, chronological ML splits, one-time untouched-test consumption, Platt calibration, Brier/ECE metrics and feature-coefficient importance. It rejects feature names that indicate labels, outcomes, exits, P&L or future values. There is **no trained or deployed ML champion yet**: the required deep, validated historical dataset and sufficient forward sample do not exist. Any future model begins in `RESEARCH`, can move to `SHADOW` only after meaningful unseen improvement, and cannot auto-promote or alter risk.
+
 ## Current evidence verdict
 
 Historical samples remain tiny and inconsistent. No asset meets the requested robust bar across multi-year regimes, 184+ untouched/walk-forward trades, reasonable parameter neighborhoods, 0.25% costs and consistent forward evidence. Deployment remains **PAPER TRADE ONLY**.

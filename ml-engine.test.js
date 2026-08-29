@@ -1,0 +1,12 @@
+const assert=require('node:assert/strict');
+const ML=require('./ml-engine.js');
+const samples=Array.from({length:180},(_,index)=>{const trend=(index%30)/30,volume=(index%11)/10,success=trend+volume>.9?1:0,finalR=success?1.4:-.8;return ML.makeSample({time:index+1,asset:'BTC',strategy:'TREND CONTINUATION',direction:'long',regime:'TREND UP',features:{trend,volume,atrPct:.02+volume*.01,entryDistance:1-trend},targets:{tp1BeforeSl:success,finalR,mfeR:success?2:.4,maeR:success?-.4:-1.2}});});
+assert.throws(()=>ML.makeSample({time:1,features:{finalR:1},targets:{tp1BeforeSl:1}}),/LEAKAGE_REJECTED/);
+assert.throws(()=>ML.makeSample({time:1,features:{futureClose:1},targets:{tp1BeforeSl:1}}),/LEAKAGE_REJECTED/);
+const split=ML.chronologicalSplit(samples,{datasetHash:'fixture'});assert.equal(split.train.length,108);assert.equal(split.validation.length,36);assert.equal(split.test.rows.length,36);assert.ok(split.train.at(-1).time<split.validation[0].time&&split.validation.at(-1).time<split.test.rows[0].time);
+const train=ML.trainLogistic(split.train,'tp1BeforeSl'),probability=ML.predictProbability(train,split.validation[0].features);assert.ok(probability>=0&&probability<=1);assert.equal(ML.featureImportance(train).length,4);
+const ridge=ML.trainRidge(split.train,'finalR'),predictedR=ML.predictR(ridge,split.validation[0].features);assert.ok(Number.isFinite(predictedR));
+const validationScores=split.validation.map(row=>ML.predictProbability(train,row.features)),validationTargets=split.validation.map(row=>row.targets.tp1BeforeSl);const calibration=ML.calibratePlatt(validationScores,validationTargets);assert.ok(Number.isFinite(calibration.calibratedBrier));assert.ok(ML.expectedCalibrationError(validationScores,validationTargets)>=0);
+const consumed=ML.consumeUntouched(split,{});assert.equal(consumed.split.test.consumed,true);assert.throws(()=>ML.consumeUntouched(consumed.split,consumed.registry),/already been consumed/);
+assert.equal(ML.challengerDecision({candidate:{},baseline:{brier:.25,expectedR:.1},untouchedMetrics:{samples:110,brier:.2,expectedR:.12}}).status,'SHADOW');assert.equal(ML.challengerDecision({candidate:{},baseline:{brier:.25,expectedR:.1},untouchedMetrics:{samples:10,brier:.2,expectedR:.12}}).status,'RESEARCH');
+console.log('Leakage-safe ML research tests passed');

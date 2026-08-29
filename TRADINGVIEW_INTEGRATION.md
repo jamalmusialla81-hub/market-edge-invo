@@ -44,4 +44,4 @@ TradingView requires webhook targets on port 80 or 443, cancels requests that ta
 }
 ```
 
-Accepted states are `CANDIDATE`, `WAIT` and `NO TRADE`. Webhook evidence cannot override a quantitative `WAIT`, `NO TRADE` or `ANALYSIS UNAVAILABLE` result and cannot execute money.
+Accepted states are `CANDIDATE`, `WAIT` and `NO TRADE`. When configured with the Market Edge D1 binding, accepted evidence is inserted as an immutable server-side record. Webhook evidence cannot override a quantitative `WAIT`, `NO TRADE` or `ANALYSIS UNAVAILABLE` result and cannot execute money or submit a manual-live order.

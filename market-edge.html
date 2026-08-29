@@ -312,12 +312,16 @@
 
     <section class="control-panel" aria-label="Portfolio controls">
       <div class="field">
-        <label for="balance">Exact Invo Wallet balance (USDC)</label>
+        <label for="balance">Manual account balance / Invo wallet (USDC)</label>
         <input id="balance" type="number" min="1" step="1" value="7" inputmode="decimal">
       </div>
       <div class="field">
         <label for="quoteAsset">Price shown in</label>
         <input id="quoteAsset" value="USDT (balance stays USDC)" readonly>
+      </div>
+      <div class="field">
+        <label for="workflowMode">Workspace mode</label>
+        <select id="workflowMode"><option value="research">Research</option><option value="paper">Paper</option><option value="manual" selected>Manual live</option></select>
       </div>
       <div class="field">
         <label for="riskMode">Risk mode</label>
@@ -467,6 +471,16 @@
       </div>
     </section>
 
+    <section class="card paper-card" aria-label="Manual live-trade journal">
+      <div class="card-head"><div><p class="eyebrow">You place every order</p><h2>Manual live-trade journal</h2></div><span class="badge watch">No exchange connection</span></div>
+      <div class="research-body">
+        <div id="manualModeNote" class="social-summary"><strong>Manual live mode.</strong> Prices and risk sizing are real-time decision support only. Market Edge cannot submit, modify or close an exchange order.</div>
+        <div id="manualTradeStats" class="metric-grid" style="margin-top:12px"></div>
+        <h3 class="paper-section-title">Open manual trades</h3><div id="manualTradePositions" class="paper-list"></div>
+        <h3 class="paper-section-title">Closed manual trades</h3><div id="manualTradeHistory" class="paper-list"></div>
+      </div>
+    </section>
+
     <section class="card trader-check" aria-label="Invo trader checker">
       <div class="card-head">
         <div><p class="eyebrow">Second opinion</p><h2>Check an Invo trader before mimicking</h2></div>
@@ -536,10 +550,12 @@
           <div class="metric"><span>Leakage tests</span><strong>Future rows rejected</strong></div>
           <div class="metric"><span>Execution model</span><strong>Next bar · stop first</strong></div>
           <div class="metric"><span>Historical depth</span><strong>900 × 4h · insufficient</strong></div>
+          <div class="metric"><span>ML champion</span><strong>None · research only</strong></div>
         </div>
         <div class="research-status-grid">
           <div id="dataHealth" class="social-summary"><strong>Scan to inspect the selected live dataset.</strong> Completed candles, gaps, source coverage and a deterministic hash will appear here.</div>
           <div id="costSensitivity" class="social-summary"><strong>Run a backtest to inspect cost sensitivity.</strong> Expectancy will be compared at 0.08%, 0.16%, 0.25% and 0.40% round-trip cost.</div>
+          <div id="monitorSummary" class="social-summary"><strong>Background monitor connecting.</strong> It records canonical market states and paper-research events only; real execution is disabled.</div>
         </div>
         <div class="field" style="margin-top:14px;max-width:260px"><label for="tvExchange">TradingView visual venue</label><select id="tvExchange"><option value="BINANCE">Binance · USDT</option><option value="COINBASE">Coinbase · USD</option><option value="KRAKEN">Kraken · USD</option><option value="BYBIT">Bybit · USDT</option></select></div>
         <div class="evidence-links">
@@ -571,6 +587,8 @@
   <script src="quant-engine.js?v=14"></script>
   <script src="tradingview-compat.js?v=14"></script>
   <script src="forward-engine.js?v=14"></script>
+  <script src="manual-trade-engine.js?v=15"></script>
+  <script src="ml-engine.js?v=15"></script>
   <script src="ai-engine.js?v=14"></script>
   <script>
     const MARKETS = ['BTC','ETH','SOL','XRP','DOGE','ADA','AVAX','LINK','SUI','PENGU','BNB','LTC','DOT','NEAR','APT','ARB','OP','UNI','AAVE','INJ'];
@@ -588,7 +606,7 @@
       scan: document.getElementById('scanButton'), balance: document.getElementById('balance'), risk: document.getElementById('riskMode'), leverage: document.getElementById('leverage'),
       minQuality: document.getElementById('minQuality'), minRR: document.getElementById('minRR'), maxConcurrent: document.getElementById('maxConcurrent'),
       maxExposure: document.getElementById('maxExposure'), openDirection: document.getElementById('openDirection'), maxDailyLoss: document.getElementById('maxDailyLoss'),
-      maxDrawdown: document.getElementById('maxDrawdown'), forwardMode: document.getElementById('forwardMode'), opportunityFilter: document.getElementById('opportunityFilter'),
+      maxDrawdown: document.getElementById('maxDrawdown'), forwardMode: document.getElementById('forwardMode'), workflowMode:document.getElementById('workflowMode'), opportunityFilter: document.getElementById('opportunityFilter'),
       status: document.getElementById('feedStatus'), list: document.getElementById('marketList'), rec: document.getElementById('recommendation'),
       title: document.getElementById('decisionTitle'), badge: document.getElementById('decisionBadge'), toast: document.getElementById('toast'),
       alternatives: document.getElementById('alternatives'),
@@ -599,7 +617,8 @@
       socialData: document.getElementById('socialData'), importSocial: document.getElementById('importSocial'), clearSocial: document.getElementById('clearSocial'), socialSummary: document.getElementById('socialSummary'),
       runBacktest: document.getElementById('runBacktest'), backtestResult: document.getElementById('backtestResult'),
       forwardBadge: document.getElementById('forwardBadge'), forwardResult: document.getElementById('forwardResult'), clearForward: document.getElementById('clearForward'),
-      dataHealth:document.getElementById('dataHealth'),costSensitivity:document.getElementById('costSensitivity'),tvExchange:document.getElementById('tvExchange'),tradingViewChart:document.getElementById('tradingViewChart')
+      dataHealth:document.getElementById('dataHealth'),costSensitivity:document.getElementById('costSensitivity'),tvExchange:document.getElementById('tvExchange'),tradingViewChart:document.getElementById('tradingViewChart'),
+      manualModeNote:document.getElementById('manualModeNote'),manualTradeStats:document.getElementById('manualTradeStats'),manualTradePositions:document.getElementById('manualTradePositions'),manualTradeHistory:document.getElementById('manualTradeHistory'),monitorSummary:document.getElementById('monitorSummary')
     };
     function currentSettings() {
       return {
@@ -871,6 +890,17 @@
       els.tradingViewChart.href=MarketEdgeTradingView.chartUrl(exchange,asset,quote);
       els.tradingViewChart.textContent=`Open ${asset} on TradingView`;
     }
+    async function refreshMonitorSummary() {
+      const base=String(window.MARKET_EDGE_AI_CONFIG?.apiBase||'').replace(/\/$/,'');
+      if(!base){els.monitorSummary.textContent='Background monitor is not configured in this browser build.';return;}
+      try {
+        const response=await fetch(`${base}/v1/monitor/latest`,{cache:'no-store'}),data=await response.json();
+        const run=data.latestRun;
+        if(!run){els.monitorSummary.textContent='Background monitor is configured but has not recorded its first server-side scan yet. Execution remains disabled.';return;}
+        const errors=JSON.parse(run.errors_json||'[]'),finished=run.completed_at?new Date(run.completed_at).toLocaleString():'in progress';
+        els.monitorSummary.textContent=`Background monitor ${run.status} · ${run.assets_completed}/${run.assets_requested} assets · ${run.candles_written} canonical candles · ${finished} · ${errors.length?errors[0]:'no reported errors'}. Real execution: disabled.`;
+      } catch { els.monitorSummary.textContent='Background monitor status could not be reached. Live scanner and manual journal remain separate; no order action was attempted.'; }
+    }
     function renderResearchEvidence(best) {
       updateTradingViewLink(best);
       if(!best?.candles?.length){els.dataHealth.innerHTML='<strong>No selected dataset.</strong> A scan must return completed candles before data health can be measured.';return;}
@@ -887,6 +917,7 @@
       }
       const q=best.quant, decision=q.decision, direction=q.direction||best.lean||'neutral';
       const directionText=direction==='short'?'SHORT':direction==='long'?'LONG':'NEUTRAL';
+      const workspaceMode=els.workflowMode.value==='manual'?'MANUAL LIVE':els.workflowMode.value.toUpperCase();
       const decisionClass=decision==='TAKE TRADE'?(direction==='short'?'short':'buy'):decision==='WAIT'?'watch':'avoid';
       els.title.textContent=`${best.symbol} — ${directionText}`;
       els.badge.className=`badge ${decisionClass}`; els.badge.textContent=decision;
@@ -904,6 +935,8 @@
           <div class="evidence-item"><span>Structure</span><strong>${q.frame?.structure?.label||'Unavailable'}</strong></div>
           <div class="evidence-item"><span>RSI 14</span><strong>${Number.isFinite(q.frame?.rsi)?q.frame.rsi.toFixed(1):'—'}</strong></div>
           <div class="evidence-item"><span>Relative volume</span><strong>${Number.isFinite(q.frame?.relativeVolume)?q.frame.relativeVolume.toFixed(2)+'×':'Unavailable'}</strong></div>
+          <div class="evidence-item"><span>Workspace</span><strong>${workspaceMode}</strong></div>
+          <div class="evidence-item"><span>ML model</span><strong>UNAVAILABLE · no champion</strong></div>
         </div>
         <div class="evidence-links"><a class="evidence-link" href="${MarketEdgeTradingView.chartUrl('BINANCE',best.symbol,'USDT')}" target="_blank" rel="noopener noreferrer">Verify ${best.symbol} on TradingView</a></div>`;
       if (decision!=='TAKE TRADE' || !q.risk?.valid) {
@@ -944,13 +977,15 @@
           <p class="fresh-note">Only enter while Invo's mark price is close to ${formatPrice(q.entry)}. Confirm Invo's actual liquidation price and active TP/SL before submitting.</p>
         </section>
         <details class="analysis-details"><summary>Why this trade and what invalidates it?</summary><p class="analysis-copy">${q.reason}. A move through ${formatPrice(q.stop)} invalidates the setup. The score is not a probability and historical testing may still be insufficient.</p></details>
-        <div class="confirm"><label class="confirm-note"><input id="ack" type="checkbox">I understand this is research, not guaranteed profit.</label><button id="prepare" class="prepare" type="button" disabled>Copy exact Invo values</button></div>`;
+        <div class="confirm"><label class="confirm-note"><input id="ack" type="checkbox">I understand this is research, not guaranteed profit.</label><button id="prepare" class="prepare" type="button" disabled>Copy exact manual values</button></div>
+        <details class="analysis-details" id="manualRecordPanel"><summary>I took this trade manually</summary><p class="analysis-copy">Record what you actually entered after the order is already placed. This is a local journal only—Market Edge has no exchange connection and cannot change the trade.</p><div class="settings-grid" style="margin-top:12px"><div class="field"><label for="manualActualEntry">Actual entry</label><input id="manualActualEntry" type="number" step="any" value="${q.entry}"></div><div class="field"><label for="manualActualSize">Actual notional (USDC)</label><input id="manualActualSize" type="number" min="0.01" step="0.01" value="${risk.notional.toFixed(2)}"></div><div class="field"><label for="manualActualLeverage">Actual leverage</label><input id="manualActualLeverage" type="number" min="1" step="1" value="${risk.leverage}"></div><div class="field"><label for="manualActualStop">Actual stop</label><input id="manualActualStop" type="number" step="any" value="${q.stop}"></div><div class="field"><label for="manualActualTarget1">Actual TP1</label><input id="manualActualTarget1" type="number" step="any" value="${q.target1}"></div><div class="field"><label for="manualActualTarget2">Actual TP2</label><input id="manualActualTarget2" type="number" step="any" value="${q.target2}"></div></div><div class="research-actions" style="margin-top:12px"><button id="recordManualTrade" class="secondary-button" type="button">Record manual trade</button></div></details>`;
       const ack=document.getElementById('ack'), prepare=document.getElementById('prepare');
       ack.addEventListener('change',()=>prepare.disabled=!ack.checked);
       prepare.addEventListener('click',async()=>{
         const text=`INVO CREATE TRADE\nAsset: ${best.name} (${best.symbol})\nDirection: ${directionText}\nStrategy: ${q.strategy}\nEntry zone: ${formatPrice(q.entryZone.low)}–${formatPrice(q.entryZone.high)} USDT\nIdeal entry: ${formatPrice(q.idealEntry)} USDT\nCurrent reference: ${formatPrice(q.entry)} USDT\nStop-Loss Price: ${formatPrice(q.stop)} USDT\nTP1: ${formatPrice(q.target1)} USDT\nTP2: ${formatPrice(q.target2)} USDT\nLeverage: ${risk.leverage}x isolated\nPosition Size / Margin: ${risk.margin.toFixed(2)} USDC\nContract / Notional Value: ${risk.notional.toFixed(2)} USDC\nEstimated Liquidation: ${formatPrice(risk.estimatedLiquidation)} USDT\nMaximum Planned Loss incl. modeled costs: ${risk.lossAtStop.toFixed(2)} USDC\nRisk/Reward: ${q.rr1.toFixed(2)}R / ${q.rr2.toFixed(2)}R\nInvalidation: ${q.invalidationCondition}\nTrailing rule: ${q.trailingRule}\nSetup Quality: ${q.quality}/100`;
         await navigator.clipboard.writeText(text).catch(()=>{}); showToast('Exact Invo card copied. Verify every live field before submitting.');
       });
+      document.getElementById('recordManualTrade').addEventListener('click',()=>recordManualTrade(best,q,risk));
     }
     function checkInvoTrader() {
       const wins = Number(els.traderWins.value), losses = Number(els.traderLosses.value), pnl = Number(els.traderPnl.value), leverage = Number(els.traderLeverage.value);
@@ -1025,6 +1060,30 @@
       els.forwardResult.innerHTML=summary.signals
         ? `<strong>${summary.open} open · ${summary.wins} positive · ${summary.losses} non-positive · ${summary.averageR.toFixed(2)}R average · ${summary.sampleTier} sample.</strong> Signal snapshots and outcomes are stored separately. Every qualified setup is recorded automatically; these observations are never mixed with historical backtests. ${summary.completed<30?'The completed sample is too small for optimization or a live-readiness conclusion.':''}`
         : '<strong>No forward setups recorded.</strong> Historical backtests and forward observations remain separate.';
+    }
+    function manualLedger() {
+      try { return MarketEdgeManual.migrate(JSON.parse(localStorage.getItem('market-edge-manual-trades')||'null')); } catch { return MarketEdgeManual.blank(); }
+    }
+    function saveManual(ledger) { localStorage.setItem('market-edge-manual-trades',JSON.stringify(MarketEdgeManual.migrate(ledger))); }
+    function currentManualPrices() { return Object.fromEntries(latestResults.filter(result=>Number.isFinite(result.price)).map(result=>[result.symbol,result.price])); }
+    function renderManualJournal() {
+      const ledger=manualLedger(),summary=MarketEdgeManual.stats(ledger),prices=currentManualPrices();
+      const mode=els.workflowMode.value;
+      els.manualModeNote.innerHTML=mode==='manual'
+        ? '<strong>Manual live mode.</strong> Live market data and your manually entered account balance feed the decision card. Market Edge has no exchange credentials and cannot submit, change or close an order.'
+        : `<strong>${mode==='paper'?'Paper':'Research'} mode selected.</strong> Manual trades remain separate from paper positions and historical research.`;
+      els.manualTradeStats.innerHTML=`<div class="metric"><span>Manual trades</span><strong>${summary.trades}</strong></div><div class="metric"><span>Open</span><strong>${summary.open}</strong></div><div class="metric"><span>Closed</span><strong>${summary.closed}</strong></div><div class="metric"><span>Average R</span><strong>${summary.closed?summary.averageR.toFixed(2)+'R':'—'}</strong></div>`;
+      const open=ledger.trades.filter(trade=>!ledger.outcomes[trade.id]),closed=ledger.trades.filter(trade=>ledger.outcomes[trade.id]);
+      els.manualTradePositions.innerHTML=open.length?open.map(trade=>{const mark=MarketEdgeManual.liveMark(trade,prices[trade.recommended.asset]);return `<article class="paper-row"><div><strong>${trade.recommended.asset} ${trade.recommended.direction.toUpperCase()} · MANUAL</strong><span>Entered ${new Date(trade.actual.timestamp).toLocaleString()} · signal remains immutable</span></div><div><span>Current mark</span><b>${mark?formatPrice(mark.price)+' USDT':'Scan to refresh'}</b></div><div><span>Unrealized R</span><b>${mark?mark.unrealizedR.toFixed(2)+'R':'—'}</b></div><div><span>Stop / TP1</span><b>${formatPrice(trade.actual.stop)} / ${formatPrice(trade.actual.target1)}</b></div></article>`;}).join(''):'<div class="empty"><strong>No manual trade recorded.</strong> When a validated card appears and you take it yourself, record the exact values here. Nothing is sent to an exchange.</div>';
+      els.manualTradeHistory.innerHTML=closed.length?closed.slice().reverse().map(trade=>{const outcome=ledger.outcomes[trade.id];return `<article class="paper-row closed"><div><strong>${trade.recommended.asset} ${trade.recommended.direction.toUpperCase()} · ${outcome.reason}</strong><span>Recommended and actual entries remain available in local journal data.</span></div><div><span>Exit</span><b>${formatPrice(outcome.exit)}</b></div><div><span>Result</span><b>${outcome.realizedR.toFixed(2)}R</b></div><div><span>Review</span><b>${outcome.classification}</b></div></article>`;}).join(''):'<div class="empty"><strong>No closed manual trades.</strong> Closing a journal entry records an outcome separately; it never edits the original recommendation.</div>';
+    }
+    function recordManualTrade(best,q,risk) {
+      const actual={entry:Number(document.getElementById('manualActualEntry').value),size:Number(document.getElementById('manualActualSize').value),leverage:Number(document.getElementById('manualActualLeverage').value),stop:Number(document.getElementById('manualActualStop').value),target1:Number(document.getElementById('manualActualTarget1').value),target2:Number(document.getElementById('manualActualTarget2').value),timestamp:Date.now()};
+      const atr=Number.isFinite(q.frame?.atr)?q.frame.atr:0,maximumChase=q.direction==='long'?q.entryZone.high+atr*.35:q.entryZone.low-atr*.35;
+      const recommended={asset:best.symbol,direction:q.direction,timestamp:q.frame.timestamp,referenceTime:q.frame.timestamp,entry:q.entry,entryZone:q.entryZone,maxAcceptableChasePrice:maximumChase,stop:q.stop,target1:q.target1,target2:q.target2,rr1:q.rr1,rr2:q.rr2,notional:risk.notional,margin:risk.margin,leverage:risk.leverage,strategy:q.strategy,regime:q.regime,invalidation:q.invalidationCondition,dataHealth:best.sourceCount>=2?'MULTI-SOURCE':'LIMITED SOURCE',engineVersion:MarketEdgeQuant.VERSION};
+      const recorded=MarketEdgeManual.recordTaken(manualLedger(),recommended,actual);
+      if(!recorded.added){showToast(recorded.reason);return;}
+      saveManual(recorded.ledger);renderManualJournal();showToast(recorded.trade.deviation.chased?'Manual trade recorded — entry was beyond the chase limit.':'Manual trade recorded locally. Market Edge will monitor only; it cannot alter the order.');
     }
     function renderBacktest(result, symbol) {
       const rows=[['Training 60%',result.training],['Validation 20%',result.validation],['Untouched test 20%',result.test],['Rolling unseen windows',result.walkForward.aggregate]];
@@ -1129,11 +1188,11 @@
         latestResults=results; renderSourceStatus(results); renderList(results); renderQuantRecommendation(results[0]); renderQuantAlternatives(results);
         const aiResults=results.map(result=>MarketEdgeAI.sanitizeQuantSnapshot(result)).filter(Boolean);
         window.dispatchEvent(new CustomEvent('market-edge:scan',{detail:{best:aiResults[0]||null,results:aiResults}}));
-        updateForward(results); els.runBacktest.disabled=!results[0]?.candles?.length;
+        updateForward(results); renderManualJournal(); els.runBacktest.disabled=!results[0]?.candles?.length;
         els.status.className = 'status live'; els.status.querySelector('span:last-child').textContent = `Live · ${new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}`;
         localStorage.setItem('market-edge-settings',JSON.stringify({
           balance:els.balance.value,risk:els.risk.value,leverage:els.leverage.value,minQuality:els.minQuality.value,minRR:els.minRR.value,
-          maxConcurrent:els.maxConcurrent.value,maxExposure:els.maxExposure.value,openDirection:els.openDirection.value,maxDailyLoss:els.maxDailyLoss.value,maxDrawdown:els.maxDrawdown.value,forwardMode:els.forwardMode.value
+          maxConcurrent:els.maxConcurrent.value,maxExposure:els.maxExposure.value,openDirection:els.openDirection.value,maxDailyLoss:els.maxDailyLoss.value,maxDrawdown:els.maxDrawdown.value,forwardMode:els.forwardMode.value,workflowMode:els.workflowMode.value
         }));
       } catch (error) {
         els.status.className = 'status'; els.status.querySelector('span:last-child').textContent = 'Feed unavailable';
@@ -1149,6 +1208,7 @@
     els.checkTrader.addEventListener('click', checkInvoTrader);
     els.opportunityFilter.addEventListener('change',()=>renderList(latestResults));
     els.tvExchange.addEventListener('change',()=>updateTradingViewLink());
+    els.workflowMode.addEventListener('change',()=>{renderManualJournal();showToast(`${els.workflowMode.options[els.workflowMode.selectedIndex].text} mode selected. No exchange connection is available.`);});
     els.runBacktest.addEventListener('click',runBacktest);
     els.importSocial.addEventListener('click',()=>{
       try {
@@ -1160,11 +1220,11 @@
     els.clearForward.addEventListener('click',()=>{ localStorage.removeItem('market-edge-forward'); renderForward(); });
     try {
       const saved=JSON.parse(localStorage.getItem('market-edge-settings')||'{}');
-      const mapping={balance:'balance',risk:'risk',leverage:'leverage',minQuality:'minQuality',minRR:'minRR',maxConcurrent:'maxConcurrent',maxExposure:'maxExposure',openDirection:'openDirection',maxDailyLoss:'maxDailyLoss',maxDrawdown:'maxDrawdown',forwardMode:'forwardMode'};
+      const mapping={balance:'balance',risk:'risk',leverage:'leverage',minQuality:'minQuality',minRR:'minRR',maxConcurrent:'maxConcurrent',maxExposure:'maxExposure',openDirection:'openDirection',maxDailyLoss:'maxDailyLoss',maxDrawdown:'maxDrawdown',forwardMode:'forwardMode',workflowMode:'workflowMode'};
       Object.entries(mapping).forEach(([key,element])=>{ if(saved[key]!=null) els[element].value=saved[key]; });
       socialRecords=JSON.parse(localStorage.getItem('market-edge-social')||'[]');
     } catch {}
-    renderSocialSummary(); renderForward();
+    renderSocialSummary(); renderForward(); renderManualJournal(); refreshMonitorSummary();
     updateTradingViewLink();
     if ('serviceWorker' in navigator) window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js?v=14').catch(()=>{}));
   </script>

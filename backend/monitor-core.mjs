@@ -29,6 +29,12 @@ export function normalizeBinanceKlines(rows,{asset='UNKNOWN',symbol='UNKNOWN',no
   return {asset,symbol,interval,candles,errors,gaps,missing,coverage,status,datasetHash,firstTime:candles[0]?.time||null,lastTime:candles.at(-1)?.time||null};
 }
 
+export function normalizeHyperliquidCandles(rows,options={}){
+  const duration=INTERVAL_MS[options.interval||'5m'];
+  const adapted=(Array.isArray(rows)?rows:[]).map(row=>[row?.t,row?.o,row?.h,row?.l,row?.c,row?.v,row?.T??(Number(row?.t)+duration-1)]);
+  return normalizeBinanceKlines(adapted,options);
+}
+
 export function aggregateCompleted(base,baseInterval,targetInterval,asOf=Date.now()){
   const sourceDuration=INTERVAL_MS[baseInterval],targetDuration=INTERVAL_MS[targetInterval];
   if(!sourceDuration||!targetDuration||targetDuration%sourceDuration)throw new Error('Invalid aggregation interval');
@@ -42,20 +48,33 @@ export function canonicalState(report,now=Date.now()){
   const stale=last?now-last.closeTime>INTERVAL_MS['5m']*3:true;
   const bias=price&&ema20&&ema50?(price>ema20&&ema20>ema50?'LONG SUPPORT':price<ema20&&ema20<ema50?'SHORT SUPPORT':'NEUTRAL'):'UNAVAILABLE';
   const status=report.status==='INVALID'?'BAD DATA':stale?'WAIT':candles.length<60?'INSUFFICIENT DATA':'ACTIVE';
-  return {status,dataHealth:report.status,sourceStatus:stale?'STALE':'LIVE',referencePrice:price,referenceTime:last?.closeTime||null,staleAfter:last?.closeTime?last.closeTime+INTERVAL_MS['5m']*3:null,disagreementPct:null,bias,ema20:ema20||null,ema50:ema50||null,candleCount:candles.length,coverage:report.coverage,datasetHash:report.datasetHash,executionDisabled:true,reason:status==='ACTIVE'?'Monitor ingestion is healthy; server-side deterministic five-timeframe strategy evaluation is pending a deep canonical dataset.':'Data quality or depth prevents research qualification.'};
+  return {status,dataHealth:report.status,sourceStatus:stale?'STALE':report.providerStatus||'LIVE',referencePrice:price,referenceTime:last?.closeTime||null,staleAfter:last?.closeTime?last.closeTime+INTERVAL_MS['5m']*3:null,disagreementPct:null,bias,ema20:ema20||null,ema50:ema50||null,candleCount:candles.length,coverage:report.coverage,datasetHash:report.datasetHash,executionDisabled:true,reason:status==='ACTIVE'?'Monitor ingestion is healthy; server-side deterministic five-timeframe strategy evaluation is pending a deep canonical dataset.':'Data quality or depth prevents research qualification.'};
 }
 
+async function fetchHyperliquidCandles(asset,fetchImpl,now){
+  const started=Date.now(),startTime=now-1_001*INTERVAL_MS['5m'];
+  const response=await fetchImpl('https://api.hyperliquid.xyz/info',{method:'POST',headers:{'content-type':'application/json',accept:'application/json'},body:JSON.stringify({type:'candleSnapshot',req:{coin:asset.asset,interval:'5m',startTime,endTime:now}})});
+  if(!response.ok)throw new Error(`${asset.asset} Hyperliquid HTTP ${response.status}`);
+  const rows=await response.json(),report=normalizeHyperliquidCandles(rows,{asset:asset.asset,symbol:asset.symbol,now,interval:'5m'});
+  return {...report,exchange:'HYPERLIQUID',sourceLatencyMs:Date.now()-started,providerStatus:'LIVE · HYPERLIQUID FALLBACK'};
+}
 export async function fetchAssetCandles(asset,fetchImpl,now=Date.now()){
   const started=Date.now(),url=`https://api.binance.com/api/v3/klines?symbol=${encodeURIComponent(asset.symbol)}&interval=5m&limit=1000`;
-  const response=await fetchImpl(url,{headers:{accept:'application/json'}});if(!response.ok)throw new Error(`${asset.asset} provider HTTP ${response.status}`);
-  const rows=await response.json(),report=normalizeBinanceKlines(rows,{asset:asset.asset,symbol:asset.symbol,now,interval:'5m'});return {...report,exchange:asset.exchange,sourceLatencyMs:Date.now()-started};
+  try {
+    const response=await fetchImpl(url,{headers:{accept:'application/json'}});if(!response.ok)throw new Error(`${asset.asset} Binance HTTP ${response.status}`);
+    const rows=await response.json(),report=normalizeBinanceKlines(rows,{asset:asset.asset,symbol:asset.symbol,now,interval:'5m'});return {...report,exchange:asset.exchange,sourceLatencyMs:Date.now()-started,providerStatus:'LIVE · BINANCE'};
+  } catch(binanceError) {
+    try { const fallback=await fetchHyperliquidCandles(asset,fetchImpl,now);return {...fallback,providerError:String(binanceError.message||binanceError).slice(0,180)}; }
+    catch(hyperliquidError){throw new Error(`${String(binanceError.message||binanceError).slice(0,90)}; ${String(hyperliquidError.message||hyperliquidError).slice(0,90)}`);}
+  }
 }
 
 function id(prefix,parts){return `${prefix}-${hash(parts)}`;}
 async function writeStatements(db,statements){if(!statements.length)return;for(let index=0;index<statements.length;index+=100)await db.batch(statements.slice(index,index+100));}
 export async function persistAsset(db,runId,asset,report,state,now=Date.now()){
-  const candles=report.candles.map(candle=>db.prepare(`INSERT OR REPLACE INTO canonical_candles (asset,exchange,symbol,interval,open_time,close_time,open,high,low,close,volume,source_latency_ms,received_at,dataset_hash) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(asset.asset,asset.exchange,asset.symbol,'5m',candle.time,candle.closeTime,candle.open,candle.high,candle.low,candle.close,candle.volume,report.sourceLatencyMs,now,report.datasetHash));
-  candles.push(db.prepare(`INSERT OR REPLACE INTO market_states (asset,exchange,symbol,status,data_health,source_status,reference_price,reference_time,stale_after,disagreement_pct,state_json,dataset_hash,engine_version,updated_at,execution_disabled) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,1)`).bind(asset.asset,asset.exchange,asset.symbol,state.status,state.dataHealth,state.sourceStatus,state.referencePrice,state.referenceTime,state.staleAfter,state.disagreementPct,JSON.stringify(state),report.datasetHash,MONITOR_VERSION,now));
+  const exchange=report.exchange||asset.exchange,symbol=report.symbol||asset.symbol;
+  const candles=report.candles.map(candle=>db.prepare(`INSERT OR REPLACE INTO canonical_candles (asset,exchange,symbol,interval,open_time,close_time,open,high,low,close,volume,source_latency_ms,received_at,dataset_hash) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(asset.asset,exchange,symbol,'5m',candle.time,candle.closeTime,candle.open,candle.high,candle.low,candle.close,candle.volume,report.sourceLatencyMs,now,report.datasetHash));
+  candles.push(db.prepare(`INSERT OR REPLACE INTO market_states (asset,exchange,symbol,status,data_health,source_status,reference_price,reference_time,stale_after,disagreement_pct,state_json,dataset_hash,engine_version,updated_at,execution_disabled) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,1)`).bind(asset.asset,exchange,symbol,state.status,state.dataHealth,state.sourceStatus,state.referencePrice,state.referenceTime,state.staleAfter,state.disagreementPct,JSON.stringify(state),report.datasetHash,MONITOR_VERSION,now));
   candles.push(db.prepare(`INSERT OR IGNORE INTO monitor_events (id,run_id,asset,event_type,severity,payload_json,created_at,immutable) VALUES (?,?,?,?,?,?,?,1)`).bind(id('event',[runId,asset.asset,report.datasetHash]),runId,asset.asset,'CANONICAL_STATE_UPDATED',state.status==='BAD DATA'?'ERROR':'INFO',JSON.stringify({state,errors:report.errors.slice(0,5),gaps:report.gaps}),now));
   await writeStatements(db,candles);
   return report.candles.length;
