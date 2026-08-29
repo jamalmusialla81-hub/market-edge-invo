@@ -15,6 +15,9 @@ const hyperRows=rows.map(row=>({t:row[0],T:row[6],o:row[1],h:row[2],l:row[3],c:r
 assert.equal(normalizeHyperliquidCandles(hyperRows,{now}).status,'HIGH');
 const fallback=await fetchAssetCandles({asset:'BTC',symbol:'BTCUSDT',exchange:'BINANCE'},async(url)=>url.includes('binance')?new Response('blocked',{status:451}):new Response(JSON.stringify(hyperRows),{status:200}),now);
 assert.equal(fallback.exchange,'HYPERLIQUID');assert.match(fallback.providerStatus,/FALLBACK/);
+const coinbaseRows=rows.map(row=>[row[0]/1000,Number(row[3]),Number(row[2]),Number(row[1]),Number(row[4]),Number(row[5])]);
+const coinbase=await fetchAssetCandles({asset:'BTC',symbol:'BTCUSDT',exchange:'COINBASE',coinbaseProduct:'BTC-USD'},async()=>new Response(JSON.stringify(coinbaseRows),{status:200}),now);
+assert.equal(coinbase.exchange,'COINBASE');assert.equal(coinbase.symbol,'BTC-USD');
 
 class FakeStatement{constructor(db,sql){this.db=db;this.sql=sql;}bind(...args){this.args=args;return this;}async run(){this.db.calls.push({sql:this.sql,args:this.args});return {success:true};}async first(){return this.db.run||null;}async all(){return {results:this.db.states||[]};}}
 class FakeDb{constructor(){this.calls=[];this.run=null;this.states=[];}prepare(sql){return new FakeStatement(this,sql);}async batch(items){for(const item of items)await item.run();}}

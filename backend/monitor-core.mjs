@@ -1,8 +1,9 @@
 export const MONITOR_VERSION='1.0.0';
 export const INTERVAL_MS={'5m':300_000,'15m':900_000,'1h':3_600_000,'4h':14_400_000,'1d':86_400_000};
+const COINBASE_PRODUCTS={BTC:'BTC-USD',ETH:'ETH-USD',SOL:'SOL-USD',XRP:'XRP-USD',DOGE:'DOGE-USD',LTC:'LTC-USD',ADA:'ADA-USD',AVAX:'AVAX-USD',LINK:'LINK-USD',SUI:'SUI-USD',BCH:'BCH-USD',AAVE:'AAVE-USD',ICP:'ICP-USD'};
 export const WATCHLIST=[
   ['BTC','BTCUSDT'],['ETH','ETHUSDT'],['SOL','SOLUSDT'],['XRP','XRPUSDT'],['DOGE','DOGEUSDT'],['LTC','LTCUSDT'],['BNB','BNBUSDT'],['ADA','ADAUSDT'],['AVAX','AVAXUSDT'],['LINK','LINKUSDT'],['SUI','SUIUSDT'],['HYPE','HYPEUSDT'],['BCH','BCHUSDT'],['AAVE','AAVEUSDT'],['ICP','ICPUSDT']
-].map(([asset,symbol])=>({asset,symbol,exchange:'HYPERLIQUID',backupSources:['BINANCE','COINBASE','BYBIT']}));
+].map(([asset,symbol])=>({asset,symbol,exchange:COINBASE_PRODUCTS[asset]?'COINBASE':'HYPERLIQUID',coinbaseProduct:COINBASE_PRODUCTS[asset]||null,backupSources:['HYPERLIQUID','BINANCE','BYBIT']}));
 
 function finite(value){const n=Number(value);return Number.isFinite(n)?n:null;}
 function hash(value){const text=JSON.stringify(value);let h=2166136261;for(let i=0;i<text.length;i++){h^=text.charCodeAt(i);h=Math.imul(h,16777619);}return (h>>>0).toString(16).padStart(8,'0');}
@@ -58,11 +59,22 @@ async function fetchHyperliquidCandles(asset,fetchImpl,now){
   const rows=await response.json(),report=normalizeHyperliquidCandles(rows,{asset:asset.asset,symbol:asset.symbol,now,interval:'5m'});
   return {...report,exchange:'HYPERLIQUID',sourceLatencyMs:Date.now()-started,providerStatus:'LIVE · HYPERLIQUID FALLBACK'};
 }
+async function fetchCoinbaseCandles(asset,fetchImpl,now){
+  const product=asset.coinbaseProduct;if(!product)throw new Error(`${asset.asset} has no approved Coinbase product mapping`);
+  const started=Date.now(),start=new Date(now-101*INTERVAL_MS['5m']).toISOString(),end=new Date(now).toISOString(),url=`https://api.exchange.coinbase.com/products/${encodeURIComponent(product)}/candles?granularity=300&start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`;
+  const response=await fetchImpl(url,{headers:{accept:'application/json'}});if(!response.ok)throw new Error(`${asset.asset} Coinbase HTTP ${response.status}`);
+  const rows=await response.json(),adapted=(Array.isArray(rows)?rows:[]).map(row=>[Number(row?.[0])*1000,row?.[3],row?.[2],row?.[1],row?.[4],row?.[5],Number(row?.[0])*1000+INTERVAL_MS['5m']-1]);
+  const report=normalizeBinanceKlines(adapted,{asset:asset.asset,symbol:product,now,interval:'5m'});return {...report,exchange:'COINBASE',sourceLatencyMs:Date.now()-started,providerStatus:'LIVE · COINBASE'};
+}
 export async function fetchAssetCandles(asset,fetchImpl,now=Date.now()){
   const started=Date.now(),url=`https://api.binance.com/api/v3/klines?symbol=${encodeURIComponent(asset.symbol)}&interval=5m&limit=1000`;
+  if(asset.exchange==='COINBASE') {
+    try { return await fetchCoinbaseCandles(asset,fetchImpl,now); }
+    catch(coinbaseError) { try { const fallback=await fetchHyperliquidCandles(asset,fetchImpl,now);return {...fallback,providerError:String(coinbaseError.message||coinbaseError).slice(0,180)}; } catch(hyperliquidError) { throw new Error(`${String(coinbaseError.message||coinbaseError).slice(0,90)}; ${String(hyperliquidError.message||hyperliquidError).slice(0,90)}`); } }
+  }
   if(asset.exchange==='HYPERLIQUID') {
     try { return await fetchHyperliquidCandles(asset,fetchImpl,now); }
-    catch(hyperliquidError) { throw new Error(`${String(hyperliquidError.message||hyperliquidError).slice(0,180)}; Binance fallback not used from this Worker region after repeated HTTP 451`); }
+    catch(hyperliquidError) { try { return await fetchCoinbaseCandles(asset,fetchImpl,now); } catch { throw new Error(`${String(hyperliquidError.message||hyperliquidError).slice(0,180)}; Binance fallback not used from this Worker region after repeated HTTP 451`); } }
   }
   try {
     const response=await fetchImpl(url,{headers:{accept:'application/json'}});if(!response.ok)throw new Error(`${asset.asset} Binance HTTP ${response.status}`);
@@ -84,7 +96,7 @@ export async function persistAsset(db,runId,asset,report,state,now=Date.now()){
   return report.candles.length;
 }
 
-export async function runMonitor({db,fetchImpl=fetch,now=Date.now(),watchlist=WATCHLIST,runId=id('run',[now,watchlist.map(item=>item.asset)]),throttleMs=1200,delay=milliseconds=>new Promise(resolve=>setTimeout(resolve,milliseconds))}={}){
+export async function runMonitor({db,fetchImpl=fetch,now=Date.now(),watchlist=WATCHLIST,runId=id('run',[now,watchlist.map(item=>item.asset)]),throttleMs=700,delay=milliseconds=>new Promise(resolve=>setTimeout(resolve,milliseconds))}={}){
   if(!db)return {runId,status:'STORAGE_UNAVAILABLE',assetsRequested:watchlist.length,assetsCompleted:0,candlesWritten:0,errors:['D1 binding is unavailable'],executionDisabled:true};
   await db.prepare(`INSERT INTO monitor_runs (id,started_at,status,assets_requested,engine_version,execution_disabled) VALUES (?,?,?,?,?,1)`).bind(runId,now,'RUNNING',watchlist.length,MONITOR_VERSION).run();
   const errors=[];let completed=0,written=0;
