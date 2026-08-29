@@ -14,11 +14,14 @@
     assertNoLookahead(timeframes,asOf);
     return {asOf,timeframes,counts:Object.fromEntries(Object.entries(timeframes).map(([name,rows])=>[name,rows.length]))};
   }
+  function completedPrefix(rows,interval,asOf){let low=0,high=(rows||[]).length;while(low<high){const middle=(low+high)>>1;if(rows[middle].time+interval<=asOf)low=middle+1;else high=middle;}return rows.slice(0,low);}
+  function derived(base){const m5=[...(base||[])].sort((a,b)=>a.time-b.time),allAsOf=Infinity;return{m5,m15:Research.aggregateCandles(m5,'5m','15m',{asOf:allAsOf}).candles,h1:Research.aggregateCandles(m5,'5m','1h',{asOf:allAsOf}).candles,h4:Research.aggregateCandles(m5,'5m','4h',{asOf:allAsOf}).candles,d1:Research.aggregateCandles(m5,'5m','1d',{asOf:allAsOf}).candles};}
+  function cachedSnapshot(derivedFrames,asOf){if(!Number.isFinite(finite(asOf)))throw new Error('Historical snapshot timestamp is required');const timeframes={m5:completedPrefix(derivedFrames.m5,Research.INTERVAL_MS['5m'],asOf),m15:completedPrefix(derivedFrames.m15,Research.INTERVAL_MS['15m'],asOf),h1:completedPrefix(derivedFrames.h1,Research.INTERVAL_MS['1h'],asOf),h4:completedPrefix(derivedFrames.h4,Research.INTERVAL_MS['4h'],asOf),d1:completedPrefix(derivedFrames.d1,Research.INTERVAL_MS['1d'],asOf)};assertNoLookahead(timeframes,asOf);return{asOf,timeframes,counts:Object.fromEntries(Object.entries(timeframes).map(([name,rows])=>[name,rows.length]))};}
   function assertNoLookahead(timeframes,asOf){
     const aliases={m5:'5m',m15:'15m',h1:'1h',h4:'4h',d1:'1d'};
     for(const [name,rows] of Object.entries(timeframes||{})){const interval=Research.INTERVAL_MS[aliases[name]||name];for(const candle of rows||[]){if(!Number.isFinite(finite(candle.time))||finite(candle.time)+interval>asOf)throw new Error(`LOOKAHEAD_REJECTED: ${name} contains an incomplete or future candle`);}}
     return true;
   }
   function readiness(snapshotResult){const needed={m5:60,m15:60,h1:60,h4:60,d1:60},missing=Object.entries(needed).filter(([key,count])=>(snapshotResult?.counts?.[key]||0)<count).map(([key,count])=>`${key} ${snapshotResult?.counts?.[key]||0}/${count}`);return{ready:!missing.length,missing};}
-  return {VERSION,TIMEFRAMES,snapshot,assertNoLookahead,readiness};
+  return {VERSION,TIMEFRAMES,snapshot,derived,cachedSnapshot,assertNoLookahead,readiness};
 });
