@@ -18,7 +18,7 @@ assert.equal(fallback.exchange,'HYPERLIQUID');assert.match(fallback.providerStat
 
 class FakeStatement{constructor(db,sql){this.db=db;this.sql=sql;}bind(...args){this.args=args;return this;}async run(){this.db.calls.push({sql:this.sql,args:this.args});return {success:true};}async first(){return this.db.run||null;}async all(){return {results:this.db.states||[]};}}
 class FakeDb{constructor(){this.calls=[];this.run=null;this.states=[];}prepare(sql){return new FakeStatement(this,sql);}async batch(items){for(const item of items)await item.run();}}
-const db=new FakeDb();const monitor=await runMonitor({db,now,watchlist:[{asset:'BTC',symbol:'BTCUSDT',exchange:'BINANCE'}],fetchImpl:async()=>new Response(JSON.stringify(rows),{status:200})});
+const db=new FakeDb();const monitor=await runMonitor({db,now,watchlist:[{asset:'BTC',symbol:'BTCUSDT',exchange:'HYPERLIQUID'}],fetchImpl:async()=>new Response(JSON.stringify(hyperRows),{status:200}),throttleMs:0});
 assert.equal(monitor.status,'COMPLETE');assert.equal(monitor.assetsCompleted,1);assert.equal(monitor.executionDisabled,true);assert.ok(db.calls.some(call=>call.sql.includes('canonical_candles')));assert.ok(db.calls.some(call=>call.sql.includes('market_states')));
 const unavailable=await runMonitor({db:null,now,watchlist:[]});assert.equal(unavailable.status,'STORAGE_UNAVAILABLE');
 db.run={id:'run',status:'COMPLETE'};db.states=[{asset:'BTC'}];const latest=await latestMonitor(db);assert.equal(latest.storage,'connected');assert.equal(latest.states.length,1);
