@@ -1,4 +1,5 @@
 import {runMonitor, latestMonitor, MONITOR_VERSION} from './monitor-core.mjs';
+import {runHistoricalBackfill,latestHistorical,HISTORICAL_VERSION} from './historical-core.mjs';
 
 const DEFAULT_ORIGINS = ['https://jamalmusialla81-hub.github.io', 'http://127.0.0.1:4173', 'http://127.0.0.1:4174', 'http://localhost:4173'];
 const MAX_BODY_BYTES = 8_500_000;
@@ -209,10 +210,11 @@ export async function handleRequest(request,env={},ctx={},deps={}) {
   if(request.method==='OPTIONS') return isAllowedOrigin(request,env)?new Response(null,{status:204,headers:cors}):json({error:{code:'ORIGIN_DENIED',message:'Origin is not allowed'}},403);
   if(!isAllowedOrigin(request,env)) return json({error:{code:'ORIGIN_DENIED',message:'Origin is not allowed'}},403,cors);
   if(request.method==='GET'&&url.pathname==='/health') {
-    const monitor=await latestMonitor(env.MARKET_EDGE_DB).catch(()=>({storage:'error',latestRun:null,states:[],events:[]}));
-    return json({ok:true,service:'market-edge-ai',configured:!!env.OPENAI_API_KEY,tradingview_webhook_configured:!!env.TV_WEBHOOK_TOKEN,monitor:{storage:monitor.storage,latest_run:monitor.latestRun,asset_states:monitor.states.length,engine_version:MONITOR_VERSION,execution:'disabled'},vision_model:env.VISION_MODEL||'gpt-5.6-terra',chat_model:env.CHAT_MODEL||'gpt-5.6-luna'},200,cors);
+    const [monitor,historical]=await Promise.all([latestMonitor(env.MARKET_EDGE_DB).catch(()=>({storage:'error',latestRun:null,states:[],events:[]})),latestHistorical(env.MARKET_EDGE_DB).catch(()=>({storage:'error',manifests:[]}))]);
+    return json({ok:true,service:'market-edge-ai',configured:!!env.OPENAI_API_KEY,tradingview_webhook_configured:!!env.TV_WEBHOOK_TOKEN,monitor:{storage:monitor.storage,latest_run:monitor.latestRun,asset_states:monitor.states.length,engine_version:MONITOR_VERSION,execution:'disabled'},historical:{storage:historical.storage,manifests:historical.manifests.length,engine_version:HISTORICAL_VERSION,execution:'disabled'},vision_model:env.VISION_MODEL||'gpt-5.6-terra',chat_model:env.CHAT_MODEL||'gpt-5.6-luna'},200,cors);
   }
   if(request.method==='GET'&&url.pathname==='/v1/monitor/latest') return json(await latestMonitor(env.MARKET_EDGE_DB),200,cors);
+  if(request.method==='GET'&&url.pathname==='/v1/research/historical') return json(await latestHistorical(env.MARKET_EDGE_DB),200,cors);
   if(request.method!=='POST'||!['/v1/analyze','/v1/chat','/v1/tradingview-alert'].includes(url.pathname)) return json({error:{code:'NOT_FOUND',message:'Endpoint not found'}},404,cors);
   const rate=rateLimit(request,env); if(!rate.allowed) return json({error:{code:'RATE_LIMITED',message:'Too many requests. Try again shortly.'}},429,{...cors,'retry-after':String(rate.retryAfter)});
   if(!String(request.headers.get('content-type')||'').toLowerCase().includes('application/json')) return json({error:{code:'UNSUPPORTED_MEDIA',message:'Use application/json'}},415,cors);
@@ -230,7 +232,7 @@ export async function handleRequest(request,env={},ctx={},deps={}) {
 }
 
 export async function handleScheduled(controller,env={},ctx={},deps={}) {
-  const now=Number(controller?.scheduledTime)||Date.now(),operation=runMonitor({db:env.MARKET_EDGE_DB,fetchImpl:deps.fetch||fetch,now,watchlist:deps.watchlist});
+  const now=Number(controller?.scheduledTime)||Date.now(),operation=(async()=>{const monitor=await runMonitor({db:env.MARKET_EDGE_DB,fetchImpl:deps.fetch||fetch,now,watchlist:deps.watchlist});const historical=await runHistoricalBackfill({db:env.MARKET_EDGE_DB,fetchImpl:deps.fetch||fetch,now,assets:deps.historicalAssets,days:deps.historicalDays,delay:deps.delay});return{...monitor,historical};})();
   if(ctx?.waitUntil) { ctx.waitUntil(operation); return {accepted:true,scheduledAt:now,execution:'disabled'}; }
   return operation;
 }
