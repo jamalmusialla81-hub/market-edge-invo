@@ -4,6 +4,15 @@
   "main": "worker.mjs",
   "compatibility_date": "2026-08-29",
   "workers_dev": true,
+  "triggers": { "crons": ["*/5 * * * *"] },
+  "d1_databases": [
+    {
+      "binding": "MARKET_EDGE_DB",
+      "database_name": "market-edge-research",
+      "database_id": "39a4082e-41a4-45e9-9b76-99cf10eaca01",
+      "migrations_dir": "migrations"
+    }
+  ],
   "observability": { "enabled": true },
   "vars": {
     "ALLOWED_ORIGINS": "https://jamalmusialla81-hub.github.io",

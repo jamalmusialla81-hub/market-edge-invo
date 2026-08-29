@@ -1,3 +1,5 @@
+import {runMonitor, latestMonitor, MONITOR_VERSION} from './monitor-core.mjs';
+
 const DEFAULT_ORIGINS = ['https://jamalmusialla81-hub.github.io', 'http://127.0.0.1:4173', 'http://127.0.0.1:4174', 'http://localhost:4173'];
 const MAX_BODY_BYTES = 8_500_000;
 const MAX_IMAGES = 4;
@@ -120,7 +122,13 @@ function sanitizeTradingViewAlert(payload,env,now=Date.now()) {
   if(now-timestamp>maxAge) throw Object.assign(new Error('Stale TradingView alert rejected'),{code:'TV_STALE_ALERT'});
   return alert;
 }
-function acceptTradingViewAlert(request,env,payload,now=Date.now()) {
+async function persistTradingViewEvidence(db,alert,now=Date.now()) {
+  if(!db)return {storage:'unavailable'};
+  const id=`tv-${alert.exchange}-${alert.symbol}-${alert.event_id}`.replace(/[^A-Za-z0-9_-]/g,'_').slice(0,180);
+  await db.prepare(`INSERT INTO tradingview_alert_evidence (id,event_id,asset,exchange,symbol,timeframe,alert_time,received_at,payload_json,state,immutable) VALUES (?,?,?,?,?,?,?,?,?,?,1)`).bind(id,alert.event_id,alert.symbol.replace(/(?:USDT|USD|PERP)$/,''),alert.exchange,alert.symbol,alert.timeframe,alert.timestamp,now,JSON.stringify(alert),alert.state).run();
+  return {storage:'persisted',id};
+}
+async function acceptTradingViewAlert(request,env,payload,now=Date.now()) {
   if(!env.TV_WEBHOOK_TOKEN) throw Object.assign(new Error('TradingView webhook is disabled until its Worker secret is configured'),{status:503,code:'TV_NOT_CONFIGURED'});
   const url=new URL(request.url),provided=request.headers.get('x-market-edge-token')||url.searchParams.get('token')||'';
   if(!constantTimeEqual(provided,env.TV_WEBHOOK_TOKEN)) throw Object.assign(new Error('TradingView webhook authentication failed'),{status:401,code:'TV_AUTH_FAILED'});
@@ -128,7 +136,9 @@ function acceptTradingViewAlert(request,env,payload,now=Date.now()) {
   for(const [id,seenAt] of tradingViewEvents) if(now-seenAt>86_400_000) tradingViewEvents.delete(id);
   if(tradingViewEvents.has(key)) throw Object.assign(new Error('Duplicate TradingView alert rejected'),{status:409,code:'TV_DUPLICATE_ALERT'});
   tradingViewEvents.set(key,now);
-  return {accepted:true,evidence:alert,usage:'additional evidence only',execution:'disabled',deployment_verdict:'PAPER TRADE ONLY'};
+  let stored={storage:'unavailable'};
+  try { stored=await persistTradingViewEvidence(env.MARKET_EDGE_DB,alert,now); } catch(error) { throw Object.assign(new Error('TradingView evidence could not be persisted'),{status:503,code:'TV_STORAGE_UNAVAILABLE'}); }
+  return {accepted:true,evidence:alert,storage:stored.storage,usage:'additional evidence only',execution:'disabled',deployment_verdict:'MANUAL LIVE DECISION SUPPORT / PAPER RESEARCH ONLY'};
 }
 function extractOutputText(response) {
   if(typeof response?.output_text==='string') return response.output_text;
@@ -198,7 +208,11 @@ export async function handleRequest(request,env={},ctx={},deps={}) {
   const fetchImpl=deps.fetch||fetch,cors=corsHeaders(request,env),url=new URL(request.url);
   if(request.method==='OPTIONS') return isAllowedOrigin(request,env)?new Response(null,{status:204,headers:cors}):json({error:{code:'ORIGIN_DENIED',message:'Origin is not allowed'}},403);
   if(!isAllowedOrigin(request,env)) return json({error:{code:'ORIGIN_DENIED',message:'Origin is not allowed'}},403,cors);
-  if(request.method==='GET'&&url.pathname==='/health') return json({ok:true,service:'market-edge-ai',configured:!!env.OPENAI_API_KEY,tradingview_webhook_configured:!!env.TV_WEBHOOK_TOKEN,vision_model:env.VISION_MODEL||'gpt-5.6-terra',chat_model:env.CHAT_MODEL||'gpt-5.6-luna'},200,cors);
+  if(request.method==='GET'&&url.pathname==='/health') {
+    const monitor=await latestMonitor(env.MARKET_EDGE_DB).catch(()=>({storage:'error',latestRun:null,states:[],events:[]}));
+    return json({ok:true,service:'market-edge-ai',configured:!!env.OPENAI_API_KEY,tradingview_webhook_configured:!!env.TV_WEBHOOK_TOKEN,monitor:{storage:monitor.storage,latest_run:monitor.latestRun,asset_states:monitor.states.length,engine_version:MONITOR_VERSION,execution:'disabled'},vision_model:env.VISION_MODEL||'gpt-5.6-terra',chat_model:env.CHAT_MODEL||'gpt-5.6-luna'},200,cors);
+  }
+  if(request.method==='GET'&&url.pathname==='/v1/monitor/latest') return json(await latestMonitor(env.MARKET_EDGE_DB),200,cors);
   if(request.method!=='POST'||!['/v1/analyze','/v1/chat','/v1/tradingview-alert'].includes(url.pathname)) return json({error:{code:'NOT_FOUND',message:'Endpoint not found'}},404,cors);
   const rate=rateLimit(request,env); if(!rate.allowed) return json({error:{code:'RATE_LIMITED',message:'Too many requests. Try again shortly.'}},429,{...cors,'retry-after':String(rate.retryAfter)});
   if(!String(request.headers.get('content-type')||'').toLowerCase().includes('application/json')) return json({error:{code:'UNSUPPORTED_MEDIA',message:'Use application/json'}},415,cors);
@@ -207,7 +221,7 @@ export async function handleRequest(request,env={},ctx={},deps={}) {
   try { const text=await request.text(); if(new TextEncoder().encode(text).byteLength>MAX_BODY_BYTES) throw Object.assign(new Error('Request is too large'),{status:413,code:'REQUEST_TOO_LARGE'}); payload=JSON.parse(text); }
   catch(error) { return json({error:{code:error.code||'BAD_JSON',message:error.message==='Request is too large'?error.message:'Request body must be valid JSON'}},error.status||400,cors); }
   try {
-    const data=url.pathname==='/v1/analyze'?await analyze(request,env,payload,fetchImpl):url.pathname==='/v1/chat'?await chat(request,env,payload,fetchImpl):acceptTradingViewAlert(request,env,payload,deps.now||Date.now());
+    const data=url.pathname==='/v1/analyze'?await analyze(request,env,payload,fetchImpl):url.pathname==='/v1/chat'?await chat(request,env,payload,fetchImpl):await acceptTradingViewAlert(request,env,payload,deps.now||Date.now());
     return json(data,200,{...cors,'x-ratelimit-remaining':String(rate.remaining)});
   } catch(error) {
     const status=error.status||(/too large/i.test(error.message)?413:400),code=error.code||(status===413?'REQUEST_TOO_LARGE':'INVALID_REQUEST');
@@ -215,5 +229,11 @@ export async function handleRequest(request,env={},ctx={},deps={}) {
   }
 }
 
-export default {fetch:handleRequest};
-export {analysisSchema,chatSchema,sanitizeImages,sanitizeQuant,sanitizeTradingViewAlert,acceptTradingViewAlert,extractOutputText,MAX_BODY_BYTES};
+export async function handleScheduled(controller,env={},ctx={},deps={}) {
+  const now=Number(controller?.scheduledTime)||Date.now(),operation=runMonitor({db:env.MARKET_EDGE_DB,fetchImpl:deps.fetch||fetch,now,watchlist:deps.watchlist});
+  if(ctx?.waitUntil) { ctx.waitUntil(operation); return {accepted:true,scheduledAt:now,execution:'disabled'}; }
+  return operation;
+}
+
+export default {fetch:handleRequest,scheduled:handleScheduled};
+export {analysisSchema,chatSchema,sanitizeImages,sanitizeQuant,sanitizeTradingViewAlert,acceptTradingViewAlert,persistTradingViewEvidence,extractOutputText,MAX_BODY_BYTES};

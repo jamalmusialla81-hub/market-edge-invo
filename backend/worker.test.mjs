@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {handleRequest} from './worker.mjs';
+import {handleRequest,handleScheduled} from './worker.mjs';
 
 const env={OPENAI_API_KEY:'test-only',ALLOWED_ORIGINS:'https://jamalmusialla81-hub.github.io',RATE_LIMIT_PER_MINUTE:'1000'};
 const quant={asset:'ETH',price:100,decision:'WAIT',direction:'long',strategy:'BREAKOUT + RETEST',regime:'BREAKOUT RETEST',reason:'Await 15m confirmation'};
@@ -76,5 +76,17 @@ response=await handleRequest(tvRequest({...tvAlert,event_id:'auth'},'wrong'),tvE
 assert.equal(response.status,401);assert.equal((await response.json()).error.code,'TV_AUTH_FAILED');
 response=await handleRequest(tvRequest({...tvAlert,event_id:'disabled'}),env,{}, {now:tvNow});
 assert.equal(response.status,503);assert.equal((await response.json()).error.code,'TV_NOT_CONFIGURED');
+
+class FakeStatement {
+  constructor(db,sql){this.db=db;this.sql=sql;}
+  bind(...args){this.args=args;return this;}
+  async run(){this.db.calls.push({sql:this.sql,args:this.args});return {success:true};}
+  async first(){return null;}
+  async all(){return {results:[]};}
+}
+class FakeD1 { constructor(){this.calls=[];} prepare(sql){return new FakeStatement(this,sql);} async batch(items){for(const item of items)await item.run();} }
+const monitorNow=1_800_000_000_000,monitorRows=Array.from({length:100},(_,index)=>{const time=monitorNow-(100-index)*300000,price=100+index*.1;return[time,String(price),String(price+1),String(price-1),String(price+.2),'20',time+299999];});
+const monitorDb=new FakeD1(),scheduled=await handleScheduled({scheduledTime:monitorNow},{MARKET_EDGE_DB:monitorDb},{},{watchlist:[{asset:'BTC',symbol:'BTCUSDT',exchange:'BINANCE'}],fetch:async()=>new Response(JSON.stringify(monitorRows),{status:200})});
+assert.equal(scheduled.status,'COMPLETE');assert.equal(scheduled.executionDisabled,true);assert.ok(monitorDb.calls.some(call=>call.sql.includes('monitor_runs')));
 
 console.log('AI backend tests passed');
