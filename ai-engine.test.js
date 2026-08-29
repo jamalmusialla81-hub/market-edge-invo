@@ -61,5 +61,9 @@ const tiny=AI.makePortfolio(5.70),oversized=AI.makePaperSignal({id:'oversized',q
 assert.throws(()=>AI.addPaperSignal(tiny,oversized),/cannot support/);
 assert.match(AI.historyFeedback(portfolio).messages[0],/Not enough/);
 assert.match(AI.explainTerm('OOS','beginner',{quant:quant()}),/ETH/);
+assert.match(AI.localQuantAnswer('Why no trade?',quant('long','NO TRADE')),/Do not enter/);
+assert.match(AI.localQuantAnswer('What leverage?',quant('long','WAIT')),/Leverage cannot/);
+assert.match(AI.localQuantAnswer('What do I put into Invo?',quant('long')),/Entry 99.5–100.5/);
+assert.match(AI.localQuantAnswer('What leverage?',quant('long')),/2×/);
 
 console.log('AI fusion and paper portfolio tests passed');

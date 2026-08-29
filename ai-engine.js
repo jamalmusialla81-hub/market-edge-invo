@@ -212,5 +212,23 @@
     if (level==='intermediate') return `${base}${suffix} It is evidence, not a trade signal by itself.`;
     return `${base}${suffix}`;
   }
-  return {VERSION,AI_VERDICTS,FINAL_VERDICTS,TIMEFRAMES,IMAGE_TYPES,MAX_IMAGES,MAX_IMAGE_BYTES,MAX_TOTAL_IMAGE_BYTES,MISTAKE_CATEGORIES,DEFINITIONS,parseAIJSON,normalizeAIAnalysis,sanitizeQuantSnapshot,fuseDecision,validateImageMeta,makePortfolio,makePaperSignal,addPaperSignal,updatePaperMarks,closePaperSignal,portfolioStats,historyFeedback,explainTerm,clone,clamp,safeText,safeAsset};
+  function localQuantAnswer(question,quantInput) {
+    const quant=quantInput?.decision?quantInput:sanitizeQuantSnapshot(quantInput),ask=safeText(question,500).toLowerCase();
+    if(!quant) return 'Scan the markets first. I need a current quantitative result before I can explain an entry, stop, target, leverage or WAIT decision.';
+    const asset=quant.asset||'This market',decision=quant.decision||'ANALYSIS UNAVAILABLE',reason=quant.reason||'the required rules are incomplete';
+    const quality=Number.isFinite(Number(quant.quality))?` Setup quality is ${Number(quant.quality).toFixed(0)}/100.`:'';
+    const blocked=`${asset} is ${decision} because ${reason}.${quality} Do not enter from this result. Re-scan later and wait for a fully risk-checked TAKE TRADE result.`;
+    if(['NO TRADE','WAIT','ANALYSIS UNAVAILABLE'].includes(decision)) {
+      if(/leverage|\bx\b/.test(ask)) return `${blocked} Leverage cannot turn a rejected or incomplete setup into a valid one.`;
+      if(/stop|loss|target|profit|entry|enter|buy|sell|when/.test(ask)) return `${blocked} There is no entry, stop-loss or take-profit to copy into Invo right now.`;
+      return blocked;
+    }
+    if(decision!=='TAKE TRADE'||!['long','short'].includes(quant.direction)) return `${asset} does not have a complete supported trade plan. Do not enter it.`;
+    const zone=quant.entryZone?`${quant.entryZone.low}–${quant.entryZone.high}`:(Number.isFinite(Number(quant.entry))?String(quant.entry):'not available');
+    const risk=quant.risk||{},levels=`Entry ${zone}; stop ${Number.isFinite(Number(quant.stop))?quant.stop:'not available'}; target 1 ${Number.isFinite(Number(quant.target1))?quant.target1:'not available'}; target 2 ${Number.isFinite(Number(quant.target2))?quant.target2:'not available'}.`;
+    if(/leverage|margin|size|risk/.test(ask)) return `${asset} has a quantitative ${quant.direction.toUpperCase()} plan. Calculated leverage: ${Number.isFinite(Number(risk.leverage))?`${risk.leverage}×`:'not available'}; margin: ${Number.isFinite(Number(risk.margin))?risk.margin:'not available'} USDC; maximum planned loss: ${Number.isFinite(Number(risk.riskAmount))?risk.riskAmount:'not available'} USDC. ${levels} Use this only as a paper-trade plan.`;
+    if(/stop|loss|target|profit|entry|enter|buy|sell|when/.test(ask)) return `${asset} has a quantitative ${quant.direction.toUpperCase()} plan. ${levels} Invalidation: ${quant.invalidationCondition||'not available'}. Use this only as a paper-trade plan.`;
+    return `${asset} has a quantitative ${quant.direction.toUpperCase()} result using ${quant.strategy||'the qualified strategy'}.${quality} ${levels} Reason: ${reason}. Use this only as a paper-trade plan.`;
+  }
+  return {VERSION,AI_VERDICTS,FINAL_VERDICTS,TIMEFRAMES,IMAGE_TYPES,MAX_IMAGES,MAX_IMAGE_BYTES,MAX_TOTAL_IMAGE_BYTES,MISTAKE_CATEGORIES,DEFINITIONS,parseAIJSON,normalizeAIAnalysis,sanitizeQuantSnapshot,fuseDecision,validateImageMeta,makePortfolio,makePaperSignal,addPaperSignal,updatePaperMarks,closePaperSignal,portfolioStats,historyFeedback,explainTerm,localQuantAnswer,clone,clamp,safeText,safeAsset};
 });

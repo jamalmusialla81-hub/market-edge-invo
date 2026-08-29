@@ -1,12 +1,12 @@
 (function () {
   'use strict';
   if (!window.MarketEdgeAI) return;
-  const AI=window.MarketEdgeAI,config=window.MARKET_EDGE_AI_CONFIG||{},API_BASE=String(config.apiBase||'').replace(/\/$/,'');
+  const AI=window.MarketEdgeAI,config=window.MARKET_EDGE_AI_CONFIG||{},API_BASE=String(config.apiBase||'').replace(/\/$/,''),FREE_MODE=config.mode==='free';
   const ASSETS=['BTC','ETH','SOL','XRP','DOGE','ADA','AVAX','LINK','SUI','PENGU','BNB','LTC','DOT','NEAR','APT','ARB','OP','UNI','AAVE','INJ'];
   const byId=id=>document.getElementById(id),escape=value=>String(value==null?'':value).replace(/[&<>'"]/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));
   const money=value=>Number.isFinite(Number(value))?Number(value).toFixed(Math.abs(Number(value))<1?4:2):'—';
   const price=value=>Number.isFinite(Number(value))?(Number(value)>=1000?Number(value).toLocaleString(undefined,{maximumFractionDigits:2}):Number(value).toLocaleString(undefined,{maximumSignificantDigits:7})):'—';
-  const state={quant:null,quantByAsset:{},analysis:null,fusion:null,uploads:[],chat:[],portfolio:loadPortfolio(),busy:false};
+  const state={quant:null,quantByAsset:{},analysis:null,fusion:null,uploads:[],chat:[],portfolio:loadPortfolio(),busy:false,freeFallback:FREE_MODE};
   const els={
     asset:byId('aiAsset'),file:byId('chartUpload'),previews:byId('chartPreviews'),question:byId('aiQuestion'),analyze:byId('analyzeCharts'),clear:byId('clearCharts'),
     backend:byId('aiBackendStatus'),result:byId('aiAnalysisResult'),finalBadge:byId('aiFinalBadge'),chatLog:byId('aiChatLog'),chatInput:byId('aiChatInput'),chatSend:byId('aiChatSend'),
@@ -39,6 +39,7 @@
     finally { clearTimeout(timer); }
   }
   async function checkBackend() {
+    if(FREE_MODE) {setBackend('Free local mode','watch');return;}
     if(!API_BASE) {setBackend('AI backend setup required','watch');return;}
     try { const response=await fetch(`${API_BASE}/health`,{cache:'no-store'}),data=await response.json(); setBackend(data.configured?'AI backend connected':'Backend missing API secret',data.configured?'take':'watch'); }
     catch { setBackend('AI backend unavailable','avoid'); }
@@ -114,6 +115,7 @@
     renderPaperButton();
   }
   async function analyze() {
+    if(FREE_MODE){setBackend('Free local mode · chart AI off','watch');toast('Chart-image AI is off in free mode. The quantitative scanner and free explanations still work.');return;}
     if(state.busy)return;state.busy=true;els.analyze.disabled=true;els.analyze.textContent='Analysing…';
     try {
       const images=state.uploads.map(({dataUrl,type,size,timeframe,name})=>({dataUrl,type,size,timeframe,name}));AI.validateImageMeta(images);
@@ -123,15 +125,19 @@
     finally {state.busy=false;els.analyze.disabled=false;els.analyze.textContent='Analyse with AI';}
   }
   function renderChat() {
-    els.chatLog.innerHTML=state.chat.length?state.chat.map(item=>`<div class="chat-message ${item.role}"><span>${item.role==='user'?'You':'Market Edge AI'}</span><p>${escape(item.content)}</p></div>`).join(''):'<div class="empty compact"><strong>Ask about this setup</strong>The answer will use the current quant snapshot, structured chart analysis and paper context—nothing else.</div>';
+    els.chatLog.innerHTML=state.chat.length?state.chat.map(item=>`<div class="chat-message ${item.role}"><span>${item.role==='user'?'You':item.local?'Market Edge · free':'Market Edge AI'}</span><p>${escape(item.content)}</p></div>`).join(''):'<div class="empty compact"><strong>Ask about this setup for free</strong>Answers use only the current scanner result—no paid AI call and no invented market facts.</div>';
     els.chatLog.scrollTop=els.chatLog.scrollHeight;
   }
   async function sendChat() {
     const question=els.chatInput.value.trim();if(!question||state.busy)return;state.chat.push({role:'user',content:question});els.chatInput.value='';renderChat();state.busy=true;els.chatSend.disabled=true;
+    if(state.freeFallback){state.chat.push({role:'assistant',local:true,content:AI.localQuantAnswer(question,state.quant)});state.busy=false;els.chatSend.disabled=false;setBackend('Free local mode','watch');renderChat();return;}
     try {
       const data=await fetchJSON('/v1/chat',{question,quant:state.quant,analysis:state.analysis,history:state.chat.slice(-7,-1),paperContext:{stats:AI.portfolioStats(state.portfolio),feedback:AI.historyFeedback(state.portfolio)},level:els.level.value},25000);
       const answer=String(data.message?.answer||'No answer returned');state.chat.push({role:'assistant',content:answer});setBackend(`AI ready · ${data.model}`,'take');
-    } catch(error){state.chat.push({role:'assistant',content:`Unavailable: ${apiError(error)} The quantitative verdict was not changed.`});showBackendError(error);}
+    } catch(error){
+      if(['AI_CREDITS_EXHAUSTED','AI_SPEND_LIMIT','AI_QUOTA_REQUIRED'].includes(error.code)){state.freeFallback=true;state.chat.push({role:'assistant',local:true,content:AI.localQuantAnswer(question,state.quant)});setBackend('Free local mode','watch');}
+      else {state.chat.push({role:'assistant',content:`Unavailable: ${apiError(error)} The quantitative verdict was not changed.`});showBackendError(error);}
+    }
     finally{state.busy=false;els.chatSend.disabled=false;renderChat();}
   }
   function renderPaperButton() {
@@ -164,6 +170,7 @@
     els.paperButton.addEventListener('click',paperSetup);els.paperReset.addEventListener('click',resetPaper);
   }
   els.asset.innerHTML=ASSETS.map(asset=>`<option value="${asset}">${asset}</option>`).join('');
+  if(FREE_MODE){els.analyze.disabled=true;els.analyze.textContent='Chart AI off · free mode';els.file.disabled=true;}
   bind();renderUploads();renderAnalysis();renderChat();renderPortfolio();renderPaperButton();checkBackend();
   window.MarketEdgeAIUI={getState:()=>AI.clone(state),refreshBackend:checkBackend};
 })();
