@@ -76,7 +76,7 @@ async function fetchHyperliquidCandles(asset,fetchImpl,now){
 async function fetchCoinbaseCandles(asset,fetchImpl,now){
   const product=asset.coinbaseProduct;if(!product)throw new Error(`${asset.asset} has no approved Coinbase product mapping`);
   const started=Date.now(),start=new Date(now-101*INTERVAL_MS['5m']).toISOString(),end=new Date(now).toISOString(),url=`https://api.exchange.coinbase.com/products/${encodeURIComponent(product)}/candles?granularity=300&start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`;
-  const rows=await fetchJsonWithRetry(fetchImpl,url,{headers:{accept:'application/json'}},{provider:'Coinbase',asset:asset.asset}),adapted=(Array.isArray(rows)?rows:[]).map(row=>[Number(row?.[0])*1000,row?.[3],row?.[2],row?.[1],row?.[4],row?.[5],Number(row?.[0])*1000+INTERVAL_MS['5m']-1]);
+  const rows=await fetchJsonWithRetry(fetchImpl,url,{headers:{accept:'application/json','user-agent':'MarketEdgeResearch/1.2 (manual decision support)'}},{provider:'Coinbase',asset:asset.asset}),adapted=(Array.isArray(rows)?rows:[]).map(row=>[Number(row?.[0])*1000,row?.[3],row?.[2],row?.[1],row?.[4],row?.[5],Number(row?.[0])*1000+INTERVAL_MS['5m']-1]);
   const report=normalizeBinanceKlines(adapted,{asset:asset.asset,symbol:product,now,interval:'5m'});return {...report,exchange:'COINBASE',sourceLatencyMs:Date.now()-started,providerStatus:'LIVE · COINBASE'};
 }
 export async function fetchAssetCandles(asset,fetchImpl,now=Date.now()){
