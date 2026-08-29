@@ -543,14 +543,14 @@
     </section>
 
     <section class="card" style="margin-top:22px" aria-label="Research evidence dashboard">
-      <div class="card-head"><div><p class="eyebrow">Evidence before confidence</p><h2>Research integrity dashboard</h2></div><span class="badge watch">PAPER TRADE ONLY</span></div>
+      <div class="card-head"><div><p class="eyebrow">Evidence before confidence</p><h2>Research integrity dashboard</h2></div><span class="badge watch">MANUAL LIVE · EVIDENCE INSUFFICIENT</span></div>
       <div class="research-body">
         <div class="metric-grid">
           <div class="metric"><span>Data boundary</span><strong>Canonical + hashed</strong></div>
           <div class="metric"><span>Leakage tests</span><strong>Future rows rejected</strong></div>
           <div class="metric"><span>Execution model</span><strong>Next bar · stop first</strong></div>
           <div class="metric"><span>Historical depth</span><strong>900 × 4h · insufficient</strong></div>
-          <div class="metric"><span>ML champion</span><strong>None · research only</strong></div>
+          <div class="metric"><span>ML champion</span><strong>No validated champion</strong></div>
         </div>
         <div class="research-status-grid">
           <div id="dataHealth" class="social-summary"><strong>Scan to inspect the selected live dataset.</strong> Completed candles, gaps, source coverage and a deterministic hash will appear here.</div>
@@ -577,7 +577,7 @@
 
     <footer class="footer">
       <span>Research and decision support only—not guaranteed returns or personal financial advice. Crypto futures can lose the full margin.</span>
-      <span>Public feeds: Hyperliquid, Binance and Coinbase · Invo social data: authorised manual import only · Verdict: PAPER TRADE ONLY until out-of-sample evidence is sufficient</span>
+      <span>Manual Live is available for your own manual decisions · model evidence remains insufficient until out-of-sample and forward validation is meaningful</span>
     </footer>
   </main>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
@@ -936,7 +936,7 @@
           <div class="evidence-item"><span>RSI 14</span><strong>${Number.isFinite(q.frame?.rsi)?q.frame.rsi.toFixed(1):'—'}</strong></div>
           <div class="evidence-item"><span>Relative volume</span><strong>${Number.isFinite(q.frame?.relativeVolume)?q.frame.relativeVolume.toFixed(2)+'×':'Unavailable'}</strong></div>
           <div class="evidence-item"><span>Workspace</span><strong>${workspaceMode}</strong></div>
-          <div class="evidence-item"><span>ML model</span><strong>UNAVAILABLE · no champion</strong></div>
+          <div class="evidence-item"><span>ML model</span><strong>NO VALIDATED CHAMPION</strong></div>
         </div>
         <div class="evidence-links"><a class="evidence-link" href="${MarketEdgeTradingView.chartUrl('BINANCE',best.symbol,'USDT')}" target="_blank" rel="noopener noreferrer">Verify ${best.symbol} on TradingView</a></div>`;
       if (decision!=='TAKE TRADE' || !q.risk?.valid) {
@@ -1226,7 +1226,7 @@
     } catch {}
     renderSocialSummary(); renderForward(); renderManualJournal(); refreshMonitorSummary();
     updateTradingViewLink();
-    if ('serviceWorker' in navigator) window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js?v=16').catch(()=>{}));
+    if ('serviceWorker' in navigator) window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js?v=17').catch(()=>{}));
   </script>
   <script src="ai-ui.js?v=14"></script>
 </body>
