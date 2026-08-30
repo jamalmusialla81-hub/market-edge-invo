@@ -348,13 +348,49 @@
     @media (max-width:1100px){.control-panel{grid-template-columns:repeat(4,1fr)}.terminal-overview{grid-template-columns:repeat(3,1fr)}.main-grid{grid-template-columns:1fr}.paper-stats,.research-lab .metric-grid{grid-template-columns:repeat(4,1fr)}}
     @media (max-width:720px){.shell{width:min(100% - 22px,1440px);padding-top:10px}.topbar{align-items:flex-start;flex-wrap:wrap}.terminal-status{width:100%;margin-left:0;justify-content:space-between}.workspace-switcher{margin-left:auto}.workspace-switcher button{padding:0 8px}.hero{grid-template-columns:1fr;margin:18px 2px 14px}.hero-copy{max-width:100%}h1{font-size:37px}.terminal-overview{grid-template-columns:1fr 1fr}.control-panel{grid-template-columns:1fr 1fr;padding:10px}.control-panel .scan{grid-column:1/-1}.source-strip{align-items:flex-start;flex-direction:column}.evidence-grid,.order-plan,.research-lab .metric-grid{grid-template-columns:1fr 1fr}.research-progress{grid-template-columns:1fr 1fr}.paper-stats{grid-template-columns:1fr 1fr}.card-head{padding:13px}.market-row{min-width:760px}.footer{display:grid;gap:10px}.brand-subtitle{max-width:190px}.settings-grid{grid-template-columns:1fr}}
     @media (prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;transition-duration:.01ms!important;animation-duration:.01ms!important;animation-iteration-count:1!important}}
+    /* Command center second pass. */
+    :root { --ease:cubic-bezier(.2,.8,.2,1); }
+    .hero,.terminal-overview { display:none; }
+    .topbar { margin-bottom:10px; animation:surface-in .34s var(--ease) both; }
+    .control-panel { grid-template-columns:1.2fr .75fr .8fr .72fr .72fr .65fr auto; padding:8px 10px; margin-bottom:8px; border-color:rgba(255,255,255,.07); box-shadow:0 12px 42px rgba(0,0,0,.22),inset 0 1px rgba(255,255,255,.04); }
+    .control-panel input,.control-panel select { min-height:36px; padding-inline:10px; background:transparent; border-color:rgba(255,255,255,.045); }
+    .control-panel .field label { font-size:8px; }.control-panel .scan { min-height:36px; padding-inline:16px; }
+    .settings-panel { margin:0 0 8px; border:0; border-radius:13px; background:rgba(255,255,255,.025); box-shadow:none; }.settings-panel summary { padding:9px 12px; font-size:10px; }
+    .source-strip { display:none; }
+    .main-grid { grid-template-columns:minmax(260px,.78fr) minmax(430px,1.32fr) minmax(290px,.9fr); grid-template-areas:"radar chart decision"; gap:10px; align-items:start; }
+    .main-grid>article:nth-child(1) { grid-area:decision; animation:surface-in .42s .12s var(--ease) both; }
+    .main-grid>article:nth-child(2) { grid-area:radar; animation:surface-in .38s .06s var(--ease) both; }
+    .chart-stage { grid-area:chart; min-height:510px; animation:surface-in .42s .09s var(--ease) both; overflow:hidden; }
+    .main-grid>.card { border-color:rgba(255,255,255,.065); background:linear-gradient(180deg,rgba(255,255,255,.055),rgba(255,255,255,.018)),rgba(13,13,15,.78); box-shadow:0 20px 60px rgba(0,0,0,.35),inset 0 1px rgba(255,255,255,.035); backdrop-filter:blur(18px) saturate(120%); -webkit-backdrop-filter:blur(18px) saturate(120%); }
+    .main-grid .card-head { min-height:56px; padding:13px 14px; border-color:rgba(255,255,255,.055); }.main-grid .recommendation { padding:14px; }
+    .main-grid .evidence-item { padding:5px 0; border:0; border-radius:0; background:transparent; box-shadow:none; }.main-grid .evidence-grid { grid-template-columns:repeat(2,1fr); gap:11px 16px; padding:11px 0; border-top:1px solid rgba(255,255,255,.055); border-bottom:1px solid rgba(255,255,255,.055); }
+    .main-grid .evidence-item span { font-size:8px; }.main-grid .evidence-item strong { display:block; margin-top:2px; font-size:11px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .main-grid .order-plan { grid-template-columns:1fr 1fr; margin-top:10px; }.main-grid .plan-box { padding:8px 0; background:transparent; border:0; border-radius:0; }.main-grid .plan-box strong { font-size:13px; }.main-grid .invo-entry { margin-top:12px; padding:12px; border-color:rgba(255,255,255,.09); }
+    .main-grid>article:nth-child(2) .card-head { position:sticky; top:0; z-index:2; background:rgba(18,18,20,.92); backdrop-filter:blur(12px); }
+    .main-grid>article:nth-child(2) .market-list { max-height:454px; overflow:auto; padding:0 8px; }.main-grid>article:nth-child(2) .market-row { min-width:0; grid-template-columns:1.3fr .9fr .7fr .95fr; grid-template-rows:auto auto; gap:4px 8px; padding:10px 4px; border-bottom:1px solid rgba(255,255,255,.055); transition:transform .16s var(--ease),background .16s var(--ease); }
+    .main-grid>article:nth-child(2) .market-row.table-head { display:none; }.main-grid>article:nth-child(2) .market-row:not(.table-head)>:nth-child(1){grid-area:1 / 1 / 3 / 2}.main-grid>article:nth-child(2) .market-row:not(.table-head)>:nth-child(2){grid-column:2;grid-row:1}.main-grid>article:nth-child(2) .market-row:not(.table-head)>:nth-child(3){grid-column:3;grid-row:1}.main-grid>article:nth-child(2) .market-row:not(.table-head)>:nth-child(4){grid-column:4;grid-row:1}.main-grid>article:nth-child(2) .market-row:not(.table-head)>:nth-child(5){grid-column:2;grid-row:2}.main-grid>article:nth-child(2) .market-row:not(.table-head)>:nth-child(6){grid-column:3;grid-row:2}.main-grid>article:nth-child(2) .market-row:not(.table-head)>:nth-child(7){grid-column:4;grid-row:2;font-size:8px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.main-grid>article:nth-child(2) .market-row:not(.table-head)>:nth-child(8){display:none}
+    .main-grid>article:nth-child(2) .market-row:hover,.main-grid>article:nth-child(2) .market-row.selected { background:linear-gradient(90deg,rgba(181,188,222,.09),transparent); box-shadow:none; transform:translateY(-1px); }.main-grid>article:nth-child(2) .market-row.selected { border-left:2px solid #c6c9db; padding-left:8px; }
+    .main-grid>article:nth-child(2) .mini-coin { width:27px;height:27px;border:0;background:rgba(255,255,255,.07); }.main-grid>article:nth-child(2) .market-asset b { font-size:12px; }.main-grid>article:nth-child(2) .market-asset small { font-size:8px; }.main-grid>article:nth-child(2) .badge { min-height:18px; padding:0 5px; font-size:8px; }.radar-score b { font-size:9px; }.radar-bar i { transition:width .42s var(--ease); }
+    .chart-stage-head { display:flex; align-items:center; gap:12px; padding:15px 16px 10px; }.chart-stage-head>div:first-child { margin-right:auto; }.chart-price { font-size:20px; font-weight:650; font-variant-numeric:tabular-nums; }.chart-toolbar { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:0 16px 12px; border-bottom:1px solid rgba(255,255,255,.055); }.chart-timeframes { display:flex; gap:3px; padding:3px; border-radius:9px; background:rgba(0,0,0,.22); }.chart-timeframes button { min-width:31px; height:24px; border:0; border-radius:6px; background:transparent; color:var(--muted); font-size:9px; }.chart-timeframes button.active,.chart-timeframes button:hover { background:rgba(255,255,255,.1); color:var(--text); }.chart-verify { color:var(--muted); font-size:9px; text-decoration:none; }.chart-verify:hover { color:var(--text); }
+    .chart-canvas { position:relative; min-height:340px; margin:12px; border-radius:14px; overflow:hidden; background:radial-gradient(460px 230px at 62% 40%,rgba(149,160,205,.08),transparent 73%),linear-gradient(rgba(255,255,255,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.028) 1px,transparent 1px),rgba(3,3,5,.42); background-size:auto,42px 42px,42px 42px,auto; }.chart-canvas svg { width:100%;height:340px;display:block; }.chart-empty { position:absolute; inset:0; display:grid; place-content:center; gap:5px; text-align:center; color:var(--muted); font-size:10px; }.chart-empty strong{color:var(--text);font-size:12px;}.chart-signals { display:flex; flex-wrap:wrap; gap:7px; padding:0 14px 15px; }.chart-signals span { color:var(--muted); font-size:8px; letter-spacing:.04em; }.chart-signals span::first-line { color:var(--text); }
+    .research-lab,.research-grid,.ai-assistant,.paper-card,.trader-check,.alternatives-card { opacity:.86; }.research-lab:hover,.research-grid:hover,.ai-assistant:hover,.paper-card:hover,.trader-check:hover,.alternatives-card:hover { opacity:1; }
+    .replay-asset { border:0; background:rgba(255,255,255,.025); }.research-lab { border-color:rgba(255,255,255,.055); }
+    .price-flash-up { animation:tick-up .42s var(--ease); }.price-flash-down { animation:tick-down .42s var(--ease); }
+    .manual-safety { display:inline-flex; align-items:center; min-height:26px; padding:0 8px; color:#bcbcc4; border:1px solid rgba(255,255,255,.07); border-radius:999px; background:rgba(255,255,255,.025); font-size:8px; letter-spacing:.07em; text-transform:uppercase; white-space:nowrap; }
+    .research-drawer { margin:0 0 9px; border:1px solid rgba(255,255,255,.055); border-radius:12px; background:rgba(255,255,255,.018); overflow:hidden; }.research-drawer summary { display:flex; align-items:center; gap:9px; padding:9px 12px; cursor:pointer; color:var(--muted); font-size:9px; letter-spacing:.08em; text-transform:uppercase; list-style:none; }.research-drawer summary::-webkit-details-marker{display:none}.research-drawer summary strong{color:var(--yellow);font-size:9px}.research-drawer summary small{margin-left:auto;color:var(--muted);font-size:8px;letter-spacing:0;text-transform:none}.research-drawer-body{display:flex;gap:14px;align-items:center;padding:0 12px 10px;color:var(--muted);font-size:9px}.research-drawer-body a{margin-left:auto;color:var(--text);text-decoration:none}.research-drawer[open]{background:rgba(255,255,255,.035);animation:drawer-in .2s var(--ease)}
+    .asset-changing { animation:asset-swap .2s var(--ease); }.radar-loading { display:grid; gap:9px; padding:12px; }.radar-loading i { height:42px; border-radius:9px; background:linear-gradient(90deg,rgba(255,255,255,.035),rgba(255,255,255,.09),rgba(255,255,255,.035)); background-size:180% 100%; animation:shimmer 1.2s linear infinite; }
+    @keyframes asset-swap { from{opacity:.35;transform:translateY(4px)}to{opacity:1;transform:translateY(0)} } @keyframes drawer-in { from{opacity:.7}to{opacity:1} } @keyframes shimmer { to{background-position:-180% 0} }
+    @keyframes surface-in { from { opacity:0;transform:translateY(8px) } to { opacity:1;transform:translateY(0) } } @keyframes tick-up { 0%{background:rgba(98,214,164,.13)}100%{background:transparent} } @keyframes tick-down { 0%{background:rgba(237,129,123,.13)}100%{background:transparent} }
+    @media(max-width:1180px){.main-grid{grid-template-columns:minmax(250px,.8fr) minmax(440px,1.35fr);grid-template-areas:"radar chart" "decision chart"}.chart-stage{min-height:610px}.control-panel{grid-template-columns:repeat(4,1fr)}}
+    @media(max-width:820px){.main-grid{grid-template-columns:1fr;grid-template-areas:"decision" "chart" "radar"}.chart-stage{min-height:430px}.main-grid>article:nth-child(2) .market-list{max-height:none}.control-panel{grid-template-columns:1fr 1fr}.terminal-status .badge{display:none}.chart-canvas,.chart-canvas svg{min-height:250px;height:250px}}
+    @media(max-width:500px){.topbar{border-radius:14px}.brand{font-size:13px}.terminal-status{gap:5px}.status{max-width:116px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}.manual-safety{display:none}.workspace-switcher button{min-width:0;padding:0 6px;font-size:8px}.control-panel .field:nth-child(2),.control-panel .field:nth-child(3){display:none}.chart-stage-head{flex-wrap:wrap}.chart-stage-head .badge{margin-left:auto}.chart-canvas,.chart-canvas svg{min-height:220px;height:220px}.main-grid>article:nth-child(2) .market-row{grid-template-columns:1.2fr .8fr .65fr .9fr}.main-grid>article:nth-child(2) .market-row:not(.table-head)>:nth-child(7){display:none}.research-drawer-body{display:grid;gap:6px}.research-drawer-body a{margin-left:0}}
   </style>
 </head>
 <body>
   <main class="shell">
     <header class="topbar">
-      <div class="brand"><span class="brand-mark">M</span><span>Market Edge<small class="brand-subtitle">Quantitative trading research &amp; decision support</small></span></div>
-      <div class="terminal-status"><div id="feedStatus" class="status"><span class="status-dot"></span><span>Waiting to scan</span></div><span class="badge">Research active</span><div class="workspace-switcher" aria-label="Workspace"><button type="button" data-workspace="research">Research</button><button type="button" data-workspace="paper">Paper</button><button type="button" data-workspace="manual" class="active">Manual Live</button></div></div>
+      <div class="brand"><span class="brand-mark">M</span><span>Market Edge<small class="brand-subtitle">Quant intelligence for manual execution</small></span></div>
+      <div class="terminal-status"><div id="feedStatus" class="status"><span class="status-dot"></span><span>Waiting to scan</span></div><span class="manual-safety" title="Market Edge cannot place orders">⌁ Manual execution</span><div class="workspace-switcher" aria-label="Workspace"><button type="button" data-workspace="research">Research</button><button type="button" data-workspace="paper">Paper</button><button type="button" data-workspace="manual" class="active">Manual Live</button></div></div>
     </header>
 
     <section class="hero">
@@ -419,6 +455,11 @@
       </div>
     </details>
 
+    <details class="research-drawer">
+      <summary><span>Research</span><strong>INSUFFICIENT</strong><small>Dataset, replay and validation status</small></summary>
+      <div class="research-drawer-body"><span>Dataset V1 accumulates resolved decision points only.</span><span>No-lookahead checks remain enabled.</span><a href="#researchLab">Open Research Lab ↓</a></div>
+    </details>
+
     <section class="source-strip" aria-label="Market data sources">
       <div id="sourcePills" class="source-pills">
         <span class="source-pill"><i></i>Hyperliquid</span>
@@ -460,6 +501,13 @@
           <div class="market-row table-head"><span>Market</span><span>Price</span><span>24h</span><span>Decision</span></div>
           <div class="empty"><strong>Ready when you are</strong>Press Scan markets to load the latest candles.</div>
         </div>
+      </article>
+
+      <article class="card chart-stage" aria-label="Selected market chart">
+        <div class="chart-stage-head"><div><p class="eyebrow">Live market structure</p><h2 id="chartAsset">Select a market</h2></div><div id="chartPrice" class="chart-price">—</div><span id="chartMeta" class="badge">Completed candles only</span></div>
+        <div class="chart-toolbar"><div class="chart-timeframes" aria-label="Chart timeframe"><button type="button" class="active" data-chart-tf="5m">5m</button><button type="button" data-chart-tf="15m">15m</button><button type="button" data-chart-tf="1h">1h</button><button type="button" data-chart-tf="4h">4h</button><button type="button" data-chart-tf="1d">1d</button></div><a id="chartVerify" class="chart-verify" target="_blank" rel="noopener noreferrer">Open TradingView ↗</a></div>
+        <div id="chartCanvas" class="chart-canvas"><div class="chart-empty"><strong>Market structure appears after a scan</strong><span>Completed candles only · no order execution</span></div></div>
+        <div id="chartSignals" class="chart-signals"><span>Trend —</span><span>Structure —</span><span>Momentum —</span><span>Volume —</span><span>Regime —</span></div>
       </article>
     </section>
 
@@ -598,7 +646,7 @@
       </div>
     </section>
 
-    <section class="card research-lab" aria-label="Research evidence dashboard">
+    <section id="researchLab" class="card research-lab" aria-label="Research evidence dashboard">
       <div class="card-head"><div><p class="eyebrow">Research Lab</p><h2>Evidence before confidence</h2></div><span class="badge watch">MANUAL LIVE · EVIDENCE INSUFFICIENT</span></div>
       <div class="research-body">
         <div class="metric-grid">
@@ -659,7 +707,7 @@
       DOGE:'validation −0.76R, test −1.15R and LONG expectancy −0.92R overall',
       LTC:'validation −0.40R, test −0.22R and LONG expectancy −0.46R overall'
     };
-    let latestBest = null, latestResults = [], socialRecords = [];
+    let latestBest = null, latestResults = [], socialRecords = [], chartTimeframe='5m', lastChartPrice=null;
     const els = {
       scan: document.getElementById('scanButton'), balance: document.getElementById('balance'), risk: document.getElementById('riskMode'), leverage: document.getElementById('leverage'),
       minQuality: document.getElementById('minQuality'), minRR: document.getElementById('minRR'), maxConcurrent: document.getElementById('maxConcurrent'),
@@ -676,7 +724,7 @@
       runBacktest: document.getElementById('runBacktest'), backtestResult: document.getElementById('backtestResult'),
       forwardBadge: document.getElementById('forwardBadge'), forwardResult: document.getElementById('forwardResult'), clearForward: document.getElementById('clearForward'),
       dataHealth:document.getElementById('dataHealth'),costSensitivity:document.getElementById('costSensitivity'),tvExchange:document.getElementById('tvExchange'),tradingViewChart:document.getElementById('tradingViewChart'),
-      manualModeNote:document.getElementById('manualModeNote'),manualTradeStats:document.getElementById('manualTradeStats'),manualTradePositions:document.getElementById('manualTradePositions'),manualTradeHistory:document.getElementById('manualTradeHistory'),monitorSummary:document.getElementById('monitorSummary'),researchProgress:document.getElementById('researchProgress')
+      manualModeNote:document.getElementById('manualModeNote'),manualTradeStats:document.getElementById('manualTradeStats'),manualTradePositions:document.getElementById('manualTradePositions'),manualTradeHistory:document.getElementById('manualTradeHistory'),monitorSummary:document.getElementById('monitorSummary'),researchProgress:document.getElementById('researchProgress'),chartAsset:document.getElementById('chartAsset'),chartPrice:document.getElementById('chartPrice'),chartMeta:document.getElementById('chartMeta'),chartCanvas:document.getElementById('chartCanvas'),chartSignals:document.getElementById('chartSignals'),chartVerify:document.getElementById('chartVerify')
     };
     function currentSettings() {
       return {
@@ -915,7 +963,7 @@
         const opportunity=Number.isFinite(r.opportunity)?Math.round(r.opportunity):0;
         const direction=r.quant?.direction?.toUpperCase()||'—';
         return `
-        <div class="market-row">
+        <div class="market-row ${latestBest?.symbol===r.symbol?'selected':''}" data-asset="${r.symbol}">
           <div class="market-asset"><span class="mini-coin">${r.symbol}</span><span><b>${r.symbol}</b><small>${r.name}</small></span></div>
           <span class="num">${formatPrice(r.price)} USDT</span>
           <span class="num ${r.change24>=0?'positive':'negative'}">${r.change24>=0?'+':''}${r.change24.toFixed(1)}%</span>
@@ -926,6 +974,16 @@
           <span><span class="badge ${badgeClass}">${decision}</span></span>
         </div>`;
       }).join('') || '<div class="empty"><strong>No markets match this filter</strong>Try Best overall or scan again later.</div>';
+    }
+    function renderChartStage(best) {
+      if(!best){els.chartAsset.textContent='Select a market';els.chartPrice.textContent='—';els.chartMeta.textContent='Completed candles only';els.chartCanvas.innerHTML='<div class="chart-empty"><strong>Market structure appears after a scan</strong><span>Completed candles only · no order execution</span></div>';els.chartSignals.innerHTML='<span>Trend —</span><span>Structure —</span><span>Momentum —</span><span>Volume —</span><span>Regime —</span>';return;}
+      const frame={ '5m':'m5','15m':'m15','1h':'h1','4h':'h4','1d':'d1' }[chartTimeframe],candles=(best.timeframes?.[frame]||best.candles||[]).slice(-90),q=best.quant||{},price=Number(best.price);
+      els.chartAsset.textContent=`${best.symbol}USDT · ${chartTimeframe}`;els.chartPrice.textContent=Number.isFinite(price)?`$${formatPrice(price)}`:'—';els.chartMeta.textContent=`${best.sourceCount||0} feeds · ${q.regime||'Awaiting regime'}`;els.chartVerify.href=MarketEdgeTradingView.chartUrl('BINANCE',best.symbol,'USDT');
+      if(Number.isFinite(price)&&lastChartPrice!=null&&price!==lastChartPrice){els.chartPrice.classList.remove('price-flash-up','price-flash-down');void els.chartPrice.offsetWidth;els.chartPrice.classList.add(price>lastChartPrice?'price-flash-up':'price-flash-down');}lastChartPrice=price;
+      if(candles.length<2){els.chartCanvas.innerHTML='<div class="chart-empty"><strong>Waiting for completed candles</strong><span>The chart never uses an incomplete candle.</span></div>';return;}
+      const closes=candles.map(c=>Number(c.close)).filter(Number.isFinite),min=Math.min(...closes),max=Math.max(...closes),range=max-min||1,width=800,height=340,padding=18,path=closes.map((value,index)=>`${index?'L':'M'}${(padding+index*(width-padding*2)/(closes.length-1)).toFixed(1)},${(height-padding-(value-min)/range*(height-padding*2)).toFixed(1)}`).join(' '),area=`${path} L${width-padding},${height-padding} L${padding},${height-padding} Z`,short=q.direction==='short',stroke=short?'#e59b82':q.direction==='long'?'#78d8aa':'#d6d6dd';
+      els.chartCanvas.innerHTML=`<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${best.symbol} ${chartTimeframe} price structure"><defs><linearGradient id="chartFill" x1="0" x2="0" y1="0" y2="1"><stop stop-color="${stroke}" stop-opacity=".22"/><stop offset="1" stop-color="${stroke}" stop-opacity="0"/></linearGradient></defs><path d="${area}" fill="url(#chartFill)"/><path d="${path}" fill="none" stroke="${stroke}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><line x1="${padding}" y1="${height-padding}" x2="${width-padding}" y2="${height-padding}" stroke="rgba(255,255,255,.13)"/></svg>`;
+      els.chartSignals.innerHTML=[['Trend',q.frame?.structure?.trend||'—'],['Structure',q.frame?.structure?.label||'—'],['Momentum',Number.isFinite(q.frame?.rsi)?`RSI ${q.frame.rsi.toFixed(0)}`:'—'],['Volume',Number.isFinite(q.frame?.relativeVolume)?`${q.frame.relativeVolume.toFixed(2)}×`:'—'],['Regime',q.regime||'—']].map(([label,value])=>`<span>${label} <b>${value}</b></span>`).join('');
     }
     function renderQuantAlternatives(results) {
       const candidates = results.slice(1).filter(result=>result.quant?.decision==='TAKE TRADE' && result.quant.risk?.valid).slice(0,2);
@@ -983,7 +1041,9 @@
     }
     function renderQuantRecommendation(best) {
       latestBest = best || null;
+      els.rec.classList.remove('asset-changing'); void els.rec.offsetWidth; els.rec.classList.add('asset-changing');
       renderResearchEvidence(best);
+      renderChartStage(best);
       if (!best || !best.quant) {
         els.title.textContent='No analysable market'; els.badge.className='badge avoid'; els.badge.textContent='ANALYSIS UNAVAILABLE';
         els.rec.innerHTML='<div class="empty"><strong>No reliable analysis</strong>Fresh, valid data is required before any trade plan is generated.</div>';
@@ -1247,7 +1307,7 @@
     async function scan() {
       els.scan.disabled = true; els.scan.textContent = 'Scanning…';
       els.status.className = 'status'; els.status.querySelector('span:last-child').textContent = 'Loading live candles';
-      els.list.innerHTML = '<div class="market-row table-head"><span>Market</span><span>Price</span><span>24h</span><span>Decision</span></div><div class="empty"><strong>Analyzing twenty markets across three feeds</strong>Checking strategies, regime, structure, multi-timeframe context, costs and account constraints.</div>';
+      els.list.innerHTML = '<div class="radar-loading" aria-live="polite"><div class="empty"><strong>Scanning 20 markets</strong>Checking independent feeds, completed candles and strategy gates.</div><i></i><i></i><i></i><i></i><i></i></div>';
       try {
         const base=(await promisePool(MARKETS,loadMarket,4)).filter(Boolean);
         const leaders=[...base].sort((a,b)=>(b.quality||0)-(a.quality||0)).slice(0,8);
@@ -1259,7 +1319,7 @@
           (decisionRank[b.quant?.decision]||0)-(decisionRank[a.quant?.decision]||0) || (b.quality||0)-(a.quality||0)
         );
         if (!results.length) throw new Error('Live market data could not be reached from this browser.');
-        latestResults=results; renderSourceStatus(results); renderList(results); renderQuantRecommendation(results[0]); renderQuantAlternatives(results);
+        latestResults=results; renderSourceStatus(results); renderQuantRecommendation(results[0]); renderList(results); renderQuantAlternatives(results);
         const aiResults=results.map(result=>MarketEdgeAI.sanitizeQuantSnapshot(result)).filter(Boolean);
         window.dispatchEvent(new CustomEvent('market-edge:scan',{detail:{best:aiResults[0]||null,results:aiResults}}));
         updateForward(results); renderManualJournal(); els.runBacktest.disabled=!results[0]?.candles?.length;
@@ -1281,6 +1341,8 @@
     els.scan.addEventListener('click', scan);
     els.checkTrader.addEventListener('click', checkInvoTrader);
     els.opportunityFilter.addEventListener('change',()=>renderList(latestResults));
+    els.list.addEventListener('click',event=>{const row=event.target.closest('[data-asset]'),selected=latestResults.find(result=>result.symbol===row?.dataset.asset);if(!selected)return;renderQuantRecommendation(selected);renderList(latestResults);});
+    document.querySelectorAll('[data-chart-tf]').forEach(button=>button.addEventListener('click',()=>{chartTimeframe=button.dataset.chartTf;document.querySelectorAll('[data-chart-tf]').forEach(item=>item.classList.toggle('active',item===button));renderChartStage(latestBest);}));
     els.tvExchange.addEventListener('change',()=>updateTradingViewLink());
     els.workflowMode.addEventListener('change',()=>{renderManualJournal();showToast(`${els.workflowMode.options[els.workflowMode.selectedIndex].text} mode selected. No exchange connection is available.`);});
     document.querySelectorAll('[data-workspace]').forEach(button=>button.addEventListener('click',()=>{els.workflowMode.value=button.dataset.workspace;els.workflowMode.dispatchEvent(new Event('change'));document.querySelectorAll('[data-workspace]').forEach(item=>item.classList.toggle('active',item===button));}));
