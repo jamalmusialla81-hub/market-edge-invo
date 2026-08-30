@@ -15,7 +15,28 @@
     return {asOf,timeframes,counts:Object.fromEntries(Object.entries(timeframes).map(([name,rows])=>[name,rows.length]))};
   }
   function completedPrefix(rows,interval,asOf){let low=0,high=(rows||[]).length;while(low<high){const middle=(low+high)>>1;if(rows[middle].time+interval<=asOf)low=middle+1;else high=middle;}return rows.slice(0,low);}
-  function derived(base){const m5=[...(base||[])].sort((a,b)=>a.time-b.time),allAsOf=Infinity;return{m5,m15:Research.aggregateCandles(m5,'5m','15m',{asOf:allAsOf}).candles,h1:Research.aggregateCandles(m5,'5m','1h',{asOf:allAsOf}).candles,h4:Research.aggregateCandles(m5,'5m','4h',{asOf:allAsOf}).candles,d1:Research.aggregateCandles(m5,'5m','1d',{asOf:allAsOf}).candles};}
+  // The historical runner gives us ordered, completed 5m rows. Build every higher
+  // timeframe in one pass so a cron chunk does not repeatedly clone and regroup the
+  // same 60-day window. The emitted candles are deliberately identical to
+  // Research.aggregateCandles(..., {asOf: Infinity}).
+  function aggregateDerived(base,targetInterval){
+    const baseInterval=Research.INTERVAL_MS['5m'],expected=targetInterval/baseInterval,out=[];
+    let bucket=null;
+    const flush=()=>{if(bucket&&bucket.valid&&bucket.count===expected)out.push({time:bucket.time,open:bucket.open,high:bucket.high,low:bucket.low,close:bucket.close,volume:bucket.volume});};
+    for(const candle of base){
+      const time=finite(candle?.time);if(!Number.isFinite(time))continue;
+      const start=Math.floor(time/targetInterval)*targetInterval;
+      if(!bucket||bucket.time!==start){flush();bucket={time:start,next:start,count:0,valid:true,open:finite(candle.open),high:finite(candle.high),low:finite(candle.low),close:finite(candle.close),volume:finite(candle.volume)||0};}
+      else {bucket.high=Math.max(bucket.high,finite(candle.high));bucket.low=Math.min(bucket.low,finite(candle.low));bucket.close=finite(candle.close);bucket.volume+=finite(candle.volume)||0;}
+      if(time!==bucket.next)bucket.valid=false;
+      bucket.next+=baseInterval;bucket.count++;
+    }
+    flush();return out;
+  }
+  function derived(base){
+    const input=Array.isArray(base)?base:[],ordered=input.every((row,index)=>!index||finite(input[index-1]?.time)<=finite(row?.time))?input:[...input].sort((a,b)=>a.time-b.time);
+    return{m5:ordered,m15:aggregateDerived(ordered,Research.INTERVAL_MS['15m']),h1:aggregateDerived(ordered,Research.INTERVAL_MS['1h']),h4:aggregateDerived(ordered,Research.INTERVAL_MS['4h']),d1:aggregateDerived(ordered,Research.INTERVAL_MS['1d'])};
+  }
   function cachedSnapshot(derivedFrames,asOf){if(!Number.isFinite(finite(asOf)))throw new Error('Historical snapshot timestamp is required');const timeframes={m5:completedPrefix(derivedFrames.m5,Research.INTERVAL_MS['5m'],asOf),m15:completedPrefix(derivedFrames.m15,Research.INTERVAL_MS['15m'],asOf),h1:completedPrefix(derivedFrames.h1,Research.INTERVAL_MS['1h'],asOf),h4:completedPrefix(derivedFrames.h4,Research.INTERVAL_MS['4h'],asOf),d1:completedPrefix(derivedFrames.d1,Research.INTERVAL_MS['1d'],asOf)};assertNoLookahead(timeframes,asOf);return{asOf,timeframes,counts:Object.fromEntries(Object.entries(timeframes).map(([name,rows])=>[name,rows.length]))};}
   function assertNoLookahead(timeframes,asOf){
     const aliases={m5:'5m',m15:'15m',h1:'1h',h4:'4h',d1:'1d'};
