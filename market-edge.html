@@ -384,14 +384,36 @@
     @media(max-width:1180px){.main-grid{grid-template-columns:minmax(250px,.8fr) minmax(440px,1.35fr);grid-template-areas:"radar chart" "decision chart"}.chart-stage{min-height:610px}.control-panel{grid-template-columns:repeat(4,1fr)}}
     @media(max-width:820px){.main-grid{grid-template-columns:1fr;grid-template-areas:"decision" "chart" "radar"}.chart-stage{min-height:430px}.main-grid>article:nth-child(2) .market-list{max-height:none}.control-panel{grid-template-columns:1fr 1fr}.terminal-status .badge{display:none}.chart-canvas,.chart-canvas svg{min-height:250px;height:250px}}
     @media(max-width:500px){.topbar{border-radius:14px}.brand{font-size:13px}.terminal-status{gap:5px}.status{max-width:116px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}.manual-safety{display:none}.workspace-switcher button{min-width:0;padding:0 6px;font-size:8px}.control-panel .field:nth-child(2),.control-panel .field:nth-child(3){display:none}.chart-stage-head{flex-wrap:wrap}.chart-stage-head .badge{margin-left:auto}.chart-canvas,.chart-canvas svg{min-height:220px;height:220px}.main-grid>article:nth-child(2) .market-row{grid-template-columns:1.2fr .8fr .65fr .9fr}.main-grid>article:nth-child(2) .market-row:not(.table-head)>:nth-child(7){display:none}.research-drawer-body{display:grid;gap:6px}.research-drawer-body a{margin-left:0}}
+    /* App navigation and beginner-first workspace. */
+    .app-navigation{display:flex;align-items:center;gap:5px;margin:0 0 12px;padding:4px;border:1px solid rgba(255,255,255,.07);border-radius:14px;background:rgba(255,255,255,.025);width:max-content;box-shadow:inset 0 1px rgba(255,255,255,.04)}
+    .app-navigation button{min-height:34px;border:0;border-radius:10px;padding:0 13px;background:transparent;color:var(--muted);font-size:11px;font-weight:720;transition:background .18s var(--ease),color .18s var(--ease),transform .18s var(--ease)}
+    .app-navigation button span{margin-right:5px;opacity:.7}.app-navigation button:hover{color:var(--text);transform:translateY(-1px)}.app-navigation button.active{color:#101013;background:#e7e7ea;box-shadow:0 5px 14px rgba(0,0,0,.18)}
+    .header-help{min-height:28px;border:1px solid rgba(255,255,255,.1);border-radius:9px;padding:0 9px;background:rgba(255,255,255,.035);color:var(--text);font-size:10px;font-weight:720;transition:background .18s var(--ease),transform .18s var(--ease)}.header-help:hover{background:rgba(255,255,255,.09);transform:translateY(-1px)}
+    .app-view{display:none}.app-view.active{display:block;animation:app-view-in .22s var(--ease) both}.app-view>.card,.app-view>.research-grid,.app-view>.method{margin-top:0;margin-bottom:14px}.app-view .hero{display:none}.app-view .terminal-overview{display:none}
+    .trade-view .control-panel{grid-template-columns:minmax(145px,.9fr) minmax(145px,.9fr) auto;max-width:680px}.trade-view .control-panel .field:nth-child(2),.trade-view .control-panel .field:nth-child(3),.trade-view .control-panel .field:nth-child(5),.trade-view .control-panel .field:nth-child(6){display:none}.trade-view .control-panel .field label{font-size:9px}.trade-view .alternatives-card{display:none}
+    .section-intro{display:flex;align-items:end;justify-content:space-between;gap:20px;margin:4px 0 14px}.section-intro h1{font-size:clamp(28px,4vw,46px);max-width:650px}.section-intro p{max-width:430px;margin:0;color:var(--muted);font-size:13px;line-height:1.55}.research-overview{display:grid;grid-template-columns:1.2fr .8fr .8fr;gap:10px;margin:0 0 14px}.research-overview .metric{min-height:92px}.evidence-meter{height:7px;overflow:hidden;border-radius:99px;background:rgba(255,255,255,.08);margin-top:10px}.evidence-meter i{display:block;width:0;height:100%;border-radius:inherit;background:var(--accent);transition:width .5s var(--ease)}
+    .journal-tabs{display:flex;gap:6px;margin:0 0 12px}.journal-tabs button{min-height:34px;border:1px solid var(--line);border-radius:10px;padding:0 12px;background:rgba(255,255,255,.025);color:var(--muted);font-size:10px;font-weight:700}.journal-tabs button.active{border-color:rgba(216,255,99,.35);background:rgba(216,255,99,.08);color:var(--accent)}.journal-page{display:none}.journal-page.active{display:block;animation:app-view-in .2s var(--ease) both}
+    .settings-quick{margin-bottom:14px}.settings-quick .settings-grid{grid-template-columns:repeat(5,1fr)}.settings-quick .settings-note{font-size:11px}.research-view .ai-assistant,.research-view .trader-check{margin-top:14px}
+    .simple-decision{display:grid;gap:14px}.decision-state{display:flex;align-items:center;justify-content:space-between;gap:12px}.decision-state h3{margin:0;font-size:24px;letter-spacing:-.04em}.decision-summary{margin:0;color:var(--text);font-size:14px;line-height:1.55}.score-pair{display:grid;grid-template-columns:1fr 1fr;gap:8px}.score-tile{padding:10px;border:1px solid rgba(255,255,255,.07);border-radius:12px;background:rgba(255,255,255,.025)}.score-tile span{display:block;color:var(--muted);font-size:9px;text-transform:uppercase;letter-spacing:.08em}.score-tile strong{display:block;margin-top:4px;font-size:18px;font-variant-numeric:tabular-nums}.score-tile button{padding:0;border:0;background:transparent;color:inherit;font:inherit;cursor:help}.decision-actions{display:flex;gap:8px;flex-wrap:wrap}.decision-actions button{min-height:34px}.decision-advanced{display:none;border-top:1px solid rgba(255,255,255,.07);padding-top:12px}.decision-advanced.open{display:block;animation:app-view-in .18s var(--ease) both}.why-list{display:grid;gap:8px}.why-line{display:flex;gap:8px;color:var(--muted);font-size:12px;line-height:1.4}.why-line b{color:var(--text);font-size:11px}.advanced-details{margin-top:12px}.advanced-details summary{cursor:pointer;color:var(--muted);font-size:11px}
+    .onboarding-modal{width:min(520px,calc(100% - 28px));padding:0;border:1px solid rgba(255,255,255,.13);border-radius:22px;background:#16171a;color:var(--text);box-shadow:0 28px 90px rgba(0,0,0,.6)}.onboarding-modal::backdrop{background:rgba(0,0,0,.65);backdrop-filter:blur(5px)}.onboarding-card{position:relative;padding:26px}.onboarding-card h2{font-size:28px}.onboarding-card>p{margin:12px 0 20px;color:var(--muted);line-height:1.55}.onboarding-close{position:absolute;top:12px;right:12px;width:32px;height:32px;border:0;border-radius:9px;background:rgba(255,255,255,.06);color:var(--muted);font-size:22px}.onboarding-progress{height:5px;overflow:hidden;border-radius:99px;background:rgba(255,255,255,.09)}.onboarding-progress i{display:block;width:14.28%;height:100%;background:var(--accent);transition:width .22s var(--ease)}.onboarding-actions{display:flex;align-items:center;gap:8px;margin-top:20px}.onboarding-actions #onboardingCount{margin-left:auto;color:var(--muted);font-size:11px}.onboarding-actions .scan{min-height:36px}.onboarding-actions .secondary-button{min-height:36px}
+    .main-grid>article:nth-child(2) .market-row{grid-template-columns:minmax(0,1fr) .7fr .55fr;grid-template-rows:auto;align-items:center;padding:10px 5px}.main-grid>article:nth-child(2) .market-row.table-head{display:grid;color:var(--muted);font-size:8px;text-transform:uppercase;letter-spacing:.09em}.main-grid>article:nth-child(2) .market-row:not(.table-head)>:nth-child(n){grid-area:auto}.main-grid>article:nth-child(2) .market-row:not(.table-head)>:nth-child(1){grid-column:1}.main-grid>article:nth-child(2) .market-row:not(.table-head)>:nth-child(2){grid-column:2}.main-grid>article:nth-child(2) .market-row:not(.table-head)>:nth-child(3){grid-column:3}.main-grid>article:nth-child(2) .market-row small{display:block;margin-top:3px;color:var(--muted);font-size:8px}.main-grid>article:nth-child(2) .radar-score{justify-items:end}.main-grid>article:nth-child(2) .radar-score b{font-size:13px}.main-grid>article:nth-child(2) .radar-score b small{display:inline;font-size:8px}
+    @keyframes app-view-in{from{opacity:0;transform:translateY(6px) scale(.99)}to{opacity:1;transform:translateY(0) scale(1)}}
+    @media(max-width:760px){.app-navigation{position:fixed;z-index:20;bottom:10px;left:50%;transform:translateX(-50%);margin:0;width:calc(100% - 22px);justify-content:space-around;background:rgba(20,20,23,.94);backdrop-filter:blur(18px)}.app-navigation button{flex:1;padding:0 5px;font-size:10px}.app-navigation button span{display:block;margin:0 0 1px;font-size:12px}.shell{padding-bottom:86px}.terminal-status{width:auto}.header-help{display:none}.trade-view .control-panel{grid-template-columns:1fr 1fr;max-width:none}.trade-view .control-panel .scan{grid-column:1/-1}.section-intro{display:grid;align-items:start;gap:6px}.section-intro h1{font-size:30px}.research-overview{grid-template-columns:1fr 1fr}.research-overview .metric:first-child{grid-column:1/-1}.settings-quick .settings-grid{grid-template-columns:1fr 1fr}.main-grid{grid-template-columns:1fr;grid-template-areas:"decision" "chart" "radar"}.chart-stage{min-height:auto}.main-grid>article:nth-child(2) .market-list{max-height:300px}.onboarding-actions{flex-wrap:wrap}.onboarding-actions #onboardingCount{order:-1;width:100%;margin:0}.onboarding-actions #onboardingSkip{margin-right:auto}}
   </style>
 </head>
 <body>
   <main class="shell">
     <header class="topbar">
       <div class="brand"><span class="brand-mark">M</span><span>Market Edge<small class="brand-subtitle">Quant intelligence for manual execution</small></span></div>
-      <div class="terminal-status"><div id="feedStatus" class="status"><span class="status-dot"></span><span>Waiting to scan</span></div><span class="manual-safety" title="Market Edge cannot place orders">⌁ Manual execution</span><div class="workspace-switcher" aria-label="Workspace"><button type="button" data-workspace="research">Research</button><button type="button" data-workspace="paper">Paper</button><button type="button" data-workspace="manual" class="active">Manual Live</button></div></div>
+      <div class="terminal-status"><div id="feedStatus" class="status"><span class="status-dot"></span><span>Waiting to scan</span></div><span class="manual-safety" title="Market Edge cannot place orders">⌁ Manual execution</span><button id="howToUse" class="header-help" type="button">How to use</button></div>
     </header>
+
+    <nav class="app-navigation" aria-label="Primary navigation">
+      <button type="button" class="active" data-app-view="trade"><span>⌁</span>Trade</button>
+      <button type="button" data-app-view="research"><span>◌</span>Research</button>
+      <button type="button" data-app-view="journal"><span>▣</span>Journal</button>
+      <button type="button" data-app-view="settings"><span>⚙</span>Settings</button>
+    </nav>
 
     <section class="hero">
       <h1>Evidence first.<br><span>Execution second.</span></h1>
@@ -687,6 +709,16 @@
     </footer>
   </main>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <dialog id="onboardingModal" class="onboarding-modal" aria-labelledby="onboardingTitle">
+    <form method="dialog" class="onboarding-card">
+      <button class="onboarding-close" value="skip" aria-label="Skip tutorial">×</button>
+      <p class="eyebrow" id="onboardingStep">Welcome</p>
+      <h2 id="onboardingTitle">Welcome to Market Edge</h2>
+      <p id="onboardingCopy">Market Edge scans markets and helps you evaluate potential trades. It does not place trades for you.</p>
+      <div class="onboarding-progress" aria-hidden="true"><i></i></div>
+      <div class="onboarding-actions"><button id="onboardingSkip" class="secondary-button" value="skip">Skip tutorial</button><span id="onboardingCount">1 / 7</span><button id="onboardingBack" class="secondary-button" type="button" disabled>Back</button><button id="onboardingNext" class="scan" type="button">Next</button></div>
+    </form>
+  </dialog>
 
   <script src="ai-config.js?v=14"></script>
   <script src="research-engine.js?v=14"></script>
@@ -697,6 +729,31 @@
   <script src="ml-engine.js?v=15"></script>
   <script src="ai-engine.js?v=14"></script>
   <script>
+    function setupAppShell() {
+      const shell=document.querySelector('.shell'),anchor=shell.querySelector('.hero'),root=document.createElement('div');root.className='app-views';
+      const views=Object.fromEntries(['trade','research','journal','settings'].map(name=>{const view=document.createElement('section');view.className=`app-view ${name}-view${name==='trade'?' active':''}`;view.dataset.appView=name;view.setAttribute('aria-label',`${name[0].toUpperCase()+name.slice(1)} workspace`);root.append(view);return[name,view];}));
+      shell.insertBefore(root,anchor);
+      const move=(node,view)=>{if(node)view.append(node);};
+      move(shell.querySelector('.hero'),views.trade);move(shell.querySelector('.terminal-overview'),views.trade);move(shell.querySelector('.control-panel'),views.trade);move(shell.querySelector('.source-strip'),views.trade);move(shell.querySelector('.main-grid'),views.trade);move(shell.querySelector('.alternatives-card'),views.trade);
+      const settingsPanel=shell.querySelector('.settings-panel');move(settingsPanel,views.settings);
+      views.settings.insertAdjacentHTML('afterbegin',`<div class="section-intro"><div><p class="eyebrow">Your workspace</p><h1>Settings</h1></div><p>Set your account and risk controls here. Balance and risk also stay available as quick controls on Trade.</p></div><section class="card settings-quick"><div class="card-head"><div><p class="eyebrow">Quick settings</p><h2>Account and decision controls</h2></div></div><div class="settings-grid"><div class="field"><label>Account balance (USDC)</label><input data-setting-proxy="balance" type="number" min="1" step="1"></div><div class="field"><label>Risk mode</label><select data-setting-proxy="riskMode"><option value="0.005">Protect · 0.5%</option><option value="0.01">Balanced · 1%</option><option value="0.015">Aggressive · 1.5%</option></select></div><div class="field"><label>Maximum leverage</label><select data-setting-proxy="leverage"><option value="1">1×</option><option value="2">2×</option><option value="3">3×</option><option value="5">5×</option><option value="10">10× · high risk</option></select></div><div class="field"><label>Minimum setup quality</label><input data-setting-proxy="minQuality" type="number" min="50" max="95" step="1"></div><div class="field"><label>Workspace mode</label><select data-setting-proxy="workflowMode"><option value="research">Research</option><option value="paper">Paper</option><option value="manual">Manual live</option></select></div><p class="settings-note">Leverage changes margin required, not the maximum loss allowed by your selected risk mode.</p></div></section>`);
+      const paperCards=[...shell.querySelectorAll('.paper-card')],researchGrid=shell.querySelector('.research-grid'),forwardCard=researchGrid?.querySelector('article:nth-child(2)');
+      views.journal.insertAdjacentHTML('beforeend',`<div class="section-intro"><div><p class="eyebrow">Your records</p><h1>Journal</h1></div><p>Keep paper positions, forward evidence and the trades you actually place in separate, easy-to-review records.</p></div><div class="journal-tabs" role="tablist"><button class="active" type="button" data-journal-page="paper">Paper</button><button type="button" data-journal-page="forward">Forward test</button><button type="button" data-journal-page="manual">My trades</button></div><div class="journal-page active" data-journal-content="paper"></div><div class="journal-page" data-journal-content="forward"></div><div class="journal-page" data-journal-content="manual"></div>`);
+      move(paperCards[0],views.journal.querySelector('[data-journal-content="paper"]'));move(forwardCard,views.journal.querySelector('[data-journal-content="forward"]'));move(paperCards[1],views.journal.querySelector('[data-journal-content="manual"]'));
+      views.research.insertAdjacentHTML('afterbegin',`<div class="section-intro"><div><p class="eyebrow">Evidence, not promises</p><h1>Research</h1></div><p>Market Edge studies completed historical setups in the background. It will not claim reliability while evidence is still limited.</p></div><section class="research-overview" aria-label="Research summary"><article class="metric"><span>Evidence</span><strong id="evidenceResolved">Loading…</strong><small>resolved setups toward the first 20</small><div class="evidence-meter"><i id="evidenceMeter"></i></div></article><article class="metric"><span>Research mode</span><strong>CATCH UP</strong><small>Historical replay continues in the background</small></article><article class="metric"><span>Machine learning</span><strong>LOCKED</strong><small>More evidence is required first</small></article></section>`);
+      move(shell.querySelector('.research-drawer'),views.research);move(researchGrid,views.research);move(shell.querySelector('[aria-label="Latest historical validation findings"]'),views.research);move(shell.querySelector('.research-lab'),views.research);move(shell.querySelector('.ai-assistant'),views.research);move(shell.querySelector('.trader-check'),views.research);move(shell.querySelector('.method'),views.research);
+      const setView=name=>{Object.entries(views).forEach(([key,view])=>{const active=key===name;view.classList.toggle('active',active);view.toggleAttribute('hidden',!active);});document.querySelectorAll('[data-app-view]').forEach(button=>button.classList.toggle('active',button.dataset.appView===name));window.scrollTo({top:0,behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'});};
+      document.querySelectorAll('[data-app-view]').forEach(button=>button.addEventListener('click',()=>setView(button.dataset.appView)));
+      document.querySelector('.research-drawer a')?.addEventListener('click',event=>{event.preventDefault();setView('research');document.getElementById('researchLab')?.scrollIntoView({behavior:'smooth'});});
+      document.querySelectorAll('[data-journal-page]').forEach(button=>button.addEventListener('click',()=>{const page=button.dataset.journalPage;document.querySelectorAll('[data-journal-page]').forEach(item=>item.classList.toggle('active',item===button));document.querySelectorAll('[data-journal-content]').forEach(item=>item.classList.toggle('active',item.dataset.journalContent===page));}));
+      document.querySelectorAll('[data-setting-proxy]').forEach(proxy=>{const original=document.getElementById(proxy.dataset.settingProxy),sync=()=>{proxy.value=original.value;};sync();proxy.addEventListener('input',()=>{original.value=proxy.value;original.dispatchEvent(new Event('input',{bubbles:true}));});proxy.addEventListener('change',()=>{original.value=proxy.value;original.dispatchEvent(new Event('change',{bubbles:true}));});original.addEventListener('change',sync);original.addEventListener('input',sync);});
+      const tutorial=[['Welcome to Market Edge','Market Edge scans markets and helps you evaluate potential trades. It does not place trades for you.'],['Step 1 · Set your balance','Enter the amount currently available in your trading account.'],['Step 2 · Choose risk','Risk controls how much of your balance Market Edge is allowed to lose if the stop is hit.'],['Step 3 · Scan markets','Market Edge checks supported markets and ranks current opportunities.'],['Step 4 · Read the decision','TAKE TRADE passed the rules. WAIT means do not enter yet. NO TRADE means no valid setup right now.'],['Step 5 · Read the trade plan','If a setup is approved, see the entry, stop, targets, position size and maximum loss.'],['Step 6 · Place it manually','Open Invo, enter the values yourself, then return here to record what you did.']];
+      const modal=document.getElementById('onboardingModal'),title=document.getElementById('onboardingTitle'),copy=document.getElementById('onboardingCopy'),stepLabel=document.getElementById('onboardingStep'),count=document.getElementById('onboardingCount'),next=document.getElementById('onboardingNext'),back=document.getElementById('onboardingBack'),progress=modal.querySelector('.onboarding-progress i');let step=0;
+      const showStep=()=>{const current=tutorial[step];title.textContent=current[0];copy.textContent=current[1];stepLabel.textContent=step===0?'Welcome':`Step ${step} of ${tutorial.length-1}`;count.textContent=`${step+1} / ${tutorial.length}`;back.disabled=step===0;next.textContent=step===tutorial.length-1?'Done':'Next';progress.style.width=`${(step+1)/tutorial.length*100}%`;};
+      const closeTutorial=()=>{localStorage.setItem('market-edge-onboarding-v1','complete');modal.close();};next.addEventListener('click',()=>{if(step===tutorial.length-1)closeTutorial();else{step++;showStep();}});back.addEventListener('click',()=>{if(step){step--;showStep();}});modal.addEventListener('close',()=>localStorage.setItem('market-edge-onboarding-v1','complete'));document.getElementById('howToUse').addEventListener('click',()=>{step=0;showStep();modal.showModal();});
+      if(!localStorage.getItem('market-edge-onboarding-v1')){showStep();setTimeout(()=>modal.showModal(),180);}
+    }
+    setupAppShell();
     const MARKETS = ['BTC','ETH','SOL','XRP','DOGE','ADA','AVAX','LINK','SUI','PENGU','BNB','LTC','DOT','NEAR','APT','ARB','OP','UNI','AAVE','INJ'];
     const LABELS = { BTC:'Bitcoin', ETH:'Ethereum', SOL:'Solana', XRP:'XRP', DOGE:'Dogecoin', ADA:'Cardano', AVAX:'Avalanche', LINK:'Chainlink', SUI:'Sui', PENGU:'Pudgy Penguins', BNB:'BNB', LTC:'Litecoin', DOT:'Polkadot', NEAR:'NEAR', APT:'Aptos', ARB:'Arbitrum', OP:'Optimism', UNI:'Uniswap', AAVE:'Aave', INJ:'Injective' };
     const HYPERLIQUID_API = 'https://api.hyperliquid.xyz/info';
@@ -956,22 +1013,16 @@
       if (filter === 'risk') visible.sort((a,b)=>(a.quant?.risk?.lossAtStop||Infinity)-(b.quant?.risk?.lossAtStop||Infinity));
       if (filter === 'liquidity') visible.sort((a,b)=>b.liquidityScore-a.liquidityScore);
       if (['overall','quality'].includes(filter)) visible.sort((a,b)=>(b.opportunity??-1)-(a.opportunity??-1));
-      els.list.innerHTML = '<div class="market-row table-head"><span>Asset</span><span>Price</span><span>24h</span><span>Direction</span><span>Opportunity</span><span>Setup</span><span>Strategy / regime</span><span>Status</span></div>' + visible.map(r=>{
+      els.list.innerHTML = '<div class="market-row table-head"><span>Asset</span><span>Action</span><span>Score</span></div>' + visible.map(r=>{
         const decision = r.quant?.decision || 'ANALYSIS UNAVAILABLE';
         const badgeClass = decision === 'TAKE TRADE' ? (r.quant.direction==='short'?'short':'buy') : decision === 'WAIT' ? 'watch' : 'avoid';
-        const setup=Number.isFinite(r.quality)?`${r.quality}/100`:'—';
         const opportunity=Number.isFinite(r.opportunity)?Math.round(r.opportunity):0;
-        const direction=r.quant?.direction?.toUpperCase()||'—';
+        const action=decision==='TAKE TRADE'?'TRADE':decision==='WAIT'?'WAIT':Number.isFinite(r.quality)&&r.quality>0?'WATCH':'SKIP';
         return `
         <div class="market-row ${latestBest?.symbol===r.symbol?'selected':''}" data-asset="${r.symbol}">
           <div class="market-asset"><span class="mini-coin">${r.symbol}</span><span><b>${r.symbol}</b><small>${r.name}</small></span></div>
-          <span class="num">${formatPrice(r.price)} USDT</span>
-          <span class="num ${r.change24>=0?'positive':'negative'}">${r.change24>=0?'+':''}${r.change24.toFixed(1)}%</span>
-          <span class="badge ${r.quant?.direction==='short'?'short':r.quant?.direction==='long'?'buy':'avoid'}">${direction}</span>
-          <span class="radar-score"><b>${Number.isFinite(r.opportunity)?opportunity+'/100':'—'}</b><span class="radar-bar"><i style="width:${opportunity}%"></i></span></span>
-          <span class="num">${setup}</span>
-          <span><b>${r.quant?.strategy||'No setup'}</b><small>${r.quant?.regime||'—'}</small></span>
-          <span><span class="badge ${badgeClass}">${decision}</span></span>
+          <span><span class="badge ${badgeClass}">${action}</span><small>${r.quant?.direction?`${r.quant.direction.toUpperCase()} · `:''}${r.change24>=0?'+':''}${r.change24.toFixed(1)}%</small></span>
+          <span class="radar-score"><b>${Number.isFinite(r.opportunity)?opportunity:'—'}<small> / 100</small></b><span class="radar-bar"><i style="width:${opportunity}%"></i></span></span>
         </div>`;
       }).join('') || '<div class="empty"><strong>No markets match this filter</strong>Try Best overall or scan again later.</div>';
     }
@@ -1030,6 +1081,7 @@
         const response=await fetch(`${base}/v1/research/replay`,{cache:'no-store'});
         if(!response.ok)throw new Error('unavailable');
         const data=await response.json(),states=new Map((data.states||[]).map(item=>[item.asset,item])),byAsset=data.byAsset||{},dataset=data.dataset||{};
+        const resolved=Number(data.totalResolvedTargets)||0,evidence=document.getElementById('evidenceResolved'),meter=document.getElementById('evidenceMeter');if(evidence)evidence.textContent=`${resolved} / 20 resolved setups`;if(meter)meter.style.width=`${Math.min(100,resolved/20*100)}%`;
         els.researchProgress.innerHTML=['BTC','ETH','SOL','XRP','DOGE','LTC'].map(asset=>{const state=states.get(asset)||{},totals=byAsset[asset]||{};return `<div class="replay-asset"><span>${asset} replay</span><strong>${totals.decisionPoints||0} decisions · ${totals.resolved||0} resolved</strong><small>${state.status||'Awaiting cache'}</small></div>`;}).join('')+`<div class="replay-asset"><span>Dataset V1</span><strong>${dataset.status||'Unavailable'}</strong><small>${data.totalDecisionPoints||0} decisions · ${data.totalResolvedTargets||0} resolved</small></div>`;
       } catch { els.researchProgress.innerHTML='<div class="replay-asset"><span>Replay progress</span><strong>Unavailable</strong><small>Live scanner remains independent.</small></div>'; }
     }
@@ -1053,16 +1105,19 @@
       const directionText=direction==='short'?'SHORT':direction==='long'?'LONG':'NEUTRAL';
       const workspaceMode=els.workflowMode.value==='manual'?'MANUAL LIVE':els.workflowMode.value.toUpperCase();
       const decisionClass=decision==='TAKE TRADE'?(direction==='short'?'short':'buy'):decision==='WAIT'?'watch':'avoid';
+      const simpleReason=decision==='TAKE TRADE'?'The setup passed the required checks. Read the exact trade plan before deciding whether to place it manually.':decision==='WAIT'?'There may be an interesting setup, but entering now is not justified.': 'No valid trade right now. Wait for a fresh scan instead of forcing an entry.';
       els.title.textContent=`${best.symbol} — ${directionText}`;
       els.badge.className=`badge ${decisionClass}`; els.badge.textContent=decision;
       const common=`
-        <div class="asset-row">
-          <div class="asset-name"><span class="coin">${best.symbol}</span><span><strong>${best.name}</strong><span>${q.strategy||'No strategy'} · ${q.regime||'Unknown regime'}</span></span></div>
-          <div><div class="quality-score"><strong>${Number.isFinite(q.setupQuality)?q.setupQuality:'—'}</strong><span>/100 setup · ${q.opportunity?.score??'—'}/100 opportunity</span></div><div class="price"><span>${formatPrice(best.price)} USDT · ${best.sourceCount} feeds</span></div></div>
+        <div class="simple-decision">
+          <div class="asset-row"><div class="asset-name"><span class="coin">${best.symbol}</span><span><strong>${best.name}</strong><span>${formatPrice(best.price)} USDT · ${best.sourceCount} independent feeds</span></span></div></div>
+          <div class="decision-state"><h3>${directionText} · ${decision}</h3><span class="badge ${decisionClass}">${decision==='TAKE TRADE'?'TRADE READY':decision}</span></div>
+          <div class="score-pair"><div class="score-tile"><span>Setup quality <button type="button" title="How strong the actual trade setup is.">?</button></span><strong>${Number.isFinite(q.setupQuality)?q.setupQuality+' / 100':'—'}</strong></div><div class="score-tile"><span>Opportunity <button type="button" title="How interesting this market is right now.">?</button></span><strong>${q.opportunity?.score??'—'}${q.opportunity?.score!=null?' / 100':''}</strong></div></div>
+          <p class="decision-summary">${simpleReason}</p>
+          <div class="decision-actions"><button class="secondary-button" type="button" data-toggle-why>Why?</button><button class="secondary-button" type="button" data-toggle-advanced>View details</button></div>
+          <div class="decision-advanced" data-decision-advanced><div class="why-list"><div class="why-line"><b>Bottom line</b><span>${q.reason||simpleReason}</span></div>${(q.reasons||[]).slice(0,4).map(reason=>`<div class="why-line"><b>•</b><span>${reason}</span></div>`).join('')}</div></div>
         </div>
-        <div class="score-line"><span>Setup quality—not a win probability</span><strong>${Number.isFinite(q.setupQuality)?q.setupQuality+' / 100':'NO SETUP'}</strong></div>
-        <div class="meter"><span style="width:${Number.isFinite(q.setupQuality)?q.setupQuality:0}%"></span></div>
-        <div class="evidence-grid">
+        <details class="advanced-details"><summary>Advanced setup data</summary><div class="evidence-grid">
           <div class="evidence-item"><span>Decision</span><strong>${decision}</strong></div>
           <div class="evidence-item"><span>Regime</span><strong>${q.regime||'Unavailable'}</strong></div>
           <div class="evidence-item"><span>Strategy</span><strong>${q.strategy||'None qualified'}</strong></div>
@@ -1071,14 +1126,12 @@
           <div class="evidence-item"><span>Relative volume</span><strong>${Number.isFinite(q.frame?.relativeVolume)?q.frame.relativeVolume.toFixed(2)+'×':'Unavailable'}</strong></div>
           <div class="evidence-item"><span>Workspace</span><strong>${workspaceMode}</strong></div>
           <div class="evidence-item"><span>ML model</span><strong>NO VALIDATED CHAMPION</strong></div>
-        </div>
+        </div></details>
         <div class="evidence-links"><a class="evidence-link" href="${MarketEdgeTradingView.chartUrl('BINANCE',best.symbol,'USDT')}" target="_blank" rel="noopener noreferrer">Verify ${best.symbol} on TradingView</a></div>`;
       if (decision!=='TAKE TRADE' || !q.risk?.valid) {
         els.rec.innerHTML=common+`
-          <div class="reasons" style="margin-top:18px"><div class="reason"><i>!</i><span>${q.reason}</span></div>${(q.reasons||[]).slice(0,4).map(reason=>`<div class="reason"><i>·</i><span>${reason}</span></div>`).join('')}</div>
-          <div class="invo-entry"><div class="invo-entry-head"><div><h3>Nothing to enter into Invo</h3><p>The setup failed at least one evidence, cost, account-size or liquidation rule.</p></div><span class="badge ${decisionClass}">${decision}</span></div>
-          <p class="fresh-note">${q.reason}. Leverage is not used to bypass the selected loss limit.</p></div>
-          <details class="analysis-details"><summary>What would invalidate or improve this setup?</summary><p class="analysis-copy">Wait for the configured quality threshold, two-feed directional confirmation and a risk-sized notional above the platform minimum. Scan again after a completed candle rather than chasing a move.</p></details>`;
+          <div class="invo-entry"><div class="invo-entry-head"><div><h3>Nothing to enter into Invo</h3><p>Wait for another scan. The app will not turn a WAIT or NO TRADE into a trade plan.</p></div><span class="badge ${decisionClass}">${decision}</span></div></div>`;
+        bindDecisionControls();
         return;
       }
       const risk=q.risk, isShort=q.direction==='short', currency='USDC';
@@ -1120,7 +1173,9 @@
         await navigator.clipboard.writeText(text).catch(()=>{}); showToast('Exact Invo card copied. Verify every live field before submitting.');
       });
       document.getElementById('recordManualTrade').addEventListener('click',()=>recordManualTrade(best,q,risk));
+      bindDecisionControls();
     }
+    function bindDecisionControls(){const panel=els.rec.querySelector('[data-decision-advanced]'),why=els.rec.querySelector('[data-toggle-why]'),advanced=els.rec.querySelector('[data-toggle-advanced]');why?.addEventListener('click',()=>{panel?.classList.toggle('open');if(panel)panel.scrollIntoView({block:'nearest',behavior:'smooth'});});advanced?.addEventListener('click',()=>els.rec.querySelector('.advanced-details')?.setAttribute('open',''));}
     function checkInvoTrader() {
       const wins = Number(els.traderWins.value), losses = Number(els.traderLosses.value), pnl = Number(els.traderPnl.value), leverage = Number(els.traderLeverage.value);
       const side = els.traderSide.value, balance = Math.max(0, Number(els.balance.value) || 0), total = wins + losses;
