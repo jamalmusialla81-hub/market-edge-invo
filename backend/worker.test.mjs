@@ -87,7 +87,6 @@ class FakeStatement {
 class FakeD1 { constructor(){this.calls=[];} prepare(sql){return new FakeStatement(this,sql);} async batch(items){for(const item of items)await item.run();} }
 const monitorNow=1_800_000_000_000,monitorRows=Array.from({length:100},(_,index)=>{const time=monitorNow-(100-index)*300000,price=100+index*.1;return[time,String(price),String(price+1),String(price-1),String(price+.2),'20',time+299999];});
 const monitorDb=new FakeD1(),scheduled=await handleScheduled({scheduledTime:monitorNow},{MARKET_EDGE_DB:monitorDb},{},{watchlist:[{asset:'BTC',symbol:'BTCUSDT',exchange:'BINANCE'}],historicalAssets:[],delay:async()=>{},fetch:async()=>new Response(JSON.stringify(monitorRows),{status:200})});
-assert.equal(scheduled.status,'COMPLETE');assert.equal(scheduled.executionDisabled,true);assert.equal(scheduled.historical.status,'BUILDING');assert.ok(monitorDb.calls.some(call=>call.sql.includes('monitor_runs')));
-assert.equal(scheduled.replay.status,'PENDING');assert.equal(scheduled.scheduledScope.replayBudget,'one asset / 288 completed 5m candles');assert.deepEqual(scheduled.scheduledScope.monitorAssets,['BTC']);
+assert.equal(scheduled.status,'COMPLETE');assert.equal(scheduled.executionDisabled,true);assert.equal(scheduled.researchRunner,'github-actions-node');assert.equal(scheduled.heavyReplay,'disabled');assert.equal(monitorDb.calls.length,0);
 
 console.log('AI backend tests passed');
