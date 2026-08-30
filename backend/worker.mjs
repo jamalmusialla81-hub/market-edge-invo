@@ -234,7 +234,16 @@ export async function handleRequest(request,env={},ctx={},deps={}) {
 }
 
 export async function handleScheduled(controller,env={},ctx={},deps={}) {
-  const now=Number(controller?.scheduledTime)||Date.now(),slot=Math.floor(now/300_000),monitorWatchlist=deps.watchlist||WATCHLIST.slice((slot*4)%WATCHLIST.length,(slot*4)%WATCHLIST.length+4),historicalAssets=deps.historicalAssets||PRIORITY_ASSETS.slice((slot*2)%PRIORITY_ASSETS.length,(slot*2)%PRIORITY_ASSETS.length+2),operation=(async()=>{const monitor=await runMonitor({db:env.MARKET_EDGE_DB,fetchImpl:deps.fetch||fetch,now,watchlist:monitorWatchlist,throttleMs:deps.throttleMs??700});const historical=await runHistoricalBackfill({db:env.MARKET_EDGE_DB,fetchImpl:deps.fetch||fetch,now,assets:historicalAssets,days:deps.historicalDays,delay:deps.delay});const replay=await runReplayChunk({db:env.MARKET_EDGE_DB,now});return{...monitor,historical,replay,scheduledScope:{monitorAssets:monitorWatchlist.map(item=>item.asset),historicalAssets}};})();
+  const now=Number(controller?.scheduledTime)||Date.now(),slot=Math.floor(now/300_000),monitorCandidates=deps.watchlist||WATCHLIST.slice(slot%WATCHLIST.length,slot%WATCHLIST.length+1),historicalCandidates=deps.historicalAssets||PRIORITY_ASSETS.slice(slot%PRIORITY_ASSETS.length,slot%PRIORITY_ASSETS.length+1),monitorWatchlist=monitorCandidates.slice(0,1),historicalAssets=historicalCandidates.slice(0,1),operation=(async()=>{
+    // Replay is first: it has a fixed single-asset chunk and must never depend on provider latency.
+    const replay=await runReplayChunk({db:env.MARKET_EDGE_DB,now});
+    const [monitorResult,historicalResult]=await Promise.allSettled([
+      runMonitor({db:env.MARKET_EDGE_DB,fetchImpl:deps.fetch||fetch,now,watchlist:monitorWatchlist,throttleMs:0}),
+      runHistoricalBackfill({db:env.MARKET_EDGE_DB,fetchImpl:deps.fetch||fetch,now,assets:historicalAssets,days:deps.historicalDays,delay:async()=>{}})
+    ]);
+    const monitor=monitorResult.status==='fulfilled'?monitorResult.value:{status:'FAILED',assetsRequested:monitorWatchlist.length,assetsCompleted:0,candlesWritten:0,errors:[String(monitorResult.reason?.message||monitorResult.reason)]};
+    const historical=historicalResult.status==='fulfilled'?historicalResult.value:{status:'FAILED',assetsRequested:historicalAssets.length,assetsCompleted:0,pages:0,errors:[String(historicalResult.reason?.message||historicalResult.reason)]};
+    return{...monitor,historical,replay,scheduledScope:{monitorAssets:monitorWatchlist.map(item=>item.asset),historicalAssets,replayBudget:'one asset / 288 completed 5m candles',monitorBudget:'one asset',historicalBudget:'one asset'}}})();
   if(ctx?.waitUntil) { ctx.waitUntil(operation); return {accepted:true,scheduledAt:now,execution:'disabled'}; }
   return operation;
 }
