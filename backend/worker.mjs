@@ -173,6 +173,7 @@ async function researchIngest(request,env,payload,now=Date.now()){
 }
 async function researchStatus(db){const [progress,run]=await Promise.all([replayProgress(db),db.prepare(`SELECT id,runner,stage,asset,status,input_cursor,output_cursor,candles_processed,decision_points_written,outcomes_resolved,detail_json,started_at,completed_at FROM research_runs ORDER BY created_at DESC LIMIT 1`).first().catch(()=>null)]);return {...progress,lastResearchRun:run||null,runner:'github-actions-node',ml:{status:'DISABLED',sampleN:progress.totalResolvedTargets}};}
 function chartNumber(value){const number=Number(value);return Number.isFinite(number)?number:null;}
+function chartStrategyLabel(value){return safeText(value,120).toLowerCase().replace(/(^|[\s-])([a-z])/g,(_,prefix,letter)=>`${prefix}${letter.toUpperCase()}`);}
 function chartTargets(value){
   let targets={};try{targets=JSON.parse(value||'{}');}catch{}
   const status=safeText(targets?.status,32).toUpperCase();
@@ -186,7 +187,7 @@ function chartTargets(value){
 }
 function publicChartSignal(row){return {
   signalId:safeText(row.signal_id,180),asset:safeAsset(row.asset),timestamp:chartNumber(row.timestamp),
-  strategy:safeText(row.strategy,120),direction:['long','short'].includes(row.direction)?row.direction:null,
+  strategy:chartStrategyLabel(row.strategy),direction:['long','short'].includes(row.direction)?row.direction:null,
   regime:safeText(row.regime,100),qualityScore:chartNumber(row.quality_score),signalPrice:chartNumber(row.signal_price),
   preferredEntry:chartNumber(row.preferred_entry),stop:chartNumber(row.stop),tp1:chartNumber(row.tp1),tp2:chartNumber(row.tp2),rr:chartNumber(row.rr),
   source:'RESEARCH',status:'HISTORICAL',outcome:chartTargets(row.targets_json)
