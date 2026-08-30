@@ -3,7 +3,7 @@ name: Market Edge Research
 on:
   workflow_dispatch:
   schedule:
-    - cron: '17 * * * *'
+    - cron: '17 */3 * * *'
 
 permissions:
   contents: read
@@ -15,14 +15,30 @@ concurrency:
 jobs:
   cycle:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: Restore validated candle cache
+        uses: actions/cache/restore@v4
+        with:
+          path: .research-cache
+          key: market-edge-research-cache-v1-${{ github.run_id }}
+          restore-keys: market-edge-research-cache-v1-
       - name: Run one resumable research cycle
         env:
           MARKET_EDGE_API: ${{ secrets.MARKET_EDGE_API }}
           MARKET_EDGE_RESEARCH_TOKEN: ${{ secrets.MARKET_EDGE_RESEARCH_TOKEN }}
+          RESEARCH_CHUNK_SIZE: '288'
+          RESEARCH_CHUNKS_PER_ASSET: '4'
+          RESEARCH_ACTION_BUDGET_MS: '300000'
+          RESEARCH_REQUEST_SPACING_MS: '180'
         run: node research/runner.js cycle
+      - name: Save validated candle cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: .research-cache
+          key: market-edge-research-cache-v1-${{ github.run_id }}
