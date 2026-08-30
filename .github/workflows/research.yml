@@ -21,8 +21,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
-      - run: npm ci
       - name: Run one resumable research cycle
         env:
           MARKET_EDGE_API: ${{ secrets.MARKET_EDGE_API }}
