@@ -172,6 +172,37 @@ async function researchIngest(request,env,payload,now=Date.now()){
   return {accepted:true,run_id:runId,asset,cursor_timestamp:cursor,candles_processed:processed,decision_points_written:written,outcomes_resolved:resolved,dataset};
 }
 async function researchStatus(db){const [progress,run]=await Promise.all([replayProgress(db),db.prepare(`SELECT id,runner,stage,asset,status,input_cursor,output_cursor,candles_processed,decision_points_written,outcomes_resolved,detail_json,started_at,completed_at FROM research_runs ORDER BY created_at DESC LIMIT 1`).first().catch(()=>null)]);return {...progress,lastResearchRun:run||null,runner:'github-actions-node',ml:{status:'DISABLED',sampleN:progress.totalResolvedTargets}};}
+function chartNumber(value){const number=Number(value);return Number.isFinite(number)?number:null;}
+function chartTargets(value){
+  let targets={};try{targets=JSON.parse(value||'{}');}catch{}
+  const status=safeText(targets?.status,32).toUpperCase();
+  return {
+    status:['RESOLVED','PENDING_OUTCOME','PENDING'].includes(status)?status:'PENDING',
+    tp1BeforeSl:targets?.TP1_BEFORE_SL===true?true:targets?.TP1_BEFORE_SL===false?false:null,
+    finalR:chartNumber(targets?.FINAL_R),mfe:chartNumber(targets?.MFE),mae:chartNumber(targets?.MAE),
+    breakoutFailure:targets?.BREAKOUT_FAILURE===true?true:targets?.BREAKOUT_FAILURE===false?false:null,
+    resolutionTime:chartNumber(targets?.resolution_time||targets?.resolved_at||targets?.resolution_timestamp)
+  };
+}
+function publicChartSignal(row){return {
+  signalId:safeText(row.signal_id,180),asset:safeAsset(row.asset),timestamp:chartNumber(row.timestamp),
+  strategy:safeText(row.strategy,120),direction:['long','short'].includes(row.direction)?row.direction:null,
+  regime:safeText(row.regime,100),qualityScore:chartNumber(row.quality_score),signalPrice:chartNumber(row.signal_price),
+  preferredEntry:chartNumber(row.preferred_entry),stop:chartNumber(row.stop),tp1:chartNumber(row.tp1),tp2:chartNumber(row.tp2),rr:chartNumber(row.rr),
+  source:'RESEARCH',status:'HISTORICAL',outcome:chartTargets(row.targets_json)
+};}
+async function researchChart(db,asset,requestedAround){
+  const allowed=['BTC','ETH','SOL','XRP','DOGE','LTC']; if(!db||!allowed.includes(asset)) return {asset,candles:[],signals:[],dataHealth:'UNAVAILABLE'};
+  const signalRows=(await db.prepare(`SELECT signal_id,asset,timestamp,strategy,direction,regime,quality_score,signal_price,preferred_entry,stop,tp1,tp2,rr,targets_json FROM historical_decision_points WHERE asset=? AND dataset_version='EARLY-WINDOW-RESEARCH-V1' ORDER BY timestamp DESC LIMIT 120`).bind(asset).all()).results||[];
+  const signals=signalRows.map(publicChartSignal).filter(signal=>signal.timestamp&&signal.direction);
+  const selected=Number.isFinite(requestedAround)&&requestedAround>0?requestedAround:(signals[0]?.timestamp||null);
+  const window=300_000*720,from=selected?selected-window:0,to=selected?selected+window:Date.now();
+  let candleRows=[];
+  if(selected) candleRows=(await db.prepare(`SELECT open_time,close_time,open,high,low,close,volume FROM canonical_candles WHERE asset=? AND exchange='COINBASE' AND interval='5m' AND open_time>=? AND open_time<=? ORDER BY open_time ASC LIMIT 1500`).bind(asset,from,to).all()).results||[];
+  else candleRows=((await db.prepare(`SELECT open_time,close_time,open,high,low,close,volume FROM canonical_candles WHERE asset=? AND exchange='COINBASE' AND interval='5m' ORDER BY open_time DESC LIMIT 720`).bind(asset).all()).results||[]).reverse();
+  const manifest=await db.prepare(`SELECT status,coverage,last_error FROM historical_dataset_manifests WHERE asset=? AND base_timeframe='5m' ORDER BY downloaded_at DESC LIMIT 1`).bind(asset).first().catch(()=>null);
+  return {asset,timeframe:'5m',focusTimestamp:selected,candles:candleRows.map(row=>({time:chartNumber(row.open_time),closeTime:chartNumber(row.close_time),open:chartNumber(row.open),high:chartNumber(row.high),low:chartNumber(row.low),close:chartNumber(row.close),volume:chartNumber(row.volume)})).filter(row=>row.time&&row.open&&row.high&&row.low&&row.close&&row.volume!=null),signals,dataHealth:manifest?.status||'UNKNOWN',coverage:chartNumber(manifest?.coverage),warning:manifest?.last_error?safeText(manifest.last_error,180):null};
+}
 function extractOutputText(response) {
   if(typeof response?.output_text==='string') return response.output_text;
   for(const item of response?.output||[]) for(const content of item?.content||[]) if(content?.type==='output_text'&&typeof content.text==='string') return content.text;
@@ -248,6 +279,7 @@ export async function handleRequest(request,env={},ctx={},deps={}) {
   if(request.method==='GET'&&url.pathname==='/v1/research/historical') return json(await latestHistorical(env.MARKET_EDGE_DB),200,cors);
   if(request.method==='GET'&&url.pathname==='/v1/research/replay') return json(await replayProgress(env.MARKET_EDGE_DB),200,cors);
   if(request.method==='GET'&&url.pathname==='/v1/research/status') return json(await researchStatus(env.MARKET_EDGE_DB),200,cors);
+  if(request.method==='GET'&&url.pathname==='/v1/research/chart') return json(await researchChart(env.MARKET_EDGE_DB,safeAsset(url.searchParams.get('asset')),Number(url.searchParams.get('around'))),200,cors);
   if(request.method!=='POST'||!['/v1/analyze','/v1/chat','/v1/tradingview-alert','/v1/research/ingest'].includes(url.pathname)) return json({error:{code:'NOT_FOUND',message:'Endpoint not found'}},404,cors);
   const rate=rateLimit(request,env); if(!rate.allowed) return json({error:{code:'RATE_LIMITED',message:'Too many requests. Try again shortly.'}},429,{...cors,'retry-after':String(rate.retryAfter)});
   if(!String(request.headers.get('content-type')||'').toLowerCase().includes('application/json')) return json({error:{code:'UNSUPPORTED_MEDIA',message:'Use application/json'}},415,cors);
