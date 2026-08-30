@@ -1,6 +1,6 @@
 import {runMonitor, latestMonitor, MONITOR_VERSION, WATCHLIST} from './monitor-core.mjs';
 import {runHistoricalBackfill,latestHistorical,HISTORICAL_VERSION,PRIORITY_ASSETS} from './historical-core.mjs';
-import {runReplayChunk,replayProgress} from './replay-core.mjs';
+import {runReplayChunk,replayProgress,materializeDataset} from './replay-core.mjs';
 
 const DEFAULT_ORIGINS = ['https://jamalmusialla81-hub.github.io', 'http://127.0.0.1:4173', 'http://127.0.0.1:4174', 'http://localhost:4173'];
 const MAX_BODY_BYTES = 8_500_000;
@@ -142,6 +142,35 @@ async function acceptTradingViewAlert(request,env,payload,now=Date.now()) {
   try { stored=await persistTradingViewEvidence(env.MARKET_EDGE_DB,alert,now); } catch(error) { throw Object.assign(new Error('TradingView evidence could not be persisted'),{status:503,code:'TV_STORAGE_UNAVAILABLE'}); }
   return {accepted:true,evidence:alert,storage:stored.storage,usage:'additional evidence only',execution:'disabled',deployment_verdict:'MANUAL LIVE DECISION SUPPORT / PAPER RESEARCH ONLY'};
 }
+function researchToken(request,env){
+  if(!env.RESEARCH_INGEST_TOKEN)throw Object.assign(new Error('Research ingest is disabled until its Worker secret is configured'),{status:503,code:'RESEARCH_NOT_CONFIGURED'});
+  const value=(request.headers.get('authorization')||'').replace(/^Bearer\s+/i,'');
+  if(!constantTimeEqual(value,env.RESEARCH_INGEST_TOKEN))throw Object.assign(new Error('Research ingest authentication failed'),{status:401,code:'RESEARCH_AUTH_FAILED'});
+}
+function researchDecision(input){
+  const asset=safeAsset(input?.asset),timestamp=Number(input?.timestamp),number=name=>Number(input?.[name]),required=['signal_price','preferred_entry','stop','tp1','tp2','rr'];
+  if(!['BTC','ETH','SOL','XRP','DOGE','LTC'].includes(asset)||!Number.isFinite(timestamp)||timestamp<=0||required.some(name=>!Number.isFinite(number(name))))throw Object.assign(new Error('Invalid immutable decision payload'),{status:400,code:'RESEARCH_INVALID_DECISION'});
+  const direction=input?.direction==='long'||input?.direction==='short'?input.direction:null,signalId=safeText(input?.signal_id,180),strategy=safeText(input?.strategy,120),datasetVersion=safeText(input?.dataset_version,80),sourceHash=safeText(input?.source_dataset_hash,120);
+  if(!direction||!signalId||!strategy||!datasetVersion||!sourceHash||Math.abs(number('signal_price')-number('stop'))<=0)throw Object.assign(new Error('Incomplete immutable decision payload'),{status:400,code:'RESEARCH_INVALID_DECISION'});
+  return {signalId,asset,timestamp,strategy,direction,regime:safeText(input?.regime,100)||'UNCLASSIFIED',quality:Number.isFinite(Number(input?.quality_score))?Number(input.quality_score):0,signal:number('signal_price'),entry:number('preferred_entry'),stop:number('stop'),tp1:number('tp1'),tp2:number('tp2'),rr:number('rr'),features:input?.features&&typeof input.features==='object'?input.features:{},targets:input?.targets&&typeof input.targets==='object'?input.targets:{status:'PENDING_OUTCOME'},datasetVersion,sourceHash};
+}
+async function researchIngest(request,env,payload,now=Date.now()){
+  researchToken(request,env);
+  if(payload?.operation!=='replay_commit')throw Object.assign(new Error('Unsupported research operation'),{status:400,code:'RESEARCH_INVALID_OPERATION'});
+  const asset=safeAsset(payload.asset),version=safeText(payload.dataset_version,80),sourceHash=safeText(payload.source_dataset_hash,120),runId=safeText(payload.run_id,180),cursor=Number(payload.cursor_timestamp),last=Number(payload.last_processed_timestamp),processed=Number(payload.candles_processed),inputCursor=Number(payload.input_cursor);
+  if(!['BTC','ETH','SOL','XRP','DOGE','LTC'].includes(asset)||version!=='EARLY-WINDOW-RESEARCH-V1'||!runId||!sourceHash||![cursor,last,processed,inputCursor].every(Number.isFinite)||processed<1||processed>288||last>=cursor)throw Object.assign(new Error('Invalid replay commit'),{status:400,code:'RESEARCH_INVALID_COMMIT'});
+  const decisions=(Array.isArray(payload.decision_points)?payload.decision_points:[]);if(decisions.length>16)throw Object.assign(new Error('Too many decisions in one commit'),{status:413,code:'RESEARCH_COMMIT_TOO_LARGE'});
+  const clean=decisions.map(researchDecision);if(clean.some(row=>row.asset!==asset||row.datasetVersion!==version||row.sourceHash!==sourceHash||row.timestamp<inputCursor||row.timestamp>=cursor))throw Object.assign(new Error('Decision does not belong to this replay window'),{status:400,code:'RESEARCH_WINDOW_MISMATCH'});
+  const statements=clean.map(row=>env.MARKET_EDGE_DB.prepare(`INSERT OR IGNORE INTO historical_decision_points (signal_id,asset,timestamp,strategy,direction,regime,quality_score,signal_price,preferred_entry,stop,tp1,tp2,rr,features_json,targets_json,dataset_version,source_dataset_hash,created_at,immutable) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1)`).bind(row.signalId,row.asset,row.timestamp,row.strategy,row.direction,row.regime,row.quality,row.signal,row.entry,row.stop,row.tp1,row.tp2,row.rr,JSON.stringify(row.features),JSON.stringify(row.targets),row.datasetVersion,row.sourceHash,now));
+  if(statements.length)await env.MARKET_EDGE_DB.batch(statements);
+  const written=Number((await env.MARKET_EDGE_DB.prepare(`SELECT COUNT(*) AS count FROM historical_decision_points WHERE asset=? AND dataset_version=? AND created_at=?`).bind(asset,version,now).first())?.count)||0;
+  const resolved=clean.filter(row=>row.targets?.status==='RESOLVED').length;
+  await env.MARKET_EDGE_DB.prepare(`INSERT INTO replay_states (asset,dataset_version,source_dataset_hash,status,cursor_timestamp,last_processed_timestamp,candles_processed,decision_points_written,targets_written,started_at,updated_at,last_error) VALUES (?,?,?,?,?,?,?,?,?,?,?,NULL) ON CONFLICT(asset) DO UPDATE SET source_dataset_hash=excluded.source_dataset_hash,status='RUNNING',cursor_timestamp=excluded.cursor_timestamp,last_processed_timestamp=excluded.last_processed_timestamp,candles_processed=replay_states.candles_processed+excluded.candles_processed,decision_points_written=replay_states.decision_points_written+excluded.decision_points_written,targets_written=replay_states.targets_written+excluded.targets_written,updated_at=excluded.updated_at,last_error=NULL`).bind(asset,version,sourceHash,'RUNNING',cursor,last,processed,written,resolved,Number(payload.started_at)||now,now).run();
+  const dataset=await materializeDataset(env.MARKET_EDGE_DB,now),detail={provider:safeText(payload?.detail?.provider,40),symbol:safeText(payload?.detail?.symbol,24),received_candles:Number(payload?.detail?.received_candles)||0,known_btc_checked:payload?.detail?.known_btc_checked===true};
+  await env.MARKET_EDGE_DB.prepare(`INSERT OR REPLACE INTO research_runs (id,runner,stage,asset,status,input_cursor,output_cursor,candles_processed,decision_points_written,outcomes_resolved,detail_json,started_at,completed_at,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(runId,'github-actions-node','replay',asset,'COMPLETE',inputCursor,cursor,processed,written,resolved,JSON.stringify(detail),Number(payload.started_at)||now,now,now).run();
+  return {accepted:true,run_id:runId,asset,cursor_timestamp:cursor,candles_processed:processed,decision_points_written:written,outcomes_resolved:resolved,dataset};
+}
+async function researchStatus(db){const [progress,run]=await Promise.all([replayProgress(db),db.prepare(`SELECT id,runner,stage,asset,status,input_cursor,output_cursor,candles_processed,decision_points_written,outcomes_resolved,detail_json,started_at,completed_at FROM research_runs ORDER BY created_at DESC LIMIT 1`).first().catch(()=>null)]);return {...progress,lastResearchRun:run||null,runner:'github-actions-node',ml:{status:'DISABLED',sampleN:progress.totalResolvedTargets}};}
 function extractOutputText(response) {
   if(typeof response?.output_text==='string') return response.output_text;
   for(const item of response?.output||[]) for(const content of item?.content||[]) if(content?.type==='output_text'&&typeof content.text==='string') return content.text;
@@ -217,7 +246,8 @@ export async function handleRequest(request,env={},ctx={},deps={}) {
   if(request.method==='GET'&&url.pathname==='/v1/monitor/latest') return json(await latestMonitor(env.MARKET_EDGE_DB),200,cors);
   if(request.method==='GET'&&url.pathname==='/v1/research/historical') return json(await latestHistorical(env.MARKET_EDGE_DB),200,cors);
   if(request.method==='GET'&&url.pathname==='/v1/research/replay') return json(await replayProgress(env.MARKET_EDGE_DB),200,cors);
-  if(request.method!=='POST'||!['/v1/analyze','/v1/chat','/v1/tradingview-alert'].includes(url.pathname)) return json({error:{code:'NOT_FOUND',message:'Endpoint not found'}},404,cors);
+  if(request.method==='GET'&&url.pathname==='/v1/research/status') return json(await researchStatus(env.MARKET_EDGE_DB),200,cors);
+  if(request.method!=='POST'||!['/v1/analyze','/v1/chat','/v1/tradingview-alert','/v1/research/ingest'].includes(url.pathname)) return json({error:{code:'NOT_FOUND',message:'Endpoint not found'}},404,cors);
   const rate=rateLimit(request,env); if(!rate.allowed) return json({error:{code:'RATE_LIMITED',message:'Too many requests. Try again shortly.'}},429,{...cors,'retry-after':String(rate.retryAfter)});
   if(!String(request.headers.get('content-type')||'').toLowerCase().includes('application/json')) return json({error:{code:'UNSUPPORTED_MEDIA',message:'Use application/json'}},415,cors);
   const declared=Number(request.headers.get('content-length')||0); if(declared>MAX_BODY_BYTES) return json({error:{code:'REQUEST_TOO_LARGE',message:'Request is too large'}},413,cors);
@@ -225,7 +255,7 @@ export async function handleRequest(request,env={},ctx={},deps={}) {
   try { const text=await request.text(); if(new TextEncoder().encode(text).byteLength>MAX_BODY_BYTES) throw Object.assign(new Error('Request is too large'),{status:413,code:'REQUEST_TOO_LARGE'}); payload=JSON.parse(text); }
   catch(error) { return json({error:{code:error.code||'BAD_JSON',message:error.message==='Request is too large'?error.message:'Request body must be valid JSON'}},error.status||400,cors); }
   try {
-    const data=url.pathname==='/v1/analyze'?await analyze(request,env,payload,fetchImpl):url.pathname==='/v1/chat'?await chat(request,env,payload,fetchImpl):await acceptTradingViewAlert(request,env,payload,deps.now||Date.now());
+    const data=url.pathname==='/v1/analyze'?await analyze(request,env,payload,fetchImpl):url.pathname==='/v1/chat'?await chat(request,env,payload,fetchImpl):url.pathname==='/v1/tradingview-alert'?await acceptTradingViewAlert(request,env,payload,deps.now||Date.now()):await researchIngest(request,env,payload,deps.now||Date.now());
     return json(data,200,{...cors,'x-ratelimit-remaining':String(rate.remaining)});
   } catch(error) {
     const status=error.status||(/too large/i.test(error.message)?413:400),code=error.code||(status===413?'REQUEST_TOO_LARGE':'INVALID_REQUEST');
