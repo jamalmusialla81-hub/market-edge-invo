@@ -1234,7 +1234,9 @@
       els.dataHealth.innerHTML=`<strong>${best.symbol} 4h · ${meta.dataQualityStatus} · ${meta.dataHealthScore.toFixed(0)}/100.</strong> ${meta.candleCount}/${meta.expectedCandleCount} completed candles · ${(meta.coverage*100).toFixed(2)}% coverage · ${meta.gapCount} gaps · ${meta.partialCandleCount} partial excluded · hash ${meta.datasetHash}. ${report.errors.length?`Rejected: ${report.errors[0]}`:'This verifies the browser sample, not multi-year depth.'}`;
     }
     function hasTradeGeometry(q) {
-      return Boolean(q?.risk?.valid&&['long','short'].includes(q.direction)&&[q.entry,q.stop,q.target1,q.target2].every(value=>Number.isFinite(Number(value)))&&Number(q.rr1||q.rr)>0);
+      const risk=q?.risk;
+      const rr1=Number(q?.rr1??q?.rr),rr2=Number(q?.rr2??q?.rr);
+      return Boolean(risk?.valid&&['long','short'].includes(q.direction)&&[q.entry,q.stop,q.target1,q.target2,rr1,rr2,risk.notional,risk.margin,risk.maxLoss,risk.lossAtStop,risk.leverage].every(value=>Number.isFinite(Number(value)))&&rr1>0&&rr2>0);
     }
     function decisionBlockers(q) {
       const messages=[];
@@ -1330,7 +1332,7 @@
         bindDecisionControls();
         return;
       }
-      const risk=q.risk, isShort=q.direction==='short', currency='USDC';
+      const risk=q.risk, isShort=q.direction==='short', currency='USDC', rr1=Number(q.rr1??q.rr),rr2=Number(q.rr2??q.rr),entryZone={low:Number(q.entryZone?.low??q.entry),high:Number(q.entryZone?.high??q.entry)};
       els.rec.innerHTML=common+`
         <div class="reasons" style="margin-top:18px">${(q.reasons||[]).slice(0,6).map(reason=>`<div class="reason"><i>✓</i><span>${reason}</span></div>`).join('')}</div>
         <div class="order-plan">
@@ -1340,7 +1342,7 @@
           <div class="plan-box"><span>Leverage selected</span><strong>${risk.leverage}× · lowest required</strong></div>
           <div class="plan-box"><span>Estimated round-trip fees</span><strong>${(risk.notional*risk.roundTripCostPct).toFixed(2)} ${currency}</strong></div>
           <div class="plan-box"><span>Loss at stop incl. costs</span><strong>${risk.lossAtStop.toFixed(2)} ${currency}</strong></div>
-          <div class="plan-box"><span>Risk / reward</span><strong>${q.rr1.toFixed(2)}R / ${q.rr2.toFixed(2)}R</strong></div>
+          <div class="plan-box"><span>Risk / reward</span><strong>${rr1.toFixed(2)}R / ${rr2.toFixed(2)}R</strong></div>
           <div class="plan-box"><span>Liquidation distance</span><strong>${(risk.liquidationDistancePct*100).toFixed(1)}%</strong></div>
         </div>
         <section class="invo-entry" aria-label="Invo inputs">
@@ -1349,7 +1351,7 @@
             <div class="invo-field"><b>1</b><span>Asset</span><strong>${best.name} (${best.symbol})</strong></div>
             <div class="invo-field"><b>•</b><span>Invo instrument</span><strong>${best.invoInstrument||best.symbol}</strong></div>
             <div class="invo-field"><b>2</b><span>Direction</span><strong class="${isShort?'short-value':'long-value'}">${directionText}</strong></div>
-            <div class="invo-field"><b>3</b><span>Entry zone</span><strong>${formatPrice(q.entryZone.low)}–${formatPrice(q.entryZone.high)} USDT</strong></div>
+            <div class="invo-field"><b>3</b><span>Entry zone</span><strong>${formatPrice(entryZone.low)}–${formatPrice(entryZone.high)} USDT</strong></div>
             <div class="invo-field"><b>4</b><span>Ideal entry / current reference</span><strong>${formatPrice(q.idealEntry)} / ${formatPrice(q.entry)} USDT</strong></div>
             <div class="invo-field"><b>5</b><span>Stop-Loss Price</span><strong>${formatPrice(q.stop)} USDT</strong></div>
             <div class="invo-field"><b>6</b><span>TP1 / TP2</span><strong>${formatPrice(q.target1)} / ${formatPrice(q.target2)} USDT</strong></div>
