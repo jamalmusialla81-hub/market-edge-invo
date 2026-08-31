@@ -2,6 +2,12 @@ name: Market Edge Research
 
 on:
   workflow_dispatch:
+    inputs:
+      run_ml_research:
+        description: 'Run one immutable Dataset V1 ML research generation after replay'
+        required: false
+        default: false
+        type: boolean
   schedule:
     - cron: '17 */3 * * *'
 
@@ -42,3 +48,19 @@ jobs:
         with:
           path: .research-cache
           key: market-edge-research-cache-v1-${{ github.run_id }}
+
+  ml-research:
+    if: github.event_name == 'workflow_dispatch' && inputs.run_ml_research == true
+    needs: cycle
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Train immutable ML research generation
+        env:
+          MARKET_EDGE_API: ${{ secrets.MARKET_EDGE_API }}
+          MARKET_EDGE_RESEARCH_TOKEN: ${{ secrets.MARKET_EDGE_RESEARCH_TOKEN }}
+        run: node research/ml-runner.js

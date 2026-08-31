@@ -4,7 +4,7 @@
   "type": "commonjs",
   "packageManager": "pnpm@11.19.0",
   "scripts": {
-    "test": "node research-engine.test.js && node replay-engine.test.js && node quant-engine.test.js && node tradingview-compat.test.js && node forward-engine.test.js && node manual-trade-engine.test.js && node ml-engine.test.js && node ai-engine.test.js && node backend/monitor-core.test.mjs && node backend/historical-core.test.mjs && node backend/worker.test.mjs",
+    "test": "node research-engine.test.js && node replay-engine.test.js && node quant-engine.test.js && node tradingview-compat.test.js && node forward-engine.test.js && node manual-trade-engine.test.js && node ml-engine.test.js && node research/ml-runner.test.js && node ai-engine.test.js && node backend/monitor-core.test.mjs && node backend/historical-core.test.mjs && node backend/worker.test.mjs",
     "test:ai": "node ai-engine.test.js && node backend/worker.test.mjs",
     "deploy:ai": "wrangler deploy --config backend/wrangler.jsonc"
   },
