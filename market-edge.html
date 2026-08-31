@@ -519,7 +519,7 @@
 
       <article class="card">
         <div class="card-head">
-          <div><p class="eyebrow">Opportunity radar</p><h2>20 liquid perpetuals</h2></div>
+          <div><p class="eyebrow">Opportunity radar</p><h2 id="marketUniverseTitle">Live Invo perpetuals</h2></div>
           <select id="opportunityFilter" class="filter-select" aria-label="Opportunity filter">
             <option value="overall">Best overall</option>
             <option value="long">Long only</option>
@@ -776,6 +776,7 @@
   <script src="forward-engine.js?v=14"></script>
   <script src="manual-trade-engine.js?v=17"></script>
   <script src="ml-engine.js?v=16"></script>
+  <script src="invo-market-universe.js?v=1"></script>
   <script src="ai-engine.js?v=14"></script>
   <script>
     function setupAppShell() {
@@ -803,7 +804,7 @@
       if(!localStorage.getItem('market-edge-onboarding-v1')){showStep();setTimeout(()=>modal.showModal(),180);}
     }
     setupAppShell();
-    const MARKETS = ['BTC','ETH','SOL','XRP','DOGE','ADA','AVAX','LINK','SUI','PENGU','BNB','LTC','DOT','NEAR','APT','ARB','OP','UNI','AAVE','INJ'];
+    const INVO_SCAN_LIMIT = 40;
     const LABELS = { BTC:'Bitcoin', ETH:'Ethereum', SOL:'Solana', XRP:'XRP', DOGE:'Dogecoin', ADA:'Cardano', AVAX:'Avalanche', LINK:'Chainlink', SUI:'Sui', PENGU:'Pudgy Penguins', BNB:'BNB', LTC:'Litecoin', DOT:'Polkadot', NEAR:'NEAR', APT:'Aptos', ARB:'Arbitrum', OP:'Optimism', UNI:'Uniswap', AAVE:'Aave', INJ:'Injective' };
     const HYPERLIQUID_API = 'https://api.hyperliquid.xyz/info';
     const MIN_ORDER_NOTIONAL = 10;
@@ -813,7 +814,7 @@
       DOGE:'validation −0.76R, test −1.15R and LONG expectancy −0.92R overall',
       LTC:'validation −0.40R, test −0.22R and LONG expectancy −0.46R overall'
     };
-    let latestBest = null, latestResults = [], socialRecords = [], chartTimeframe='5m', lastChartPrice=null, scanSequence=0, researchMlState={status:'UNAVAILABLE'};
+    let latestBest = null, latestResults = [], socialRecords = [], chartTimeframe='5m', lastChartPrice=null, scanSequence=0, researchMlState={status:'UNAVAILABLE'}, latestInvoUniverse=null, latestInvoScanAudit=null;
     const chartState={best:null,historical:null,mode:'live',requestId:0,visibleBars:92,offset:0,signalFilter:'all',directionFilter:'all',hover:null,drag:null,markerHits:[],resizeObserver:null,selectedSignalId:null,selectedPulseUntil:0};
     const chartSignalCounts={};
     const els = {
@@ -824,7 +825,7 @@
       status: document.getElementById('feedStatus'), list: document.getElementById('marketList'), rec: document.getElementById('recommendation'),
       title: document.getElementById('decisionTitle'), badge: document.getElementById('decisionBadge'), toast: document.getElementById('toast'),
       alternatives: document.getElementById('alternatives'),
-      sourcePills: document.getElementById('sourcePills'), sourceNote: document.getElementById('sourceNote'),
+      sourcePills: document.getElementById('sourcePills'), sourceNote: document.getElementById('sourceNote'), marketUniverseTitle:document.getElementById('marketUniverseTitle'),
       traderWins: document.getElementById('traderWins'), traderLosses: document.getElementById('traderLosses'), traderPnl: document.getElementById('traderPnl'),
       traderLeverage: document.getElementById('traderLeverage'), traderSide: document.getElementById('traderSide'),
       checkTrader: document.getElementById('checkTrader'), traderResult: document.getElementById('traderResult'),
@@ -849,6 +850,14 @@
         maxDailyLoss: Number(els.maxDailyLoss.value),
         maxDrawdown: Number(els.maxDrawdown.value)
       };
+    }
+    async function loadInvoTradeableMarkets() {
+      if (!window.MarketEdgeInvoUniverse?.build) throw new Error('Invo instrument registry is unavailable');
+      const response=await fetch(HYPERLIQUID_API,{method:'POST',headers:{'Accept':'application/json','Content-Type':'application/json'},body:JSON.stringify({type:'metaAndAssetCtxs'})});
+      if(!response.ok)throw new Error('Invo live instrument source is unavailable');
+      const universe=window.MarketEdgeInvoUniverse.build(await response.json(),{limit:INVO_SCAN_LIMIT});
+      if(!universe.selected.length)throw new Error('Invo returned no eligible perpetual instruments');
+      return universe;
     }
 
     function ema(values, period) {
@@ -980,10 +989,11 @@
       return scoreMarket(`${coin}-PERP`, candles, 'Coinbase');
     }
 
-    async function loadMarket(coin) {
-      const settled = await Promise.allSettled([loadHyperliquid(coin), loadBinance(coin), loadCoinbase(coin)]);
+    async function loadMarket(market) {
+      const {invoInstrument,dataSymbol}=market;
+      const settled = await Promise.allSettled([loadHyperliquid(invoInstrument), loadBinance(dataSymbol), loadCoinbase(dataSymbol)]);
       const opinions = settled.filter(item=>item.status==='fulfilled').map(item=>item.value);
-      if (!opinions.length) throw new Error(`All feeds unavailable for ${coin}`);
+      if (!opinions.length) throw new Error(`All feeds unavailable for ${invoInstrument}`);
       const reference = opinions.find(item=>item.source==='Hyperliquid') || opinions[0];
       const avgLongScore = opinions.reduce((sum,item)=>sum+item.longScore,0) / opinions.length;
       const avgShortScore = opinions.reduce((sum,item)=>sum+item.shortScore,0) / opinions.length;
@@ -1002,7 +1012,7 @@
         : direction ? `${agreeVotes} of ${opinions.length} independent feeds show a ${direction} setup` : `Feeds do not agree strongly enough on a long or short`;
       let quant = MarketEdgeQuant.evaluateSetup({
         timeframes: { h4: reference.candles },
-        social: MarketEdgeQuant.aggregateSocial(socialRecords, coin),
+        social: MarketEdgeQuant.aggregateSocial(socialRecords, invoInstrument),
         settings: { ...currentSettings(), requireMTF:false }
       });
       const opinionDirections = opinions.map(item=>item.longScore > item.shortScore ? 'long' : item.shortScore > item.longScore ? 'short' : 'neutral');
@@ -1014,6 +1024,7 @@
       }
       return {
         ...reference,
+        symbol:invoInstrument, name:LABELS[invoInstrument]||invoInstrument, invoInstrument, dataSymbol,
         score:+score.toFixed(1), action, direction, lean, reasons:[consensusReason, ...directionalReference.reasons],
         buyVotes, shortVotes, agreeVotes, avgLongScore, avgShortScore,
         sourceCount:opinions.length, sources:opinions.map(item=>item.source), sourceOpinions:opinions,
@@ -1023,10 +1034,10 @@
     async function enrichTimeframes(result) {
       try {
         const [m5, m15, h1, d1] = await Promise.all([
-          loadHyperliquidCandles(result.symbol, '5m', 500),
-          loadHyperliquidCandles(result.symbol, '15m', 320),
-          loadHyperliquidCandles(result.symbol, '1h', 420),
-          loadHyperliquidCandles(result.symbol, '1d', 260)
+          loadHyperliquidCandles(result.invoInstrument, '5m', 500),
+          loadHyperliquidCandles(result.invoInstrument, '15m', 320),
+          loadHyperliquidCandles(result.invoInstrument, '1h', 420),
+          loadHyperliquidCandles(result.invoInstrument, '1d', 260)
         ]);
         let quant = MarketEdgeQuant.evaluateSetup({
           timeframes:{ m5, m15, h1, h4:result.candles, d1 },
@@ -1051,7 +1062,7 @@
         };
         return { ...result, quant, quality:quant.quality, matchingFeeds, timeframes:{m5,m15,h1,h4:result.candles,d1} };
       } catch (error) {
-        return result;
+        return {...result,mtfDataError:error?.message||'Multi-timeframe Invo candle data unavailable'};
       }
     }
     function signalLabel(action) { return action === 'buy' ? 'Long setup' : action === 'short' ? 'Short setup' : action === 'watch' ? 'Watch' : 'Avoid'; }
@@ -1060,9 +1071,10 @@
       const counts = Object.fromEntries(names.map(name=>[name, results.filter(result=>result.sources.includes(name)).length]));
       els.sourcePills.innerHTML = names.map(name=>`<span class="source-pill ${counts[name]?'live':''}"><i></i>${name} · ${counts[name]}/${results.length}</span>`).join('');
       const liveCount = names.filter(name=>counts[name]).length;
+      const audit=latestInvoScanAudit||{},invo=`${audit.scanned||results.length}/${audit.found||results.length} live Invo perpetuals scanned`;
       els.sourceNote.textContent = liveCount >= 2
-        ? `${liveCount} independent sources responded. A trade needs agreement from at least two.`
-        : 'Only one source responded. The app will show wait instead of forcing a trade.';
+        ? `${invo} · ${liveCount} independent sources responded · ${audit.dataFailures||0} data failures. A trade needs agreement from at least two.`
+        : `${invo} · only one source responded · ${audit.dataFailures||0} data failures. The app will show wait instead of forcing a trade.`;
     }
     function renderList(results) {
       const filter = els.opportunityFilter.value;
@@ -1141,7 +1153,7 @@
     function bindInteractiveChart(){const canvas=els.chartCanvas.querySelector('canvas'),tooltip=els.chartCanvas.querySelector('.chart-tooltip');if(!canvas||!tooltip)return;const positionTooltip=(event,signal)=>{tooltip.innerHTML=chartTooltip(signal);tooltip.classList.add('visible');const bounds=els.chartCanvas.getBoundingClientRect(),x=Math.min(bounds.width-284,Math.max(8,event.clientX-bounds.left+12)),y=Math.min(bounds.height-20,Math.max(8,event.clientY-bounds.top+12));tooltip.style.left=`${x}px`;tooltip.style.top=`${y}px`;};canvas.addEventListener('pointermove',event=>{const bounds=canvas.getBoundingClientRect(),x=event.clientX-bounds.left,y=event.clientY-bounds.top;if(chartState.drag){chartState.offset=Math.max(0,Math.min(chartState.drag.max,chartState.drag.offset+Math.round((chartState.drag.x-x)/Math.max(1,bounds.width)*chartState.visibleBars)));drawInteractiveChart();return;}chartState.hover={x,y};const hit=chartState.markerHits.find(marker=>Math.hypot(marker.x-x,marker.y-y)<26);if(hit)positionTooltip(event,hit.signal);else tooltip.classList.remove('visible');drawInteractiveChart();});canvas.addEventListener('pointerleave',()=>{chartState.hover=null;tooltip.classList.remove('visible');drawInteractiveChart();});canvas.addEventListener('pointerdown',event=>{const bounds=canvas.getBoundingClientRect(),x=event.clientX-bounds.left,y=event.clientY-bounds.top,hit=chartState.markerHits.find(marker=>Math.hypot(marker.x-x,marker.y-y)<26);if(hit){if(hit.signal.source==='RESEARCH'){chartState.selectedSignalId=chartSignalKey(hit.signal);chartState.selectedPulseUntil=performance.now()+460;els.chartSignalFocus.value=String(hit.signal.timestamp);drawInteractiveChart();}positionTooltip(event,hit.signal);return;}const frame={'5m':'m5','15m':'m15','1h':'h1','4h':'h4','1d':'d1'}[chartTimeframe],available=chartState.mode==='historical'?chartState.historical?.candles:chartState.best?.timeframes?.[frame]||chartState.best?.candles||[];chartState.drag={x,offset:chartState.offset,max:Math.max(0,available.length-chartState.visibleBars)};canvas.setPointerCapture(event.pointerId);});canvas.addEventListener('pointerup',()=>{chartState.drag=null;});canvas.addEventListener('wheel',event=>{event.preventDefault();chartState.visibleBars=Math.max(24,Math.min(260,chartState.visibleBars+(event.deltaY>0?12:-12)));drawInteractiveChart();},{passive:false});}
     function renderChartStage(best) {
       const changedAsset=chartState.best?.symbol!==best?.symbol;chartState.best=best;if(changedAsset){chartState.selectedSignalId=null;chartState.mode='live';chartState.historical=null;chartState.offset=0;chartState.requestId++;}if(!best){els.chartAsset.textContent='Select a market';els.chartPrice.textContent='—';els.chartChange.textContent='—';els.chartMeta.textContent='Completed candles only';els.chartCanvas.innerHTML='<div class="chart-empty"><strong>Market structure appears after a scan</strong><span>Completed candles only · no order execution</span></div>';els.chartSignals.innerHTML='<span>Trend —</span><span>Structure —</span><span>Momentum —</span><span>Volume —</span><span>Regime —</span>';renderSelectedSignal();return;}
-      const q=best.quant||{},price=Number(best.price),change=Number(best.change24);els.chartAsset.textContent=`${best.symbol}USDT · ${chartTimeframe}`;els.chartPrice.textContent=Number.isFinite(price)?`$${formatPrice(price)}`:'—';els.chartChange.textContent=Number.isFinite(change)?`${change>=0?'+':''}${change.toFixed(2)}% 24h`:'—';els.chartChange.className=`chart-change ${Number.isFinite(change)?change>=0?'positive':'negative':''}`;els.chartMeta.textContent=`${best.sourceCount||0} live feeds · loading research markers`;els.chartVerify.href=MarketEdgeTradingView.chartUrl('BINANCE',best.symbol,'USDT');
+      const q=best.quant||{},price=Number(best.price),change=Number(best.change24);els.chartAsset.textContent=`${best.symbol}USDT · ${chartTimeframe}`;els.chartPrice.textContent=Number.isFinite(price)?`$${formatPrice(price)}`:'—';els.chartChange.textContent=Number.isFinite(change)?`${change>=0?'+':''}${change.toFixed(2)}% 24h`:'—';els.chartChange.className=`chart-change ${Number.isFinite(change)?change>=0?'positive':'negative':''}`;els.chartMeta.textContent=`${best.sourceCount||0} live feeds · loading research markers`;els.chartVerify.href=MarketEdgeTradingView.chartUrl('BINANCE',best.dataSymbol||best.symbol,'USDT');
       if(Number.isFinite(price)&&lastChartPrice!=null&&price!==lastChartPrice){els.chartPrice.classList.remove('price-flash-up','price-flash-down');void els.chartPrice.offsetWidth;els.chartPrice.classList.add(price>lastChartPrice?'price-flash-up':'price-flash-down');}lastChartPrice=price;
       els.chartCanvas.innerHTML='<canvas aria-label="Interactive market chart"></canvas><div class="chart-tooltip" role="status"></div><div class="chart-note">Live completed candles · drag to pan, scroll to zoom.</div>';bindInteractiveChart();if(chartState.resizeObserver)chartState.resizeObserver.disconnect();chartState.resizeObserver=new ResizeObserver(()=>drawInteractiveChart());chartState.resizeObserver.observe(els.chartCanvas);drawInteractiveChart();
       els.chartSignals.innerHTML=[['Trend',q.frame?.structure?.trend||'—'],['Structure',q.frame?.structure?.label||'—'],['Momentum',Number.isFinite(q.frame?.rsi)?`RSI ${q.frame.rsi.toFixed(0)}`:'—'],['Volume',Number.isFinite(q.frame?.relativeVolume)?`${q.frame.relativeVolume.toFixed(2)}×`:'—'],['Regime',q.regime||'—']].map(([label,value])=>`<span>${label} <b>${value}</b></span>`).join('');loadHistoricalChart(best.symbol);
@@ -1294,7 +1306,7 @@
           <div class="evidence-item"><span>ML strategy influence</span><strong>${q.mlStrategyInfluence||'INSUFFICIENT EVIDENCE'}</strong></div>
           <div class="evidence-item"><span>Combined ranking</span><strong>${Number.isFinite(q.combinedScore)?q.combinedScore.toFixed(0)+'/100':'Quant-only'}</strong></div>
         </div></details>
-        <div class="evidence-links"><a class="evidence-link" href="${MarketEdgeTradingView.chartUrl('BINANCE',best.symbol,'USDT')}" target="_blank" rel="noopener noreferrer">Verify ${best.symbol} on TradingView</a></div>`;
+        <div class="evidence-links"><a class="evidence-link" href="${MarketEdgeTradingView.chartUrl('BINANCE',best.dataSymbol||best.symbol,'USDT')}" target="_blank" rel="noopener noreferrer">Verify ${best.symbol} on TradingView</a></div>`;
       if (!hasGeometry) {
         els.rec.innerHTML=common+`
           <div class="invo-entry"><div class="invo-entry-head"><div><h3>No actionable setup</h3><p>${decisionBlockers(q).join(' ')||'The strategy did not produce valid entry, stop and target levels from completed market data.'}</p></div><span class="badge ${decisionClass}">${decision}</span></div></div>`;
@@ -1318,6 +1330,7 @@
           <div class="invo-entry-head"><div><h3>Invo inputs</h3><p>Use these current levels only after checking Invo's live mark price. Position/contract value and margin are deliberately shown as different numbers.</p></div><span class="badge ${isShort?'short':'buy'}">${directionText}</span></div>
           <div class="invo-fields">
             <div class="invo-field"><b>1</b><span>Asset</span><strong>${best.name} (${best.symbol})</strong></div>
+            <div class="invo-field"><b>•</b><span>Invo instrument</span><strong>${best.invoInstrument||best.symbol}</strong></div>
             <div class="invo-field"><b>2</b><span>Direction</span><strong class="${isShort?'short-value':'long-value'}">${directionText}</strong></div>
             <div class="invo-field"><b>3</b><span>Entry zone</span><strong>${formatPrice(q.entryZone.low)}–${formatPrice(q.entryZone.high)} USDT</strong></div>
             <div class="invo-field"><b>4</b><span>Ideal entry / current reference</span><strong>${formatPrice(q.idealEntry)} / ${formatPrice(q.entry)} USDT</strong></div>
@@ -1338,7 +1351,7 @@
       const ack=document.getElementById('ack'), prepare=document.getElementById('prepare');
       ack?.addEventListener('change',()=>prepare.disabled=!ack.checked);
       prepare?.addEventListener('click',async()=>{
-        const text=`MARKET EDGE\n\n${best.symbol} ${directionText}\nStrategy: ${q.strategy}\n\nEntry: ${formatPrice(q.entry)} USDT\nStop: ${formatPrice(q.stop)} USDT\nTP1: ${formatPrice(q.target1)} USDT\nTP2: ${formatPrice(q.target2)} USDT\nR:R: ${Number(q.rr1||q.rr).toFixed(2)}R / ${Number(q.rr2||q.rr).toFixed(2)}R\n\nLeverage: ${risk.leverage}x\nAllocation: ${(risk.margin/Math.max(1,Number(els.balance.value))*100).toFixed(1)}%\nPosition Size: ${risk.notional.toFixed(2)} USDC notional\nMargin: ${risk.margin.toFixed(2)} USDC\nRisk: ${(Number(els.risk.value)*100).toFixed(1)}%\nLoss at Stop: ${risk.lossAtStop.toFixed(2)} USDC\n\nQuant: ${q.setupQuality}/100\nML: ${mlCandidateLabel(q)}\nCombined: ${Number.isFinite(q.combinedScore)?q.combinedScore.toFixed(0)+'/100':'Quant-only'}\nConfidence: ${q.mlStrategyInfluence?.includes('CHAMPION')?'HIGH':q.mlStrategyInfluence?.includes('%')?'EXPERIMENTAL':'INSUFFICIENT EVIDENCE'}\nStrict verdict: ${strictVerdict}`;
+        const text=`MARKET EDGE\n\n${best.symbol} ${directionText}\nInvo instrument: ${best.invoInstrument||best.symbol}\nStrategy: ${q.strategy}\n\nEntry: ${formatPrice(q.entry)} USDT\nStop: ${formatPrice(q.stop)} USDT\nTP1: ${formatPrice(q.target1)} USDT\nTP2: ${formatPrice(q.target2)} USDT\nR:R: ${Number(q.rr1||q.rr).toFixed(2)}R / ${Number(q.rr2||q.rr).toFixed(2)}R\n\nLeverage: ${risk.leverage}x\nAllocation: ${(risk.margin/Math.max(1,Number(els.balance.value))*100).toFixed(1)}%\nPosition Size: ${risk.notional.toFixed(2)} USDC notional\nMargin: ${risk.margin.toFixed(2)} USDC\nRisk: ${(Number(els.risk.value)*100).toFixed(1)}%\nLoss at Stop: ${risk.lossAtStop.toFixed(2)} USDC\n\nQuant: ${q.setupQuality}/100\nML: ${mlCandidateLabel(q)}\nCombined: ${Number.isFinite(q.combinedScore)?q.combinedScore.toFixed(0)+'/100':'Quant-only'}\nConfidence: ${q.mlStrategyInfluence?.includes('CHAMPION')?'HIGH':q.mlStrategyInfluence?.includes('%')?'EXPERIMENTAL':'INSUFFICIENT EVIDENCE'}\nStrict verdict: ${strictVerdict}`;
         await navigator.clipboard.writeText(text).catch(()=>{}); showToast('Trade details copied. Verify every live field before submitting.');
       });
       document.getElementById('recordManualTrade')?.addEventListener('click',()=>recordManualTrade(best,q,risk));
@@ -1551,13 +1564,21 @@
       const requestId=++scanSequence;
       els.scan.disabled = true; els.scan.textContent = 'Scanning…';
       els.status.className = 'status'; els.status.querySelector('span:last-child').textContent = 'Loading live candles';
-      els.list.innerHTML = '<div class="radar-loading" aria-live="polite"><div class="empty"><strong>Scanning 20 markets</strong>Checking independent feeds, completed candles and strategy gates.</div><i></i><i></i><i></i><i></i><i></i></div>';
+      els.list.innerHTML = '<div class="radar-loading" aria-live="polite"><div class="empty"><strong>Loading live Invo perpetuals</strong>Only instruments currently returned by Invo’s Hyperliquid perpetual source will be scanned.</div><i></i><i></i><i></i><i></i><i></i></div>';
       try {
-        const base=(await promisePool(MARKETS,loadMarket,4)).filter(Boolean);
+        const invoUniverse=await loadInvoTradeableMarkets();
+        if(requestId!==scanSequence)return;
+        latestInvoUniverse=invoUniverse;
+        els.marketUniverseTitle.textContent=`${invoUniverse.selected.length} liquid Invo perpetuals`;
+        els.list.innerHTML=`<div class="radar-loading" aria-live="polite"><div class="empty"><strong>Scanning ${invoUniverse.selected.length} Invo markets</strong>Checking live Invo instruments, independent feeds, completed candles and strategy gates.</div><i></i><i></i><i></i><i></i><i></i></div>`;
+        const baseAttempts=await promisePool(invoUniverse.selected,async market=>{try{return {market,result:await loadMarket(market)};}catch(error){return {market,error:error?.message||'Market data unavailable'};}},4);
+        const base=baseAttempts.filter(attempt=>attempt?.result).map(attempt=>attempt.result);
+        const baseFailures=baseAttempts.filter(attempt=>attempt?.error);
         if(requestId!==scanSequence)return;
         els.status.querySelector('span:last-child').textContent='Validating all markets across 5m, 15m, 1h, 4h and 1d';
         const enriched=(await promisePool(base,enrichTimeframes,3)).filter(Boolean);
         if(requestId!==scanSequence)return;
+        latestInvoScanAudit={found:invoUniverse.totalEligible,scanned:invoUniverse.selected.length,excluded:invoUniverse.excluded,dataFailures:baseFailures.length+enriched.filter(result=>result.mtfDataError).length,baseFailures,mtfFailures:enriched.filter(result=>result.mtfDataError)};
         const enrichedMap=new Map(enriched.map(result=>[result.symbol,result]));
         const currentTradeRank=result=>{
           const quant=result.quant||{};

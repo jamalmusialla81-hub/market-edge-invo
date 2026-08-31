@@ -1,0 +1,12 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
+const source=fs.readFileSync(require('node:path').join(__dirname,'invo-market-universe.js'),'utf8'),sandbox={window:{}};vm.runInNewContext(source,sandbox);
+const universe=sandbox.window.MarketEdgeInvoUniverse;
+const names=['BTC','ETH','SOL','XRP','DOGE','ADA','AVAX','LINK','SUI','PENGU','BNB','LTC','DOT','NEAR','APT','ARB','OP','UNI','AAVE','INJ','HYPE','kPEPE','ZEC'];
+const payload=[{universe:names.map((name,index)=>({name,maxLeverage:10,isDelisted:name==='ZEC'}))},names.map((name,index)=>({dayNtlVlm:String(10_000-index*100),openInterest:'100',markPx:name==='ZEC'?'10':'1'}))];
+const result=universe.build(payload,{limit:22});
+assert.equal(result.totalEligible,22);assert.equal(result.selected.length,22);assert.equal(result.coreMissing.length,0);
+assert.deepEqual(result.selected.slice(0,20).map(market=>market.invoInstrument),universe.CORE_INVO_INSTRUMENTS);
+assert.equal(result.selected.find(market=>market.invoInstrument==='kPEPE')?.dataSymbol,'1000PEPE');
+assert.equal(result.selected.some(market=>market.invoInstrument==='ZEC'),false);
+assert.throws(()=>universe.build([{},[]]),/no perpetual universe/);
+console.log('Invo live-universe selection tests passed');
