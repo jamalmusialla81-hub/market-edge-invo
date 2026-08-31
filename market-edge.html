@@ -1055,7 +1055,7 @@
         if (result.maxPriceDisagreement>.02) quant={...quant,decision:'WAIT',reason:`Exchange prices disagree by up to ${(result.maxPriceDisagreement*100).toFixed(1)}%`};
         if (quant.decision === 'TAKE TRADE' && (result.sourceCount < 2 || matchingFeeds < 2)) quant = { ...quant, decision:'WAIT', reason:'Quantitative setup exists, but fewer than two independent feeds confirm its direction' };
         quant={...quant,
-          strategyCandidates:strategyCandidates.map(candidate=>({strategy:candidate.strategy,direction:candidate.direction,regime:candidate.regime,quantScore:candidate.setupQuality??candidate.quality??null,decision:candidate.decision,entry:candidate.entry,stop:candidate.stop,target1:candidate.target1,target2:candidate.target2,rr:candidate.rr1??candidate.rr,reason:candidate.reason})),
+          strategyCandidates:strategyCandidates.map(candidate=>({strategy:candidate.strategy,direction:candidate.direction,regime:candidate.regime,quantScore:candidate.setupQuality??candidate.quality??null,decision:candidate.decision,riskValid:candidate.risk?.valid===true,entry:candidate.entry,stop:candidate.stop,target1:candidate.target1,target2:candidate.target2,rr:candidate.rr1??candidate.rr,reason:candidate.reason})),
           candidateCount:quant.candidateCount??strategyCandidates.length,
           actionableCandidateCount:quant.actionableCandidateCount??strategyCandidates.filter(candidate=>candidate.decision==='TAKE TRADE'&&candidate.risk?.valid).length,
           quantStrategyPick:quant.quantStrategyPick||{strategy:quant.strategy||null,direction:quant.direction||null}
@@ -1198,6 +1198,20 @@
           : `Background monitor ${run.status} · ${run.assets_completed}/${run.assets_requested} assets · ${run.candles_written} canonical candles · ${finished} · ${errors.length?errors[0]:'no reported errors'}. Real execution: disabled.`;
       } catch { els.monitorSummary.textContent='Background monitor status could not be reached. Live scanner and manual journal remain separate; no order action was attempted.'; }
     }
+    async function refreshActiveMlModel() {
+      const base=String(window.MARKET_EDGE_AI_CONFIG?.apiBase||'').replace(/\/$/,'');
+      if(!base)return null;
+      try {
+        const response=await fetch(`${base}/v1/research/ml/active`,{cache:'no-store'});
+        if(!response.ok)throw new Error('Active ML model unavailable');
+        const activeModel=await response.json();
+        researchMlState={...researchMlState,activeModel};
+        return activeModel?.available?activeModel:null;
+      } catch {
+        researchMlState={...researchMlState,activeModel:{available:false,status:'UNAVAILABLE'}};
+        return null;
+      }
+    }
     async function refreshResearchProgress() {
       const base=String(window.MARKET_EDGE_AI_CONFIG?.apiBase||'').replace(/\/$/,'');
       if(!base||!els.researchProgress)return;
@@ -1220,7 +1234,7 @@
       els.dataHealth.innerHTML=`<strong>${best.symbol} 4h · ${meta.dataQualityStatus} · ${meta.dataHealthScore.toFixed(0)}/100.</strong> ${meta.candleCount}/${meta.expectedCandleCount} completed candles · ${(meta.coverage*100).toFixed(2)}% coverage · ${meta.gapCount} gaps · ${meta.partialCandleCount} partial excluded · hash ${meta.datasetHash}. ${report.errors.length?`Rejected: ${report.errors[0]}`:'This verifies the browser sample, not multi-year depth.'}`;
     }
     function hasTradeGeometry(q) {
-      return Boolean(q?.risk?.valid&&['long','short'].includes(q.direction)&&[q.entry,q.stop,q.target1].every(value=>Number.isFinite(Number(value)))&&Number(q.rr1||q.rr)>0);
+      return Boolean(q?.risk?.valid&&['long','short'].includes(q.direction)&&[q.entry,q.stop,q.target1,q.target2].every(value=>Number.isFinite(Number(value)))&&Number(q.rr1||q.rr)>0);
     }
     function decisionBlockers(q) {
       const messages=[];
@@ -1240,6 +1254,8 @@
       return summary||'No rejected candidates in this scan.';
     }
     function mlScanLabel() {
+      const active=researchMlState?.activeModel;
+      if(active?.available)return `${active.status||'RESEARCH'} · EXPERIMENTAL`;
       const recent=Array.isArray(researchMlState?.recentModels)?researchMlState.recentModels:[];
       const model=recent.find(item=>item.status==='CHAMPION'||item.status==='SHADOW')||recent[0];
       if (!model) return 'UNAVAILABLE';
@@ -1258,12 +1274,13 @@
     function applyExperimentalMlStrategySelection(quant,candidates) {
       const model=researchMlState.activeModel;
       const eligible=(candidates||[]).filter(candidate=>candidate.decision==='TAKE TRADE'&&candidate.risk?.valid);
-      const base={...quant,mlStrategyInfluence:'INSUFFICIENT EVIDENCE',mlWeight:0,mlAssistedStrategyPick:null,candidateCount:candidates?.length||0,actionableCandidateCount:eligible.length,quantStrategyPick:{strategy:quant.strategy||null,direction:quant.direction||null}};
-      if (quant.decision!=='TAKE TRADE'||!model?.available||model.target!=='TP1_BEFORE_SL'||!window.MarketEdgeML?.predictProbability||!eligible.length) return base;
+      const base={...quant,mlStrategyInfluence:'INSUFFICIENT EVIDENCE',mlWeight:0,mlAssistedStrategyPick:null,mlInferenceAttempts:0,mlInferenceSuccesses:0,mlInferenceFailures:0,candidateCount:candidates?.length||0,actionableCandidateCount:eligible.length,quantStrategyPick:{strategy:quant.strategy||null,direction:quant.direction||null}};
+      if (!model?.available||model.target!=='TP1_BEFORE_SL'||!window.MarketEdgeML?.predictProbability||!eligible.length) return base;
       const weight=(model.status==='CHAMPION'&&model.calibration?.status==='APPLIED') ? .25 : (model.status==='SHADOW' ? .1 : .05);
       const ranked=eligible.map(candidate=>{let raw=null;try{raw=MarketEdgeML.predictProbability(model.model,candidateMlFeatures(candidate))*100;}catch{}const combined=Number.isFinite(raw)?candidate.setupQuality*(1-weight)+raw*weight:candidate.setupQuality;return {...candidate,mlRawScore:raw,mlRankScore:raw,combinedScore:combined,modelId:model.id,modelStatus:model.status};}).sort((a,b)=>b.combinedScore-a.combinedScore||b.setupQuality-a.setupQuality||String(a.candidateKey).localeCompare(String(b.candidateKey)));
       const selected=ranked[0]||quant;
-      return {...selected,mlStrategyInfluence:`${Math.round(weight*100)}% · ${model.status} EXPERIMENTAL`,mlWeight:weight,mlAssistedStrategyPick:{strategy:selected.strategy,direction:selected.direction},quantStrategyPick:{strategy:quant.strategy||null,direction:quant.direction||null},candidateCount:candidates.length,actionableCandidateCount:eligible.length,candidateScores:ranked.map(candidate=>({strategy:candidate.strategy,direction:candidate.direction,quantScore:candidate.setupQuality,mlRawScore:candidate.mlRawScore,combinedScore:candidate.combinedScore,modelId:candidate.modelId,modelStatus:candidate.modelStatus}))};
+      const successes=ranked.filter(candidate=>Number.isFinite(candidate.mlRawScore)).length;
+      return {...selected,mlStrategyInfluence:`${Math.round(weight*100)}% · ${model.status} EXPERIMENTAL`,mlWeight:weight,mlAssistedStrategyPick:{strategy:selected.strategy,direction:selected.direction},mlInferenceAttempts:eligible.length,mlInferenceSuccesses:successes,mlInferenceFailures:eligible.length-successes,quantStrategyPick:{strategy:quant.strategy||null,direction:quant.direction||null},candidateCount:candidates.length,actionableCandidateCount:eligible.length,candidateScores:ranked.map(candidate=>({strategy:candidate.strategy,direction:candidate.direction,quantScore:candidate.setupQuality,mlRawScore:candidate.mlRawScore,combinedScore:candidate.combinedScore,modelId:candidate.modelId,modelStatus:candidate.modelStatus}))};
     }
     function renderQuantRecommendation(best) {
       latestBest = best || null;
@@ -1568,6 +1585,8 @@
       try {
         const invoUniverse=await loadInvoTradeableMarkets();
         if(requestId!==scanSequence)return;
+        await refreshActiveMlModel();
+        if(requestId!==scanSequence)return;
         latestInvoUniverse=invoUniverse;
         els.marketUniverseTitle.textContent=`${invoUniverse.selected.length} liquid Invo perpetuals`;
         els.list.innerHTML=`<div class="radar-loading" aria-live="polite"><div class="empty"><strong>Scanning ${invoUniverse.selected.length} Invo markets</strong>Checking live Invo instruments, independent feeds, completed candles and strategy gates.</div><i></i><i></i><i></i><i></i><i></i></div>`;
@@ -1590,6 +1609,13 @@
         );
         if (!results.length) throw new Error('Live market data could not be reached from this browser.');
         const fullyEvaluated=results.filter(result=>Array.isArray(result.timeframes?.m5)&&result.timeframes.m5.length&&result.quant);
+        const candidateRows=fullyEvaluated.flatMap(result=>result.quant?.strategyCandidates||[]);
+        const currentEntryCandidates=candidateRows.filter(candidate=>candidate.riskValid&&[candidate.entry,candidate.stop,candidate.target1,candidate.target2].every(value=>Number.isFinite(Number(value)))&&Number(candidate.rr)>0);
+        const actionableCandidates=currentEntryCandidates.filter(candidate=>candidate.decision==='TAKE TRADE');
+        const mlInferenceSuccesses=fullyEvaluated.reduce((total,result)=>total+(Number(result.quant?.mlInferenceSuccesses)||0),0),mlInferenceFailures=fullyEvaluated.reduce((total,result)=>total+(Number(result.quant?.mlInferenceFailures)||0),0);
+        const bestOpportunity=[...results].sort((a,b)=>(b.opportunity??-1)-(a.opportunity??-1))[0]||null;
+        Object.assign(latestInvoScanAudit,{validData:fullyEvaluated.length,strategyCandidates:candidateRows.length,currentEntryCandidates:currentEntryCandidates.length,actionableCandidates:actionableCandidates.length,mlInferenceSuccesses,mlInferenceFailures,mlNotAppliedCount:researchMlState.activeModel?.available?0:fullyEvaluated.length,bestOpportunity:bestOpportunity?.symbol||null});
+        Object.assign(els.list.dataset,{invoMarketsFound:String(latestInvoScanAudit.found),marketsScanned:String(latestInvoScanAudit.scanned),validData:String(latestInvoScanAudit.validData),dataFailures:String(latestInvoScanAudit.dataFailures),strategyCandidates:String(latestInvoScanAudit.strategyCandidates),currentEntryCandidates:String(latestInvoScanAudit.currentEntryCandidates),actionableCandidates:String(latestInvoScanAudit.actionableCandidates),mlInferenceSuccesses:String(latestInvoScanAudit.mlInferenceSuccesses),mlInferenceFailures:String(latestInvoScanAudit.mlInferenceFailures),mlNotAppliedCount:String(latestInvoScanAudit.mlNotAppliedCount),bestOpportunity:latestInvoScanAudit.bestOpportunity||''});
         const best=fullyEvaluated.find(result=>hasTradeGeometry(result.quant))||fullyEvaluated[0]||results[0];
         latestResults=results; renderSourceStatus(results); renderQuantRecommendation(best); renderList(results); renderQuantAlternatives(results); loadRadarSignalCounts(results);
         const aiResults=results.map(result=>MarketEdgeAI.sanitizeQuantSnapshot(result)).filter(Boolean);
