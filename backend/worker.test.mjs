@@ -96,6 +96,8 @@ response=await handleRequest(new Request('https://market-edge-ai.test/v1/researc
 assert.equal(response.status,409);assert.equal((await response.json()).error.code,'ML_DATASET_NOT_READY');
 response=await handleRequest(request('/v1/research/ml/ingest',{operation:'ml_research_commit'}),researchEnv,{},{});
 assert.equal(response.status,401);assert.equal((await response.json()).error.code,'RESEARCH_AUTH_FAILED');
+response=await handleRequest(request('/v1/research/forward-selections',{selection:{id:'selection-fixture-1',timestamp:tvNow-60_000,status:'FORWARD / PENDING',quantOnly:{asset:'BTC',direction:'long',strategy:'TREND CONTINUATION',score:72},mlAssisted:{asset:'BTC',direction:'long',strategy:'TREND CONTINUATION',score:73}}}),researchEnv,{},{});
+assert.equal(response.status,200);body=await response.json();assert.equal(body.status,'FORWARD / PENDING');assert.equal(researchEnv.MARKET_EDGE_DB.calls.some(call=>call.sql.includes('ml_forward_selection_snapshots')),true);
 const monitorNow=1_800_000_000_000,monitorRows=Array.from({length:100},(_,index)=>{const time=monitorNow-(100-index)*300000,price=100+index*.1;return[time,String(price),String(price+1),String(price-1),String(price+.2),'20',time+299999];});
 const monitorDb=new FakeD1(),scheduled=await handleScheduled({scheduledTime:monitorNow},{MARKET_EDGE_DB:monitorDb},{},{watchlist:[{asset:'BTC',symbol:'BTCUSDT',exchange:'BINANCE'}],historicalAssets:[],delay:async()=>{},fetch:async()=>new Response(JSON.stringify(monitorRows),{status:200})});
 assert.equal(scheduled.status,'COMPLETE');assert.equal(scheduled.executionDisabled,true);assert.equal(scheduled.researchRunner,'github-actions-node');assert.equal(scheduled.heavyReplay,'disabled');assert.equal(monitorDb.calls.length,0);

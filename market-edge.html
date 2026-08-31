@@ -779,6 +779,7 @@
   <script src="quant-engine.js?v=15"></script>
   <script src="tradingview-compat.js?v=14"></script>
   <script src="forward-engine.js?v=14"></script>
+  <script src="selection-tracking.js?v=1"></script>
   <script src="manual-trade-engine.js?v=18"></script>
   <script src="ml-engine.js?v=16"></script>
   <script src="invo-market-universe.js?v=1"></script>
@@ -1228,7 +1229,8 @@
         let datasetSummary={};try{datasetSummary=JSON.parse(dataset.summary_json||'{}');}catch{}
         const resolved=Number(data.totalResolvedTargets)||0,evidence=document.getElementById('evidenceResolved'),meter=document.getElementById('evidenceMeter'),evidenceCaption=document.getElementById('evidenceCaption'),tier=datasetSummary.sample_gate||(resolved<20?'INSUFFICIENT':resolved<50?'VERY LOW':resolved<100?'EARLY':resolved<200?'MODERATE':'LARGE'),replayRunning=(data.states||[]).some(state=>state.status==='RUNNING'),ml=researchStatus.ml||{};researchMlState={...ml,activeModel};
         if(evidence)evidence.textContent=resolved>=20?`${resolved} resolved setups · gate met`:`${resolved} / 20 resolved setups`;if(evidenceCaption)evidenceCaption.textContent=resolved>=20?`${tier} evidence tier · not a reliability claim`:'Resolved setups toward the first 20';if(meter)meter.style.width=`${Math.min(100,resolved/20*100)}%`;
-        const drawer=document.getElementById('researchDrawerStatus'),lab=document.getElementById('researchLabEvidence'),mode=document.getElementById('researchModeStatus'),modeCaption=document.getElementById('researchModeCaption'),mlStatus=document.getElementById('mlStatus'),mlCaption=document.getElementById('mlCaption');if(drawer)drawer.textContent=tier;if(lab)lab.textContent=`MANUAL LIVE · ${tier} EVIDENCE`;if(mode)mode.textContent=replayRunning?'RUNNING':'IDLE';if(modeCaption)modeCaption.textContent=replayRunning?'Historical replay continues in the background':'No active replay state reported';if(mlStatus)mlStatus.textContent=ml.status||'UNAVAILABLE';if(mlCaption)mlCaption.textContent=ml.status==='DISABLED'?'No model influences trading decisions.':`Score ${mlScanLabel()} — no calibrated champion is active.`;if(els.mlResearch){const recent=Array.isArray(ml.recentModels)?ml.recentModels:[],models=ml.models||{},counts=`${models.RESEARCH||0} research · ${models.SHADOW||0} shadow · ${models.CHAMPION||0} champion`;els.mlResearch.innerHTML=recent.length?`<strong>ML registry · ${ml.status||'RESEARCH'}</strong> ${counts}. ${recent.map(model=>`${model.target||model.algorithm}: ${model.status} · ${model.oosN||0} chronological OOS`).join(' · ')}. No model changes a trade decision unless it has passed validation.`:`<strong>ML research is awaiting a manual run.</strong> Dataset has ${resolved} resolved setups. The first model requires immutable pre-entry features, chronological validation and remains advisory-only.`;}
+        const drawer=document.getElementById('researchDrawerStatus'),lab=document.getElementById('researchLabEvidence'),mode=document.getElementById('researchModeStatus'),modeCaption=document.getElementById('researchModeCaption'),mlStatus=document.getElementById('mlStatus'),mlCaption=document.getElementById('mlCaption');if(drawer)drawer.textContent=tier;if(lab)lab.textContent=`MANUAL LIVE · ${tier} EVIDENCE`;if(mode)mode.textContent=replayRunning?'RUNNING':'IDLE';if(modeCaption)modeCaption.textContent=replayRunning?'Historical replay continues in the background':'No active replay state reported';if(mlStatus)mlStatus.textContent=ml.status||'UNAVAILABLE';if(mlCaption)mlCaption.textContent=ml.status==='DISABLED'?'No model influences trading decisions.':`Score ${mlScanLabel()} — no calibrated champion is active.`;
+        if(els.mlResearch){const recent=Array.isArray(ml.recentModels)?ml.recentModels:[],models=ml.models||{},counts=`${models.RESEARCH||0} research · ${models.SHADOW||0} shadow · ${models.CHAMPION||0} champion`,generation=ml.generation||{},active=activeModel?.available?activeModel.id:'No active model',last=generation.latestModelId?`${generation.latestModelId} · ${generation.latestStatus}`:'NOT ENOUGH NEW DATA',reason=generation.rejectionReason?` Rejected: ${generation.rejectionReason}`:'';els.mlResearch.innerHTML=`<strong>Autonomous ML generation</strong> Current active: ${active} · Dataset N: ${generation.datasetN||resolved}. New resolved rows: ${generation.newRowsSinceLastGeneration||0} / ${generation.threshold||10}. Latest: ${last}.${reason} ${recent.length?`Registry: ${counts}. ${recent.slice(0,2).map(model=>`${model.target||model.algorithm}: ${model.status}`).join(' · ')}.`:'No candidate generation yet.'} Production influence is unchanged until a separate manual promotion.`;}
         els.researchProgress.innerHTML=['BTC','ETH','SOL','XRP','DOGE','LTC'].map(asset=>{const state=states.get(asset)||{},totals=byAsset[asset]||{};return `<div class="replay-asset"><span>${asset} replay</span><strong>${totals.decisionPoints||0} decisions · ${totals.resolved||0} resolved</strong><small>${state.status||'Awaiting cache'}</small></div>`;}).join('')+`<div class="replay-asset"><span>Dataset V1</span><strong>${dataset.status||'Unavailable'}</strong><small>${data.totalDecisionPoints||0} decisions · ${data.totalResolvedTargets||0} resolved</small></div>`;
       } catch { els.researchProgress.innerHTML='<div class="replay-asset"><span>Replay progress</span><strong>Unavailable</strong><small>Live scanner remains independent.</small></div>'; }
     }
@@ -1436,6 +1438,21 @@
       try { return MarketEdgeForward.migrate(JSON.parse(localStorage.getItem('market-edge-forward')||'null')); } catch { return MarketEdgeForward.blankLedger(); }
     }
     function saveForward(ledger) { localStorage.setItem('market-edge-forward',JSON.stringify(MarketEdgeForward.migrate(ledger))); }
+    function selectionLedger() {
+      try { return MarketEdgeSelectionTracking.migrate(JSON.parse(localStorage.getItem('market-edge-selection-tracking')||'null')); } catch { return MarketEdgeSelectionTracking.blank(); }
+    }
+    function saveSelectionLedger(ledger) { localStorage.setItem('market-edge-selection-tracking',JSON.stringify(MarketEdgeSelectionTracking.migrate(ledger))); }
+    function freezeSelectionPair(best) {
+      const q=best?.quant||{},timestamp=Number((best?.timeframes?.m5||best?.candles||[]).at(-1)?.time);
+      if (!hasTradeGeometry(q)||!Number.isFinite(timestamp)||!window.MarketEdgeSelectionTracking) return;
+      const quant=q.quantStrategyPick||{},ml=q.mlAssistedStrategyPick||quant;
+      const payload={timestamp,quantOnly:{asset:best.symbol,direction:quant.direction,strategy:quant.strategy,score:q.setupQuality},mlAssisted:{asset:best.symbol,direction:ml.direction,strategy:ml.strategy,score:Number(q.combinedScore??q.setupQuality)}};
+      const saved=MarketEdgeSelectionTracking.freeze(selectionLedger(),payload);
+      if (!saved.added) return;
+      saveSelectionLedger(saved.ledger);
+      const base=String(window.MARKET_EDGE_AI_CONFIG?.apiBase||'').replace(/\/$/,'');
+      if(base) fetch(`${base}/v1/research/forward-selections`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({selection:saved.record})}).catch(()=>{});
+    }
     function updateForward(results) {
       const candleMap=Object.fromEntries(results.filter(result=>result?.symbol).map(result=>[result.symbol,result.candles||[]])),before=forwardLedger();
       let ledger=MarketEdgeForward.settle(before,candleMap,{feePct:.0005,slippagePct:.0003,maxBars:30});
@@ -1642,6 +1659,7 @@
         latestResults=results; renderSourceStatus(results); renderQuantRecommendation(best); renderList(results); renderQuantAlternatives(results); loadRadarSignalCounts(results);
         const aiResults=results.map(result=>MarketEdgeAI.sanitizeQuantSnapshot(result)).filter(Boolean);
         window.dispatchEvent(new CustomEvent('market-edge:scan',{detail:{best:MarketEdgeAI.sanitizeQuantSnapshot(best)||null,results:aiResults}}));
+        freezeSelectionPair(best);
         updateForward(results); renderManualJournal(); els.runBacktest.disabled=!best?.candles?.length;
         els.status.className = 'status live'; els.status.querySelector('span:last-child').textContent = `Live · ${new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}`;
         localStorage.setItem('market-edge-settings',JSON.stringify({

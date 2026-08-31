@@ -1,0 +1,35 @@
+name: Market Edge Autonomous ML Generation
+
+on:
+  schedule:
+    - cron: '23 2 * * *'
+  workflow_dispatch:
+    inputs:
+      new_row_threshold:
+        description: 'Resolved observations required since the prior immutable generation'
+        required: false
+        default: '10'
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: market-edge-autonomous-ml-generation
+  cancel-in-progress: false
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check immutable resolved observations and train only when gated
+        env:
+          MARKET_EDGE_API: ${{ secrets.MARKET_EDGE_API }}
+          MARKET_EDGE_RESEARCH_TOKEN: ${{ secrets.MARKET_EDGE_RESEARCH_TOKEN }}
+          ML_NEW_ROW_THRESHOLD: ${{ inputs.new_row_threshold || '10' }}
+        run: node research/ml-generation.js

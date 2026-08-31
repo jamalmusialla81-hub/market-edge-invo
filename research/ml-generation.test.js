@@ -1,0 +1,9 @@
+const assert=require('node:assert/strict');
+const {eligibleRows,newRowsSince,datasetSnapshot,buildGeneration}=require('./ml-generation.js');
+function row(index,status='RESOLVED') { return {signal_id:`signal-${index}`,timestamp:1_730_000_000_000+index*300_000,asset:'BTC',strategy:'TREND CONTINUATION',direction:index%2?'long':'short',regime:'UPTREND',quality_score:70,rr:1.8,features_json:JSON.stringify({h4:{rsi:55,roc5:index,relativeVolume:1.2},m15:{rsi:52,relativeVolume:1.1}}),targets_json:JSON.stringify(status==='RESOLVED'?{status:'RESOLVED',TP1_BEFORE_SL:index%3===0,FINAL_R:index%3===0?1.2:-.7}:{status:'PENDING_OUTCOME'})}; }
+const source={dataset:{id:'EARLY-WINDOW-RESEARCH-V1',dataset_hash:'source-hash'},rows:[...Array.from({length:36},(_,index)=>row(index)),row(99,'PENDING_OUTCOME')]};
+const eligible=eligibleRows(source.rows);assert.equal(eligible.length,36);assert.equal(eligible.some(item=>item.signal_id==='signal-99'),false);
+const first=datasetSnapshot(eligible,source,null),second=datasetSnapshot(eligible.slice().reverse(),source,null);assert.equal(first.datasetHash,second.datasetHash);assert.equal(first.id,second.id);assert.equal(newRowsSince(eligible,{rowIds:eligible.slice(0,26).map(item=>item.signal_id)}).length,10);
+const generation=buildGeneration(eligible,{...first,newRowCount:10},3,null);assert.equal(generation.records.every(record=>record.status==='CHALLENGER'),true);assert.equal(generation.records[0].metadata.generation,4);assert.equal(generation.records[0].metadata.temporal.chronological,true);assert.equal(generation.records[0].metadata.rowIds.length,36);
+const rejected=buildGeneration(eligible.slice(0,30),{...first,rowCount:30,newRowCount:10,rowIds:eligible.slice(0,30).map(item=>item.signal_id)},0,null);assert.equal(rejected.records.every(record=>record.status==='REJECTED'),true);
+console.log('Autonomous ML generation tests passed');
