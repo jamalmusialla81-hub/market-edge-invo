@@ -455,7 +455,7 @@
       </div>
       <div class="field">
         <label for="workflowMode">Workspace mode</label>
-        <select id="workflowMode"><option value="research">Research</option><option value="paper">Paper</option><option value="manual" selected>Manual live</option></select>
+        <select id="workflowMode"><option value="research">Research</option><option value="paper">Paper · exploratory</option><option value="manual" selected>Manual live</option></select>
       </div>
       <div class="field">
         <label for="riskMode">Risk mode</label>
@@ -493,7 +493,7 @@
         <div class="field"><label for="maxDrawdown">Maximum drawdown</label><select id="maxDrawdown"><option value="0.05">5%</option><option value="0.1" selected>10%</option><option value="0.15">15%</option></select></div>
         <div class="field"><label for="feeAssumption">Round-trip fees + slippage</label><input id="feeAssumption" value="0.16% modeled" readonly></div>
         <div class="field"><label for="forwardMode">Forward-test recording</label><select id="forwardMode"><option value="on" selected>Record qualifying setups</option><option value="off">Off</option></select></div>
-        <p class="settings-note">Position size is calculated before leverage. Leverage only changes required margin; it never increases the permitted loss. With tiny balances, the correct output may be NO TRADE.</p>
+        <p class="settings-note">Paper mode allows qualifying setups from 62/100 rather than the selected live threshold and bypasses historical approval gates only for paper observations. It never creates a live order or makes an ML model an execution authority.</p>
       </div>
     </details>
 
@@ -840,18 +840,20 @@
       manualModeNote:document.getElementById('manualModeNote'),manualTradeStats:document.getElementById('manualTradeStats'),manualTradePositions:document.getElementById('manualTradePositions'),manualTradeHistory:document.getElementById('manualTradeHistory'),addManualTrade:document.getElementById('addManualTrade'),manualTradeModal:document.getElementById('manualTradeModal'),closeManualTradeModal:document.getElementById('closeManualTradeModal'),monitorSummary:document.getElementById('monitorSummary'),researchProgress:document.getElementById('researchProgress'),mlResearch:document.getElementById('mlResearch'),chartAsset:document.getElementById('chartAsset'),chartPrice:document.getElementById('chartPrice'),chartChange:document.getElementById('chartChange'),chartMeta:document.getElementById('chartMeta'),chartCanvas:document.getElementById('chartCanvas'),chartSignals:document.getElementById('chartSignals'),chartVerify:document.getElementById('chartVerify'),chartSignalFocus:document.getElementById('chartSignalFocus'),chartSelectedSignal:document.getElementById('chartSelectedSignal')
     };
     function currentSettings() {
+      const paperMode=els.workflowMode.value==='paper', selectedQuality=Math.max(50, Number(els.minQuality.value) || 72);
       return {
         balance: Math.max(0, Number(els.balance.value) || 0),
         riskPct: Number(els.risk.value),
         maxLeverage: Math.max(1, Number(els.leverage.value) || 1),
-        minQuality: Math.max(50, Number(els.minQuality.value) || 72),
+        minQuality: paperMode?Math.min(selectedQuality,62):selectedQuality,
         minRR: Math.max(1, Number(els.minRR.value) || 1.8),
         maxExposurePct: Math.max(0.1, Number(els.maxExposure.value) || 1),
         minNotional: MIN_ORDER_NOTIONAL,
         maxConcurrent: Math.max(1, Number(els.maxConcurrent.value) || 1),
         openDirection: els.openDirection.value,
         maxDailyLoss: Number(els.maxDailyLoss.value),
-        maxDrawdown: Number(els.maxDrawdown.value)
+        maxDrawdown: Number(els.maxDrawdown.value),
+        paperMode
       };
     }
 
@@ -1073,7 +1075,7 @@
         const decision = r.quant?.decision || 'ANALYSIS UNAVAILABLE';
         const badgeClass = decision === 'TAKE TRADE' ? (r.quant.direction==='short'?'short':'buy') : decision === 'WAIT' ? 'watch' : 'avoid';
         const opportunity=Number.isFinite(r.opportunity)?Math.round(r.opportunity):0,historyCount=chartSignalCounts[r.symbol],historyLabel=historyCount==null?'History…':historyCount?`• ${historyCount} signal${historyCount===1?'':'s'}`:'No history';
-        const action=decision==='TAKE TRADE'?'TRADE':decision==='WAIT'?'WAIT':Number.isFinite(r.quality)&&r.quality>0?'WATCH':'SKIP';
+        const action=r.quant?.paperOnly?'PAPER':decision==='TAKE TRADE'?'TRADE':decision==='WAIT'?'WAIT':Number.isFinite(r.quality)&&r.quality>0?'WATCH':'SKIP';
         return `
         <div class="market-row ${latestBest?.symbol===r.symbol?'selected':''}" data-asset="${r.symbol}">
           <div class="market-asset"><span class="mini-coin">${r.symbol}</span><span><b>${r.symbol}</b><small>${r.name} <em class="history-indicator ${historyCount?'has-history':''}">${historyLabel}</em></small></span></div>
@@ -1094,7 +1096,7 @@
       const interval=chartInterval(); if(interval===300000)return candles;
       const grouped=new Map(); candles.forEach(candle=>{const time=Math.floor(Number(candle.time)/interval)*interval,prior=grouped.get(time);if(!prior)grouped.set(time,{...candle,time});else{prior.high=Math.max(prior.high,candle.high);prior.low=Math.min(prior.low,candle.low);prior.close=candle.close;prior.volume+=candle.volume;prior.closeTime=candle.closeTime;}});return [...grouped.values()];
     }
-    function chartLiveMarker(best){const q=best?.quant||{};if(q.decision!=='TAKE TRADE'||!q.risk?.valid||!['long','short'].includes(q.direction))return null;return {signalId:`current-${best.symbol}-${Number(best.price)||Date.now()}`,asset:best.symbol,timestamp:(best.timeframes?.m5||best.candles||[]).at(-1)?.time||Date.now(),direction:q.direction,strategy:q.strategy,regime:q.regime,qualityScore:q.quality,signalPrice:best.price,preferredEntry:q.entry,stop:q.stop,tp1:q.target1,tp2:q.target2,rr:q.rr,source:'CURRENT',status:'CURRENT',reason:q.reason||'',risk:q.risk,outcome:{status:'PENDING'}};}
+    function chartLiveMarker(best){const q=best?.quant||{};if(q.paperOnly||q.decision!=='TAKE TRADE'||!q.risk?.valid||!['long','short'].includes(q.direction))return null;return {signalId:`current-${best.symbol}-${Number(best.price)||Date.now()}`,asset:best.symbol,timestamp:(best.timeframes?.m5||best.candles||[]).at(-1)?.time||Date.now(),direction:q.direction,strategy:q.strategy,regime:q.regime,qualityScore:q.quality,signalPrice:best.price,preferredEntry:q.entry,stop:q.stop,tp1:q.target1,tp2:q.target2,rr:q.rr,source:'CURRENT',status:'CURRENT',reason:q.reason||'',risk:q.risk,outcome:{status:'PENDING'}};}
     function chartSignalKey(signal){return String(signal?.signalId||`${signal?.asset||''}-${signal?.timestamp||''}`);}
     function chartStoredSignals(){return chartState.historical?.signals||[];}
     function chartSelectedSignal(){return chartStoredSignals().find(signal=>chartSignalKey(signal)===chartState.selectedSignalId)||null;}
@@ -1209,24 +1211,24 @@
         els.rec.innerHTML='<div class="empty"><strong>No reliable analysis</strong>Fresh, valid data is required before any trade plan is generated.</div>';
         return;
       }
-      const q=best.quant, decision=q.decision, direction=q.direction||best.lean||'neutral';
+      const q=best.quant, decision=q.decision, displayDecision=q.paperOnly?'PAPER TRADE':decision, direction=q.direction||best.lean||'neutral';
       const directionText=direction==='short'?'SHORT':direction==='long'?'LONG':'NEUTRAL';
       const workspaceMode=els.workflowMode.value==='manual'?'MANUAL LIVE':els.workflowMode.value.toUpperCase();
       const decisionClass=decision==='TAKE TRADE'?(direction==='short'?'short':'buy'):decision==='WAIT'?'watch':'avoid';
-      const simpleReason=decision==='TAKE TRADE'?'The setup passed the required checks. Read the exact trade plan before deciding whether to place it manually.':decision==='WAIT'?'There may be an interesting setup, but entering now is not justified.': 'No valid trade right now. Wait for a fresh scan instead of forcing an entry.';
+      const simpleReason=q.paperOnly?'This is an exploratory paper observation, not a live instruction. Record it, then compare its outcome later.':decision==='TAKE TRADE'?'The setup passed the required checks. Read the exact trade plan before deciding whether to place it manually.':decision==='WAIT'?'There may be an interesting setup, but entering now is not justified.': 'No valid trade right now. Wait for a fresh scan instead of forcing an entry.';
       els.title.textContent=`${best.symbol} — ${directionText}`;
-      els.badge.className=`badge ${decisionClass}`; els.badge.textContent=decision;
+      els.badge.className=`badge ${decisionClass}`; els.badge.textContent=displayDecision;
       const common=`
         <div class="simple-decision">
           <div class="asset-row"><div class="asset-name"><span class="coin">${best.symbol}</span><span><strong>${best.name}</strong><span>${formatPrice(best.price)} USDT · ${best.sourceCount} independent feeds</span></span></div></div>
-          <div class="decision-state"><h3>${directionText} · ${decision}</h3><span class="badge ${decisionClass}">${decision==='TAKE TRADE'?'TRADE READY':decision}</span></div>
+          <div class="decision-state"><h3>${directionText} · ${displayDecision}</h3><span class="badge ${decisionClass}">${q.paperOnly?'PAPER ONLY':decision==='TAKE TRADE'?'TRADE READY':decision}</span></div>
           <div class="score-pair"><div class="score-tile score-gauge" style="--score:${Number.isFinite(q.setupQuality)?q.setupQuality:0}"><span>Setup quality <button type="button" title="How strong the actual trade setup is.">?</button></span><strong>${Number.isFinite(q.setupQuality)?q.setupQuality+' / 100':'—'}</strong></div><div class="score-tile score-gauge" style="--score:${Number.isFinite(q.opportunity?.score)?q.opportunity.score:0}"><span>Opportunity <button type="button" title="How interesting this market is right now.">?</button></span><strong>${q.opportunity?.score??'—'}${q.opportunity?.score!=null?' / 100':''}</strong></div></div>
           <p class="decision-summary">${simpleReason}</p>
           <div class="decision-actions"><button class="secondary-button" type="button" data-toggle-why>Why?</button><button class="secondary-button" type="button" data-toggle-advanced>View details</button></div>
           <div class="decision-advanced" data-decision-advanced><div class="why-list"><div class="why-line"><b>Bottom line</b><span>${q.reason||simpleReason}</span></div>${(q.reasons||[]).slice(0,4).map(reason=>`<div class="why-line"><b>•</b><span>${reason}</span></div>`).join('')}</div></div>
         </div>
         <details class="advanced-details"><summary>Advanced setup data</summary><div class="evidence-grid">
-          <div class="evidence-item"><span>Decision</span><strong>${decision}</strong></div>
+          <div class="evidence-item"><span>Decision</span><strong>${displayDecision}</strong></div>
           <div class="evidence-item"><span>Regime</span><strong>${q.regime||'Unavailable'}</strong></div>
           <div class="evidence-item"><span>Strategy</span><strong>${q.strategy||'None qualified'}</strong></div>
           <div class="evidence-item"><span>Structure</span><strong>${q.frame?.structure?.label||'Unavailable'}</strong></div>
@@ -1243,6 +1245,14 @@
         return;
       }
       const risk=q.risk, isShort=q.direction==='short', currency='USDC';
+      if(q.paperOnly){
+        els.rec.innerHTML=common+`
+          <div class="reasons" style="margin-top:18px">${(q.reasons||[]).slice(0,6).map(reason=>`<div class="reason"><i>◌</i><span>${reason}</span></div>`).join('')}</div>
+          <div class="order-plan"><div class="plan-box"><span>Paper notional</span><strong>${risk.notional.toFixed(2)} ${currency}</strong></div><div class="plan-box"><span>Paper margin</span><strong>${risk.margin.toFixed(2)} ${currency}</strong></div><div class="plan-box"><span>Paper leverage</span><strong>${risk.leverage}×</strong></div><div class="plan-box"><span>Loss at stop</span><strong>${risk.lossAtStop.toFixed(2)} ${currency}</strong></div><div class="plan-box"><span>Risk / reward</span><strong>${q.rr1.toFixed(2)}R / ${q.rr2.toFixed(2)}R</strong></div><div class="plan-box"><span>Outcome</span><strong>Record for review</strong></div></div>
+          <section class="invo-entry"><div class="invo-entry-head"><div><h3>Paper-trade plan only</h3><p>Do not copy this into Invo. The system will record it in the forward-test ledger so the looser rule can be judged on outcomes.</p></div><span class="badge watch">PAPER ONLY</span></div><div class="invo-fields"><div class="invo-field"><b>1</b><span>Direction</span><strong>${directionText}</strong></div><div class="invo-field"><b>2</b><span>Reference entry</span><strong>${formatPrice(q.entry)} USDT</strong></div><div class="invo-field"><b>3</b><span>Stop</span><strong>${formatPrice(q.stop)} USDT</strong></div><div class="invo-field"><b>4</b><span>TP1 / TP2</span><strong>${formatPrice(q.target1)} / ${formatPrice(q.target2)} USDT</strong></div></div></section>`;
+        bindDecisionControls();
+        return;
+      }
       els.rec.innerHTML=common+`
         <div class="reasons" style="margin-top:18px">${(q.reasons||[]).slice(0,6).map(reason=>`<div class="reason"><i>✓</i><span>${reason}</span></div>`).join('')}</div>
         <div class="order-plan">
@@ -1482,6 +1492,11 @@
       if (!q||!finding||!['TAKE TRADE','WAIT'].includes(q.decision)) return result;
       return {...result,quant:{...q,decision:'NO TRADE',reason:`Historical gate disabled ${result.symbol}: ${finding}`}};
     }
+    function applyPaperCandidate(result) {
+      const q=result?.quant;
+      if (els.workflowMode.value!=='paper'||!q||q.decision!=='TAKE TRADE'||!q.risk?.valid) return result;
+      return {...result,quant:{...q,paperOnly:true,reason:`Paper-only candidate: passed the looser 62/100 exploratory threshold. Historical approval and ML champion gates remain unavailable, so this must not be placed live.`}};
+    }
     async function promisePool(items, worker, concurrency=4) {
       const output=new Array(items.length), queue=[...items.keys()];
       await Promise.all(Array.from({length:Math.min(concurrency,items.length)},async()=>{
@@ -1507,7 +1522,7 @@
         if(requestId!==scanSequence)return;
         const enrichedMap=new Map(enriched.map(result=>[result.symbol,result]));
         const decisionRank={'TAKE TRADE':3,'WAIT':2,'NO TRADE':1,'ANALYSIS UNAVAILABLE':0};
-        const results=base.map(result=>applyHistoricalEvidenceGuard(applyDirectionResearchGuard(applyPortfolioGuard(enrichedMap.get(result.symbol)||result)))).sort((a,b)=>
+        const results=base.map(result=>{const guarded=applyPortfolioGuard(enrichedMap.get(result.symbol)||result);return els.workflowMode.value==='paper'?applyPaperCandidate(guarded):applyHistoricalEvidenceGuard(applyDirectionResearchGuard(guarded));}).sort((a,b)=>
           (decisionRank[b.quant?.decision]||0)-(decisionRank[a.quant?.decision]||0) || (b.quality||0)-(a.quality||0)
         );
         if (!results.length) throw new Error('Live market data could not be reached from this browser.');
