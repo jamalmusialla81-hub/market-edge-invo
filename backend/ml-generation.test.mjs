@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {activeMlModel,resolvedMlRows,stableHash} from './worker.mjs';
+import {activeMlModel,resolvedMlRows,stableHash,validShadowSelection} from './worker.mjs';
 
 const resolved={signal_id:'resolved-1',timestamp:100,targets_json:JSON.stringify({status:'RESOLVED',TP1_BEFORE_SL:true,FINAL_R:1.2})};
 const pending={signal_id:'pending-1',timestamp:101,targets_json:JSON.stringify({status:'PENDING_OUTCOME'})};
@@ -11,4 +11,6 @@ const db={prepare(sql){return{all:async()=>({results:sql.includes("'CHALLENGER'"
 const active=await activeMlModel(db);
 assert.equal(active.id,'incumbent');
 assert.equal(active.status,'RESEARCH');
+assert.equal(validShadowSelection({asset:'BTC',direction:'long',strategy:'TREND CONTINUATION',regime:'UPTREND',entry:100,stop:95,target1:110,target2:120,quantScore:70,combinedScore:71,featureHash:'frozen'}).featureHash,'frozen');
+assert.equal(validShadowSelection({asset:'BTC',direction:'long',strategy:'TREND CONTINUATION',entry:100,stop:105,target1:110,target2:120,quantScore:70,combinedScore:71,featureHash:'frozen'}),null);
 console.log('Worker autonomous ML safety tests passed');

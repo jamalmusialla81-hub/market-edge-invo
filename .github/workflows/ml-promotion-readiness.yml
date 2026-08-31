@@ -1,0 +1,28 @@
+name: Market Edge ML Promotion Readiness
+
+on:
+  schedule:
+    - cron: '37 2 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: market-edge-ml-promotion-readiness
+  cancel-in-progress: false
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Evaluate frozen challenger shadow evidence
+        env:
+          MARKET_EDGE_API: ${{ secrets.MARKET_EDGE_API }}
+          MARKET_EDGE_RESEARCH_TOKEN: ${{ secrets.MARKET_EDGE_RESEARCH_TOKEN }}
+        run: node research/promotion-readiness.js
