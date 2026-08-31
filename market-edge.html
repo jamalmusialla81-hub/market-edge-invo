@@ -1273,7 +1273,7 @@
       const common=`
         <div class="simple-decision">
           <div class="asset-row"><div class="asset-name"><span class="coin">${best.symbol}</span><span><strong>${best.name}</strong><span>${formatPrice(best.price)} USDT · ${best.sourceCount} independent feeds</span></span></div></div>
-          <div class="decision-state"><h3>BEST TRADE NOW · ${directionText}</h3><span class="badge ${decisionClass}">${strictVerdict==='TAKE TRADE'?'TRADE READY':`STRICT VERDICT: ${strictVerdict}`}</span></div>
+          <div class="decision-state"><h3>${hasGeometry?`BEST TRADE NOW · ${directionText}`:'NO TRADE RIGHT NOW'}</h3><span class="badge ${decisionClass}">${strictVerdict==='TAKE TRADE'?'TRADE READY':`STRICT VERDICT: ${strictVerdict}`}</span></div>
           <div class="score-pair"><div class="score-tile score-gauge" style="--score:${Number.isFinite(q.setupQuality)?q.setupQuality:0}"><span>Setup quality <button type="button" title="How strong the actual trade setup is.">?</button></span><strong>${Number.isFinite(q.setupQuality)?q.setupQuality+' / 100':'—'}</strong></div><div class="score-tile score-gauge" style="--score:${Number.isFinite(q.opportunity?.score)?q.opportunity.score:0}"><span>Opportunity <button type="button" title="How interesting this market is right now.">?</button></span><strong>${q.opportunity?.score??'—'}${q.opportunity?.score!=null?' / 100':''}</strong></div></div>
           <p class="decision-summary">${simpleReason}</p>
           <div class="decision-actions"><button class="secondary-button" type="button" data-toggle-why>Why?</button><button class="secondary-button" type="button" data-toggle-advanced>View details</button></div>
