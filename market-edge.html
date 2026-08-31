@@ -498,7 +498,7 @@
     </details>
 
     <details class="research-drawer">
-      <summary><span>Research</span><strong>INSUFFICIENT</strong><small>Dataset, replay and validation status</small></summary>
+      <summary><span>Research</span><strong id="researchDrawerStatus">Loading…</strong><small>Dataset, replay and validation status</small></summary>
       <div class="research-drawer-body"><span>Dataset V1 accumulates resolved decision points only.</span><span>No-lookahead checks remain enabled.</span><a href="#researchLab">Open Research Lab ↓</a></div>
     </details>
 
@@ -691,7 +691,7 @@
     </section>
 
     <section id="researchLab" class="card research-lab" aria-label="Research evidence dashboard">
-      <div class="card-head"><div><p class="eyebrow">Research Lab</p><h2>Evidence before confidence</h2></div><span class="badge watch">MANUAL LIVE · EVIDENCE INSUFFICIENT</span></div>
+      <div class="card-head"><div><p class="eyebrow">Research Lab</p><h2>Evidence before confidence</h2></div><span id="researchLabEvidence" class="badge watch">MANUAL LIVE · LOADING EVIDENCE</span></div>
       <div class="research-body">
         <div class="metric-grid">
           <div class="metric"><span>Data boundary</span><strong>Canonical + hashed</strong></div>
@@ -793,7 +793,7 @@
       const paperCards=[...shell.querySelectorAll('.paper-card')],researchGrid=shell.querySelector('.research-grid'),forwardCard=researchGrid?.querySelector('article:nth-child(2)');
       views.journal.insertAdjacentHTML('beforeend',`<div class="section-intro"><div><p class="eyebrow">Your records</p><h1>Journal</h1></div><p>Keep paper positions, forward evidence and the trades you actually place in separate, easy-to-review records.</p></div><div class="journal-tabs" role="tablist"><button class="active" type="button" data-journal-page="paper">Paper</button><button type="button" data-journal-page="forward">Forward test</button><button type="button" data-journal-page="manual">My trades</button></div><div class="journal-page active" data-journal-content="paper"></div><div class="journal-page" data-journal-content="forward"></div><div class="journal-page" data-journal-content="manual"></div>`);
       move(paperCards[0],views.journal.querySelector('[data-journal-content="paper"]'));move(forwardCard,views.journal.querySelector('[data-journal-content="forward"]'));move(paperCards[1],views.journal.querySelector('[data-journal-content="manual"]'));
-      views.research.insertAdjacentHTML('afterbegin',`<div class="section-intro"><div><p class="eyebrow">Evidence, not promises</p><h1>Research</h1></div><p>Market Edge studies completed historical setups in the background. It will not claim reliability while evidence is still limited.</p></div><section class="research-overview" aria-label="Research summary"><article class="metric"><span>Evidence</span><strong id="evidenceResolved">Loading…</strong><small>resolved setups toward the first 20</small><div class="evidence-meter"><i id="evidenceMeter"></i></div></article><article class="metric"><span>Research mode</span><strong>CATCH UP</strong><small>Historical replay continues in the background</small></article><article class="metric"><span>Machine learning</span><strong>LOCKED</strong><small>More evidence is required first</small></article></section>`);
+      views.research.insertAdjacentHTML('afterbegin',`<div class="section-intro"><div><p class="eyebrow">Evidence, not promises</p><h1>Research</h1></div><p>Market Edge studies completed historical setups in the background. It will not claim reliability while evidence is still limited.</p></div><section class="research-overview" aria-label="Research summary"><article class="metric"><span>Evidence</span><strong id="evidenceResolved">Loading…</strong><small id="evidenceCaption">Resolved setups toward the first 20</small><div class="evidence-meter"><i id="evidenceMeter"></i></div></article><article class="metric"><span>Research mode</span><strong id="researchModeStatus">Loading…</strong><small id="researchModeCaption">Reading persisted replay status</small></article><article class="metric"><span>Machine learning</span><strong id="mlStatus">Loading…</strong><small id="mlCaption">No model influences decisions</small></article></section>`);
       move(shell.querySelector('.research-drawer'),views.research);move(researchGrid,views.research);move(shell.querySelector('[aria-label="Latest historical validation findings"]'),views.research);move(shell.querySelector('.research-lab'),views.research);move(shell.querySelector('.ai-assistant'),views.research);move(shell.querySelector('.trader-check'),views.research);move(shell.querySelector('.method'),views.research);
       const setView=name=>{Object.entries(views).forEach(([key,view])=>{const active=key===name;view.classList.toggle('active',active);view.toggleAttribute('hidden',!active);});document.querySelectorAll('[data-app-view]').forEach(button=>button.classList.toggle('active',button.dataset.appView===name));window.scrollTo({top:0,behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'});};
       document.querySelectorAll('[data-app-view]').forEach(button=>button.addEventListener('click',()=>setView(button.dataset.appView)));
@@ -1184,7 +1184,11 @@
         const response=await fetch(`${base}/v1/research/replay`,{cache:'no-store'});
         if(!response.ok)throw new Error('unavailable');
         const data=await response.json(),states=new Map((data.states||[]).map(item=>[item.asset,item])),byAsset=data.byAsset||{},dataset=data.dataset||{};
-        const resolved=Number(data.totalResolvedTargets)||0,evidence=document.getElementById('evidenceResolved'),meter=document.getElementById('evidenceMeter');if(evidence)evidence.textContent=resolved>=20?`${resolved} resolved setups · gate met`:`${resolved} / 20 resolved setups`;if(meter)meter.style.width=`${Math.min(100,resolved/20*100)}%`;
+        let researchStatus={};try{const statusResponse=await fetch(`${base}/v1/research/status`,{cache:'no-store'});if(statusResponse.ok)researchStatus=await statusResponse.json();}catch{}
+        let datasetSummary={};try{datasetSummary=JSON.parse(dataset.summary_json||'{}');}catch{}
+        const resolved=Number(data.totalResolvedTargets)||0,evidence=document.getElementById('evidenceResolved'),meter=document.getElementById('evidenceMeter'),evidenceCaption=document.getElementById('evidenceCaption'),tier=datasetSummary.sample_gate||(resolved<20?'INSUFFICIENT':resolved<50?'VERY LOW':resolved<100?'EARLY':resolved<200?'MODERATE':'LARGE'),replayRunning=(data.states||[]).some(state=>state.status==='RUNNING'),ml=researchStatus.ml||{};
+        if(evidence)evidence.textContent=resolved>=20?`${resolved} resolved setups · gate met`:`${resolved} / 20 resolved setups`;if(evidenceCaption)evidenceCaption.textContent=resolved>=20?`${tier} evidence tier · not a reliability claim`:'Resolved setups toward the first 20';if(meter)meter.style.width=`${Math.min(100,resolved/20*100)}%`;
+        const drawer=document.getElementById('researchDrawerStatus'),lab=document.getElementById('researchLabEvidence'),mode=document.getElementById('researchModeStatus'),modeCaption=document.getElementById('researchModeCaption'),mlStatus=document.getElementById('mlStatus'),mlCaption=document.getElementById('mlCaption');if(drawer)drawer.textContent=tier;if(lab)lab.textContent=`MANUAL LIVE · ${tier} EVIDENCE`;if(mode)mode.textContent=replayRunning?'RUNNING':'IDLE';if(modeCaption)modeCaption.textContent=replayRunning?'Historical replay continues in the background':'No active replay state reported';if(mlStatus)mlStatus.textContent=ml.status||'UNAVAILABLE';if(mlCaption)mlCaption.textContent=ml.status==='DISABLED'?'No model influences trading decisions.':ml.sampleN!=null?`${ml.sampleN} samples reported; no champion is active.`:'Model status is unavailable.';
         els.researchProgress.innerHTML=['BTC','ETH','SOL','XRP','DOGE','LTC'].map(asset=>{const state=states.get(asset)||{},totals=byAsset[asset]||{};return `<div class="replay-asset"><span>${asset} replay</span><strong>${totals.decisionPoints||0} decisions · ${totals.resolved||0} resolved</strong><small>${state.status||'Awaiting cache'}</small></div>`;}).join('')+`<div class="replay-asset"><span>Dataset V1</span><strong>${dataset.status||'Unavailable'}</strong><small>${data.totalDecisionPoints||0} decisions · ${data.totalResolvedTargets||0} resolved</small></div>`;
       } catch { els.researchProgress.innerHTML='<div class="replay-asset"><span>Replay progress</span><strong>Unavailable</strong><small>Live scanner remains independent.</small></div>'; }
     }
@@ -1555,7 +1559,7 @@
     } catch {}
     bindManualJournalControls(); renderSocialSummary(); renderForward(); renderManualJournal(); refreshMonitorSummary(); refreshResearchProgress();
     updateTradingViewLink();
-    if ('serviceWorker' in navigator) window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js?v=19').catch(()=>{}));
+    if ('serviceWorker' in navigator) window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js?v=20').catch(()=>{}));
   </script>
   <script src="ai-ui.js?v=14"></script>
 </body>
