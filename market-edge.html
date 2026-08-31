@@ -742,6 +742,9 @@
       <div class="onboarding-actions"><button id="onboardingSkip" class="secondary-button" value="skip">Skip tutorial</button><span id="onboardingCount">1 / 8</span><button id="onboardingBack" class="secondary-button" type="button" disabled>Back</button><button id="onboardingNext" class="scan" type="button">Next</button></div>
     </form>
   </dialog>
+  <dialog id="communityResearchModal" class="onboarding-modal" aria-labelledby="communityResearchTitle">
+    <div class="onboarding-card"><p class="eyebrow">Shared paper research</p><h2 id="communityResearchTitle">Help test Market Edge</h2><p>In Paper mode, Market Edge can automatically contribute app-generated paper signals and their simulated outcomes to shared research. It does not store account balances, names, wallet details, Invo usernames, or manual-trade notes.</p><div class="onboarding-actions"><button id="communityResearchLocal" class="secondary-button" type="button">Keep mine local</button><button id="communityResearchJoin" class="scan" type="button">Use shared research</button></div></div>
+  </dialog>
   <dialog id="manualTradeModal" class="manual-trade-modal" aria-labelledby="manualTradeModalTitle">
     <form id="manualTradeForm" class="manual-trade-form">
       <div class="manual-trade-modal-head"><div><p class="eyebrow">Your own record</p><h2 id="manualTradeModalTitle">Add manual trade</h2><p>This is a journal entry, not a Market Edge recommendation or exchange order.</p></div><button id="manualTradeCancel" class="onboarding-close" type="button" aria-label="Close manual trade form">×</button></div>
@@ -806,6 +809,10 @@
       const showStep=()=>{const current=tutorial[step];title.textContent=current[0];copy.textContent=current[1];stepLabel.textContent=step===0?'Welcome':`Step ${step} of ${tutorial.length-1}`;count.textContent=`${step+1} / ${tutorial.length}`;back.disabled=step===0;next.textContent=step===tutorial.length-1?'Done':'Next';progress.style.width=`${(step+1)/tutorial.length*100}%`;};
       const closeTutorial=()=>{localStorage.setItem('market-edge-onboarding-v1','complete');modal.close();};next.addEventListener('click',()=>{if(step===tutorial.length-1)closeTutorial();else{step++;showStep();}});back.addEventListener('click',()=>{if(step){step--;showStep();}});modal.addEventListener('close',()=>localStorage.setItem('market-edge-onboarding-v1','complete'));document.getElementById('howToUse').addEventListener('click',()=>{step=0;showStep();modal.showModal();});
       if(!localStorage.getItem('market-edge-onboarding-v1')){showStep();setTimeout(()=>modal.showModal(),180);}
+      const communityModal=document.getElementById('communityResearchModal'),communityChoice=()=>localStorage.getItem('market-edge-community-paper-research'),showCommunityNotice=()=>{if(document.getElementById('workflowMode')?.value==='paper'&&!communityChoice()&&!communityModal.open)communityModal.showModal();};
+      document.getElementById('communityResearchJoin').addEventListener('click',()=>{localStorage.setItem('market-edge-community-paper-research','shared');communityModal.close();syncCommunityPaper(forwardLedger(),[],Object.keys(forwardLedger().outcomes||{}));showToast('Anonymous paper research is on. New paper signals and outcomes will help shared research.');});
+      document.getElementById('communityResearchLocal').addEventListener('click',()=>{localStorage.setItem('market-edge-community-paper-research','local');communityModal.close();showToast('Paper records will stay on this device.');});
+      window.marketEdgeShowCommunityNotice=showCommunityNotice;
     }
     setupAppShell();
     const MARKETS = ['BTC','ETH','SOL','XRP','DOGE','ADA','AVAX','LINK','SUI','PENGU','BNB','LTC','DOT','NEAR','APT','ARB','OP','UNI','AAVE','INJ'];
@@ -1347,19 +1354,29 @@
       try { return MarketEdgeForward.migrate(JSON.parse(localStorage.getItem('market-edge-forward')||'null')); } catch { return MarketEdgeForward.blankLedger(); }
     }
     function saveForward(ledger) { localStorage.setItem('market-edge-forward',JSON.stringify(MarketEdgeForward.migrate(ledger))); }
+    function communitySignal(signal){return{id:signal.id,symbol:signal.symbol,direction:signal.direction,strategy:signal.strategy,regime:signal.regime,timestamp:signal.timestamp,entry:signal.entry,stop:signal.stop,target1:signal.target1,target2:signal.target2,rr1:signal.rr1,rr2:signal.rr2,quality:signal.quality,datasetHash:signal.datasetHash,engineVersion:signal.engineVersion,sourceCount:signal.sourceCount};}
+    async function syncCommunityPaper(ledger,signalIds=[],outcomeIds=[]){
+      if(els.workflowMode.value!=='paper'||localStorage.getItem('market-edge-community-paper-research')!=='shared')return;
+      const base=String(window.MARKET_EDGE_AI_CONFIG?.apiBase||'').replace(/\/$/,'');if(!base)return;
+      let sent={};try{sent=JSON.parse(localStorage.getItem('market-edge-community-paper-sent')||'{}');}catch{}
+      const signals=new Map((ledger.signals||[]).map(signal=>[signal.id,signal])),events=[];
+      signalIds.forEach(id=>{const signal=signals.get(id),key=`SIGNAL:${id}`;if(signal&&!sent[key])events.push({key,payload:{event_type:'SIGNAL',signal:communitySignal(signal)}});});
+      outcomeIds.forEach(id=>{const signal=signals.get(id),outcome=ledger.outcomes?.[id],key=`OUTCOME:${id}:${outcome?.closedAt}`;if(signal&&outcome&&!sent[key])events.push({key,payload:{event_type:'OUTCOME',signal:communitySignal(signal),outcome:{status:outcome.status,resultR:outcome.resultR,closedAt:outcome.closedAt,barsHeld:outcome.barsHeld,tp1Hit:outcome.tp1Hit,costR:outcome.costR}}});});
+      await Promise.all(events.map(async event=>{try{const response=await fetch(`${base}/v1/community/paper-events`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(event.payload)});if(response.ok){sent[event.key]=Date.now();localStorage.setItem('market-edge-community-paper-sent',JSON.stringify(sent));}}catch{}}));
+    }
     function updateForward(results) {
-      const candleMap=Object.fromEntries(results.filter(result=>result?.symbol).map(result=>[result.symbol,result.candles||[]]));
-      let ledger=MarketEdgeForward.settle(forwardLedger(),candleMap,{feePct:.0005,slippagePct:.0003,maxBars:30});
+      const candleMap=Object.fromEntries(results.filter(result=>result?.symbol).map(result=>[result.symbol,result.candles||[]])),before=forwardLedger(),previousOutcomes=before.outcomes||[],addedIds=[];
+      let ledger=MarketEdgeForward.settle(before,candleMap,{feePct:.0005,slippagePct:.0003,maxBars:30});
       if (els.forwardMode.value==='on') results.filter(result=>result.quant?.decision==='TAKE TRADE'&&result.quant?.risk?.valid).forEach(result=>{
         const q=result.quant,report=MarketEdgeResearch.inspectDataset(result.candles||[],{interval:'4h',asOf:Date.now(),asset:result.symbol,symbol:`${result.symbol}USDT`,exchange:'MULTI-FEED'});
-        ledger=MarketEdgeForward.appendSignal(ledger,{
+        const record=MarketEdgeForward.appendSignal(ledger,{
           symbol:result.symbol,direction:q.direction,strategy:q.strategy,quality:q.quality,entry:q.entry,idealEntry:q.idealEntry,entryZone:q.entryZone,
           stop:q.stop,target1:q.target1,target2:q.target2,rr1:q.rr1,rr2:q.rr2,leverage:q.risk.leverage,regime:q.regime,macroRegime:q.macroRegime,
           alignment:q.alignment,features:{rsi:q.frame.rsi,relativeVolume:q.frame.relativeVolume,atrPct:q.frame.atrPct,ema20Slope:q.frame.ema20Slope,structure:q.frame.structure.label},
           timestamp:q.frame.timestamp,datasetHash:report.meta.datasetHash,datasetVersion:report.meta.datasetVersion,engineVersion:MarketEdgeQuant.VERSION,appVersion:'14',sourceCount:result.sourceCount,executionCostPct:.0016
-        }).ledger;
+        });if(record.added)addedIds.push(record.id);ledger=record.ledger;
       });
-      saveForward(ledger); renderForward();
+      const resolvedIds=Object.keys(ledger.outcomes||{}).filter(id=>!previousOutcomes[id]);saveForward(ledger);renderForward();syncCommunityPaper(ledger,addedIds,resolvedIds);
     }
     function renderForward() {
       const ledger=forwardLedger(),summary=MarketEdgeForward.stats(ledger);
@@ -1556,7 +1573,7 @@
     document.querySelectorAll('[data-chart-action]').forEach(button=>button.addEventListener('click',()=>{const action=button.dataset.chartAction;if(action==='zoom-in')chartState.visibleBars=Math.max(24,chartState.visibleBars-12);if(action==='zoom-out')chartState.visibleBars=Math.min(260,chartState.visibleBars+12);if(action==='latest'){chartState.mode='live';chartState.offset=0;chartState.visibleBars=92;}if(action==='fullscreen'){const canvas=els.chartCanvas;const change=()=>setTimeout(drawInteractiveChart,40);if(document.fullscreenElement)document.exitFullscreen?.().then(change).catch(()=>{});else canvas.requestFullscreen?.().then(change).catch(()=>{});return;}if(action==='latest-signal'){const latest=[...chartStoredSignals()].sort((a,b)=>Number(b.timestamp)-Number(a.timestamp))[0];if(latest)selectHistoricalSignal(latest,{reload:true});else drawInteractiveChart();return;}if(action==='all-signals'){if(chartState.best)loadHistoricalChart(chartState.best.symbol,null,true,true);return;}drawInteractiveChart();}));
     els.chartSignalFocus.addEventListener('change',()=>{const timestamp=Number(els.chartSignalFocus.value),signal=chartStoredSignals().find(item=>Number(item.timestamp)===timestamp);if(signal)selectHistoricalSignal(signal,{reload:true});});
     els.tvExchange.addEventListener('change',()=>updateTradingViewLink());
-    els.workflowMode.addEventListener('change',()=>{renderManualJournal();showToast(`${els.workflowMode.options[els.workflowMode.selectedIndex].text} mode selected. No exchange connection is available.`);});
+    els.workflowMode.addEventListener('change',()=>{renderManualJournal();showToast(`${els.workflowMode.options[els.workflowMode.selectedIndex].text} mode selected. No exchange connection is available.`);if(els.workflowMode.value==='paper')window.marketEdgeShowCommunityNotice?.();});
     document.querySelectorAll('[data-workspace]').forEach(button=>button.addEventListener('click',()=>{els.workflowMode.value=button.dataset.workspace;els.workflowMode.dispatchEvent(new Event('change'));document.querySelectorAll('[data-workspace]').forEach(item=>item.classList.toggle('active',item===button));}));
     els.runBacktest.addEventListener('click',runBacktest);
     els.importSocial.addEventListener('click',()=>{

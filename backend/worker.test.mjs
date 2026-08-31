@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {handleRequest,handleScheduled} from './worker.mjs';
+import {handleRequest,handleScheduled,communityPaperEvent} from './worker.mjs';
 
 const env={OPENAI_API_KEY:'test-only',ALLOWED_ORIGINS:'https://jamalmusialla81-hub.github.io',RATE_LIMIT_PER_MINUTE:'1000'};
 const quant={asset:'ETH',price:100,decision:'WAIT',direction:'long',strategy:'BREAKOUT + RETEST',regime:'BREAKOUT RETEST',reason:'Await 15m confirmation'};
@@ -62,6 +62,10 @@ response=await handleRequest(new Request('https://market-edge-ai.test/v1/chat',{
 assert.equal(response.status,415);
 
 const tvEnv={...env,TV_WEBHOOK_TOKEN:'test-tv-secret'},tvNow=2_000_000_000_000;
+const communitySignal={id:'paper-signal-1',symbol:'BTC',direction:'long',strategy:'TREND CONTINUATION',timestamp:tvNow-3_600_000,entry:100,stop:95,target1:109,target2:115,rr1:1.8,rr2:3,quality:62,balance:999999,notes:'must never persist'};
+const cleanCommunity=communityPaperEvent({event_type:'SIGNAL',signal:communitySignal});assert.equal(cleanCommunity.eventId,'SIGNAL:paper-signal-1');assert.equal(cleanCommunity.signal.balance,undefined);assert.equal(cleanCommunity.signal.notes,undefined);
+const resolvedCommunity=communityPaperEvent({event_type:'OUTCOME',signal:communitySignal,outcome:{status:'win',resultR:2.1,closedAt:tvNow,barsHeld:4,tp1Hit:true,costR:.02,notes:'must never persist'}});assert.equal(resolvedCommunity.outcome.notes,undefined);assert.equal(resolvedCommunity.outcome.status,'win');
+assert.throws(()=>communityPaperEvent({event_type:'SIGNAL',signal:{...communitySignal,direction:'long',stop:105}}),/price ordering/);
 function tvRequest(payload,token='test-tv-secret') { return new Request(`https://market-edge-ai.test/v1/tradingview-alert?token=${encodeURIComponent(token)}`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload)}); }
 const tvAlert={event_id:'fixture-1',symbol:'ETHUSDT',exchange:'BINANCE',timeframe:'15m',timestamp:tvNow-60_000,close:2500,volume:1200,condition:'EMA alignment candidate',state:'CANDIDATE'};
 response=await handleRequest(tvRequest(tvAlert),tvEnv,{}, {now:tvNow});
