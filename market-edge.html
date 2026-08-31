@@ -454,10 +454,6 @@
         <input id="quoteAsset" value="USDT (balance stays USDC)" readonly>
       </div>
       <div class="field">
-        <label for="workflowMode">Workspace mode</label>
-        <select id="workflowMode"><option value="research">Research</option><option value="paper">Paper · exploratory</option><option value="manual" selected>Manual live</option></select>
-      </div>
-      <div class="field">
         <label for="riskMode">Risk mode</label>
         <select id="riskMode">
           <option value="0.005">Protect · 0.5% risk</option>
@@ -492,8 +488,7 @@
         <div class="field"><label for="maxDailyLoss">Maximum daily loss</label><select id="maxDailyLoss"><option value="0.02">2%</option><option value="0.03" selected>3%</option><option value="0.05">5%</option></select></div>
         <div class="field"><label for="maxDrawdown">Maximum drawdown</label><select id="maxDrawdown"><option value="0.05">5%</option><option value="0.1" selected>10%</option><option value="0.15">15%</option></select></div>
         <div class="field"><label for="feeAssumption">Round-trip fees + slippage</label><input id="feeAssumption" value="0.16% modeled" readonly></div>
-        <div class="field"><label for="forwardMode">Forward-test recording</label><select id="forwardMode"><option value="on" selected>Record qualifying setups</option><option value="off">Off</option></select></div>
-        <p class="settings-note">Paper mode allows qualifying setups from 62/100 rather than the selected live threshold and bypasses historical approval gates only for paper observations. It never creates a live order or makes an ML model an execution authority.</p>
+        <p class="settings-note">These controls set your maximum risk for manual trades. Market Edge does not place, change or close an order.</p>
       </div>
     </details>
 
@@ -571,7 +566,7 @@
       </div>
       <div class="ai-body">
         <div class="workflow-steps" aria-label="Analysis workflow">
-          <div class="workflow-step">Choose asset</div><div class="workflow-step">Scan market</div><div class="workflow-step">Ask questions</div><div class="workflow-step">Review risk</div><div class="workflow-step">Paper trade</div>
+          <div class="workflow-step">Choose asset</div><div class="workflow-step">Scan market</div><div class="workflow-step">Ask questions</div><div class="workflow-step">Review risk</div><div class="workflow-step">Place manually</div>
         </div>
         <div class="ai-controls">
           <div class="field"><label for="aiAsset">Asset to analyse</label><select id="aiAsset"><option value="">Scan markets first</option></select></div>
@@ -742,9 +737,6 @@
       <div class="onboarding-actions"><button id="onboardingSkip" class="secondary-button" value="skip">Skip tutorial</button><span id="onboardingCount">1 / 8</span><button id="onboardingBack" class="secondary-button" type="button" disabled>Back</button><button id="onboardingNext" class="scan" type="button">Next</button></div>
     </form>
   </dialog>
-  <dialog id="communityResearchModal" class="onboarding-modal" aria-labelledby="communityResearchTitle">
-    <div class="onboarding-card"><p class="eyebrow">Shared paper research</p><h2 id="communityResearchTitle">Help test Market Edge</h2><p>In Paper mode, Market Edge can automatically contribute app-generated paper signals and their simulated outcomes to shared research. It does not store account balances, names, wallet details, Invo usernames, or manual-trade notes.</p><div class="onboarding-actions"><button id="communityResearchLocal" class="secondary-button" type="button">Keep mine local</button><button id="communityResearchJoin" class="scan" type="button">Use shared research</button></div></div>
-  </dialog>
   <dialog id="manualTradeModal" class="manual-trade-modal" aria-labelledby="manualTradeModalTitle">
     <form id="manualTradeForm" class="manual-trade-form">
       <div class="manual-trade-modal-head"><div><p class="eyebrow">Your own record</p><h2 id="manualTradeModalTitle">Add manual trade</h2><p>This is a journal entry, not a Market Edge recommendation or exchange order.</p></div><button id="manualTradeCancel" class="onboarding-close" type="button" aria-label="Close manual trade form">×</button></div>
@@ -793,7 +785,7 @@
       const move=(node,view)=>{if(node)view.append(node);};
       move(shell.querySelector('.hero'),views.trade);move(shell.querySelector('.terminal-overview'),views.trade);move(shell.querySelector('.control-panel'),views.trade);move(shell.querySelector('.source-strip'),views.trade);move(shell.querySelector('.main-grid'),views.trade);move(shell.querySelector('.alternatives-card'),views.trade);
       const settingsPanel=shell.querySelector('.settings-panel');move(settingsPanel,views.settings);
-      views.settings.insertAdjacentHTML('afterbegin',`<div class="section-intro"><div><p class="eyebrow">Your workspace</p><h1>Settings</h1></div><p>Set your account and risk controls here. Balance and risk also stay available as quick controls on Trade.</p></div><section class="card settings-quick"><div class="card-head"><div><p class="eyebrow">Quick settings</p><h2>Account and decision controls</h2></div></div><div class="settings-grid"><div class="field"><label>Account balance (USDC)</label><input data-setting-proxy="balance" type="number" min="1" step="1"></div><div class="field"><label>Risk mode</label><select data-setting-proxy="riskMode"><option value="0.005">Protect · 0.5%</option><option value="0.01">Balanced · 1%</option><option value="0.015">Aggressive · 1.5%</option></select></div><div class="field"><label>Maximum leverage</label><select data-setting-proxy="leverage"><option value="1">1×</option><option value="2">2×</option><option value="3">3×</option><option value="5">5×</option><option value="10">10× · high risk</option></select></div><div class="field"><label>Minimum setup quality</label><input data-setting-proxy="minQuality" type="number" min="50" max="95" step="1"></div><div class="field"><label>Workspace mode</label><select data-setting-proxy="workflowMode"><option value="research">Research</option><option value="paper">Paper</option><option value="manual">Manual live</option></select></div><p class="settings-note">Leverage changes margin required, not the maximum loss allowed by your selected risk mode.</p></div></section>`);
+      views.settings.insertAdjacentHTML('afterbegin',`<div class="section-intro"><div><p class="eyebrow">Your account</p><h1>Settings</h1></div><p>Set your balance and risk limits here. They remain available as quick controls on Trade.</p></div><section class="card settings-quick"><div class="card-head"><div><p class="eyebrow">Quick settings</p><h2>Account and decision controls</h2></div></div><div class="settings-grid"><div class="field"><label>Account balance (USDC)</label><input data-setting-proxy="balance" type="number" min="1" step="1"></div><div class="field"><label>Risk mode</label><select data-setting-proxy="riskMode"><option value="0.005">Protect · 0.5%</option><option value="0.01">Balanced · 1%</option><option value="0.015">Aggressive · 1.5%</option></select></div><div class="field"><label>Maximum leverage</label><select data-setting-proxy="leverage"><option value="1">1×</option><option value="2">2×</option><option value="3">3×</option><option value="5">5×</option><option value="10">10× · high risk</option></select></div><div class="field"><label>Minimum setup quality</label><input data-setting-proxy="minQuality" type="number" min="50" max="95" step="1"></div><p class="settings-note">Leverage changes margin required, not the maximum loss allowed by your selected risk mode.</p></div></section>`);
       const paperCards=[...shell.querySelectorAll('.paper-card')],researchGrid=shell.querySelector('.research-grid'),forwardCard=researchGrid?.querySelector('article:nth-child(2)');
       views.journal.insertAdjacentHTML('beforeend',`<div class="section-intro"><div><p class="eyebrow">Your records</p><h1>Journal</h1></div><p>Keep paper positions, forward evidence and the trades you actually place in separate, easy-to-review records.</p></div><div class="journal-tabs" role="tablist"><button class="active" type="button" data-journal-page="paper">Paper</button><button type="button" data-journal-page="forward">Forward test</button><button type="button" data-journal-page="manual">My trades</button></div><div class="journal-page active" data-journal-content="paper"></div><div class="journal-page" data-journal-content="forward"></div><div class="journal-page" data-journal-content="manual"></div>`);
       move(paperCards[0],views.journal.querySelector('[data-journal-content="paper"]'));move(forwardCard,views.journal.querySelector('[data-journal-content="forward"]'));move(paperCards[1],views.journal.querySelector('[data-journal-content="manual"]'));
@@ -809,10 +801,6 @@
       const showStep=()=>{const current=tutorial[step];title.textContent=current[0];copy.textContent=current[1];stepLabel.textContent=step===0?'Welcome':`Step ${step} of ${tutorial.length-1}`;count.textContent=`${step+1} / ${tutorial.length}`;back.disabled=step===0;next.textContent=step===tutorial.length-1?'Done':'Next';progress.style.width=`${(step+1)/tutorial.length*100}%`;};
       const closeTutorial=()=>{localStorage.setItem('market-edge-onboarding-v1','complete');modal.close();};next.addEventListener('click',()=>{if(step===tutorial.length-1)closeTutorial();else{step++;showStep();}});back.addEventListener('click',()=>{if(step){step--;showStep();}});modal.addEventListener('close',()=>localStorage.setItem('market-edge-onboarding-v1','complete'));document.getElementById('howToUse').addEventListener('click',()=>{step=0;showStep();modal.showModal();});
       if(!localStorage.getItem('market-edge-onboarding-v1')){showStep();setTimeout(()=>modal.showModal(),180);}
-      const communityModal=document.getElementById('communityResearchModal'),communityChoice=()=>localStorage.getItem('market-edge-community-paper-research'),showCommunityNotice=()=>{if(document.getElementById('workflowMode')?.value==='paper'&&!communityChoice()&&!communityModal.open)communityModal.showModal();};
-      document.getElementById('communityResearchJoin').addEventListener('click',()=>{localStorage.setItem('market-edge-community-paper-research','shared');communityModal.close();syncCommunityPaper(forwardLedger(),[],Object.keys(forwardLedger().outcomes||{}));showToast('Anonymous paper research is on. New paper signals and outcomes will help shared research.');});
-      document.getElementById('communityResearchLocal').addEventListener('click',()=>{localStorage.setItem('market-edge-community-paper-research','local');communityModal.close();showToast('Paper records will stay on this device.');});
-      window.marketEdgeShowCommunityNotice=showCommunityNotice;
     }
     setupAppShell();
     const MARKETS = ['BTC','ETH','SOL','XRP','DOGE','ADA','AVAX','LINK','SUI','PENGU','BNB','LTC','DOT','NEAR','APT','ARB','OP','UNI','AAVE','INJ'];
@@ -825,14 +813,14 @@
       DOGE:'validation −0.76R, test −1.15R and LONG expectancy −0.92R overall',
       LTC:'validation −0.40R, test −0.22R and LONG expectancy −0.46R overall'
     };
-    let latestBest = null, latestResults = [], socialRecords = [], chartTimeframe='5m', lastChartPrice=null, scanSequence=0;
+    let latestBest = null, latestResults = [], socialRecords = [], chartTimeframe='5m', lastChartPrice=null, scanSequence=0, researchMlState={status:'UNAVAILABLE'};
     const chartState={best:null,historical:null,mode:'live',requestId:0,visibleBars:92,offset:0,signalFilter:'all',directionFilter:'all',hover:null,drag:null,markerHits:[],resizeObserver:null,selectedSignalId:null,selectedPulseUntil:0};
     const chartSignalCounts={};
     const els = {
       scan: document.getElementById('scanButton'), balance: document.getElementById('balance'), risk: document.getElementById('riskMode'), leverage: document.getElementById('leverage'),
       minQuality: document.getElementById('minQuality'), minRR: document.getElementById('minRR'), maxConcurrent: document.getElementById('maxConcurrent'),
       maxExposure: document.getElementById('maxExposure'), openDirection: document.getElementById('openDirection'), maxDailyLoss: document.getElementById('maxDailyLoss'),
-      maxDrawdown: document.getElementById('maxDrawdown'), forwardMode: document.getElementById('forwardMode'), workflowMode:document.getElementById('workflowMode'), opportunityFilter: document.getElementById('opportunityFilter'),
+      maxDrawdown: document.getElementById('maxDrawdown'), opportunityFilter: document.getElementById('opportunityFilter'),
       status: document.getElementById('feedStatus'), list: document.getElementById('marketList'), rec: document.getElementById('recommendation'),
       title: document.getElementById('decisionTitle'), badge: document.getElementById('decisionBadge'), toast: document.getElementById('toast'),
       alternatives: document.getElementById('alternatives'),
@@ -847,20 +835,19 @@
       manualModeNote:document.getElementById('manualModeNote'),manualTradeStats:document.getElementById('manualTradeStats'),manualTradePositions:document.getElementById('manualTradePositions'),manualTradeHistory:document.getElementById('manualTradeHistory'),addManualTrade:document.getElementById('addManualTrade'),manualTradeModal:document.getElementById('manualTradeModal'),closeManualTradeModal:document.getElementById('closeManualTradeModal'),monitorSummary:document.getElementById('monitorSummary'),researchProgress:document.getElementById('researchProgress'),mlResearch:document.getElementById('mlResearch'),chartAsset:document.getElementById('chartAsset'),chartPrice:document.getElementById('chartPrice'),chartChange:document.getElementById('chartChange'),chartMeta:document.getElementById('chartMeta'),chartCanvas:document.getElementById('chartCanvas'),chartSignals:document.getElementById('chartSignals'),chartVerify:document.getElementById('chartVerify'),chartSignalFocus:document.getElementById('chartSignalFocus'),chartSelectedSignal:document.getElementById('chartSelectedSignal')
     };
     function currentSettings() {
-      const paperMode=els.workflowMode.value==='paper', selectedQuality=Math.max(50, Number(els.minQuality.value) || 72);
+      const selectedQuality=Math.max(50, Number(els.minQuality.value) || 72);
       return {
         balance: Math.max(0, Number(els.balance.value) || 0),
         riskPct: Number(els.risk.value),
         maxLeverage: Math.max(1, Number(els.leverage.value) || 1),
-        minQuality: paperMode?Math.min(selectedQuality,62):selectedQuality,
+        minQuality: selectedQuality,
         minRR: Math.max(1, Number(els.minRR.value) || 1.8),
         maxExposurePct: Math.max(0.1, Number(els.maxExposure.value) || 1),
         minNotional: MIN_ORDER_NOTIONAL,
         maxConcurrent: Math.max(1, Number(els.maxConcurrent.value) || 1),
         openDirection: els.openDirection.value,
         maxDailyLoss: Number(els.maxDailyLoss.value),
-        maxDrawdown: Number(els.maxDrawdown.value),
-        paperMode
+        maxDrawdown: Number(els.maxDrawdown.value)
       };
     }
 
@@ -1078,16 +1065,16 @@
       if (filter === 'risk') visible.sort((a,b)=>(a.quant?.risk?.lossAtStop||Infinity)-(b.quant?.risk?.lossAtStop||Infinity));
       if (filter === 'liquidity') visible.sort((a,b)=>b.liquidityScore-a.liquidityScore);
       if (['overall','quality'].includes(filter)) visible.sort((a,b)=>(b.opportunity??-1)-(a.opportunity??-1));
-      els.list.innerHTML = '<div class="market-row table-head"><span>Asset</span><span>Action</span><span>Score</span></div>' + visible.map(r=>{
+      els.list.innerHTML = '<div class="market-row table-head"><span>Ranked market</span><span>Bias / verdict</span><span>Quant score</span></div>' + visible.map((r,index)=>{
         const decision = r.quant?.decision || 'ANALYSIS UNAVAILABLE';
         const badgeClass = decision === 'TAKE TRADE' ? (r.quant.direction==='short'?'short':'buy') : decision === 'WAIT' ? 'watch' : 'avoid';
         const opportunity=Number.isFinite(r.opportunity)?Math.round(r.opportunity):0,historyCount=chartSignalCounts[r.symbol],historyLabel=historyCount==null?'History…':historyCount?`• ${historyCount} signal${historyCount===1?'':'s'}`:'No history';
-        const action=r.quant?.paperOnly?'PAPER':decision==='TAKE TRADE'?'TRADE':decision==='WAIT'?'WAIT':Number.isFinite(r.quality)&&r.quality>0?'WATCH':'SKIP';
+        const action=decision==='TAKE TRADE'?'TRADE':decision==='WAIT'?'WAIT':Number.isFinite(r.quality)&&r.quality>0?'WATCH':'SKIP';
         return `
         <div class="market-row ${latestBest?.symbol===r.symbol?'selected':''}" data-asset="${r.symbol}">
-          <div class="market-asset"><span class="mini-coin">${r.symbol}</span><span><b>${r.symbol}</b><small>${r.name} <em class="history-indicator ${historyCount?'has-history':''}">${historyLabel}</em></small></span></div>
+          <div class="market-asset"><span class="mini-coin">#${index+1}</span><span><b>${r.symbol}</b><small>${r.name} <em class="history-indicator ${historyCount?'has-history':''}">${historyLabel}</em></small></span></div>
           <span><span class="badge ${badgeClass}">${action}</span><small>${r.quant?.direction?`${r.quant.direction.toUpperCase()} · `:''}${r.change24>=0?'+':''}${r.change24.toFixed(1)}%</small></span>
-          <span class="radar-score"><b>${Number.isFinite(r.opportunity)?opportunity:'—'}<small> / 100</small></b><span class="radar-bar"><i style="width:${opportunity}%"></i></span></span>
+          <span class="radar-score"><b>${Number.isFinite(r.quant?.setupQuality)?r.quant.setupQuality:opportunity}<small> / 100</small></b><small>ML ${mlScanLabel()}</small><span class="radar-bar"><i style="width:${opportunity}%"></i></span></span>
         </div>`;
       }).join('') || '<div class="empty"><strong>No markets match this filter</strong>Try Best overall or scan again later.</div>';
     }
@@ -1103,7 +1090,7 @@
       const interval=chartInterval(); if(interval===300000)return candles;
       const grouped=new Map(); candles.forEach(candle=>{const time=Math.floor(Number(candle.time)/interval)*interval,prior=grouped.get(time);if(!prior)grouped.set(time,{...candle,time});else{prior.high=Math.max(prior.high,candle.high);prior.low=Math.min(prior.low,candle.low);prior.close=candle.close;prior.volume+=candle.volume;prior.closeTime=candle.closeTime;}});return [...grouped.values()];
     }
-    function chartLiveMarker(best){const q=best?.quant||{};if(q.paperOnly||q.decision!=='TAKE TRADE'||!q.risk?.valid||!['long','short'].includes(q.direction))return null;return {signalId:`current-${best.symbol}-${Number(best.price)||Date.now()}`,asset:best.symbol,timestamp:(best.timeframes?.m5||best.candles||[]).at(-1)?.time||Date.now(),direction:q.direction,strategy:q.strategy,regime:q.regime,qualityScore:q.quality,signalPrice:best.price,preferredEntry:q.entry,stop:q.stop,tp1:q.target1,tp2:q.target2,rr:q.rr,source:'CURRENT',status:'CURRENT',reason:q.reason||'',risk:q.risk,outcome:{status:'PENDING'}};}
+    function chartLiveMarker(best){const q=best?.quant||{};if(q.decision!=='TAKE TRADE'||!q.risk?.valid||!['long','short'].includes(q.direction))return null;return {signalId:`current-${best.symbol}-${Number(best.price)||Date.now()}`,asset:best.symbol,timestamp:(best.timeframes?.m5||best.candles||[]).at(-1)?.time||Date.now(),direction:q.direction,strategy:q.strategy,regime:q.regime,qualityScore:q.quality,signalPrice:best.price,preferredEntry:q.entry,stop:q.stop,tp1:q.target1,tp2:q.target2,rr:q.rr,source:'CURRENT',status:'CURRENT',reason:q.reason||'',risk:q.risk,outcome:{status:'PENDING'}};}
     function chartSignalKey(signal){return String(signal?.signalId||`${signal?.asset||''}-${signal?.timestamp||''}`);}
     function chartStoredSignals(){return chartState.historical?.signals||[];}
     function chartSelectedSignal(){return chartStoredSignals().find(signal=>chartSignalKey(signal)===chartState.selectedSignalId)||null;}
@@ -1196,9 +1183,9 @@
         const data=await response.json(),states=new Map((data.states||[]).map(item=>[item.asset,item])),byAsset=data.byAsset||{},dataset=data.dataset||{};
         let researchStatus={};try{const statusResponse=await fetch(`${base}/v1/research/status`,{cache:'no-store'});if(statusResponse.ok)researchStatus=await statusResponse.json();}catch{}
         let datasetSummary={};try{datasetSummary=JSON.parse(dataset.summary_json||'{}');}catch{}
-        const resolved=Number(data.totalResolvedTargets)||0,evidence=document.getElementById('evidenceResolved'),meter=document.getElementById('evidenceMeter'),evidenceCaption=document.getElementById('evidenceCaption'),tier=datasetSummary.sample_gate||(resolved<20?'INSUFFICIENT':resolved<50?'VERY LOW':resolved<100?'EARLY':resolved<200?'MODERATE':'LARGE'),replayRunning=(data.states||[]).some(state=>state.status==='RUNNING'),ml=researchStatus.ml||{};
+        const resolved=Number(data.totalResolvedTargets)||0,evidence=document.getElementById('evidenceResolved'),meter=document.getElementById('evidenceMeter'),evidenceCaption=document.getElementById('evidenceCaption'),tier=datasetSummary.sample_gate||(resolved<20?'INSUFFICIENT':resolved<50?'VERY LOW':resolved<100?'EARLY':resolved<200?'MODERATE':'LARGE'),replayRunning=(data.states||[]).some(state=>state.status==='RUNNING'),ml=researchStatus.ml||{};researchMlState=ml;
         if(evidence)evidence.textContent=resolved>=20?`${resolved} resolved setups · gate met`:`${resolved} / 20 resolved setups`;if(evidenceCaption)evidenceCaption.textContent=resolved>=20?`${tier} evidence tier · not a reliability claim`:'Resolved setups toward the first 20';if(meter)meter.style.width=`${Math.min(100,resolved/20*100)}%`;
-        const drawer=document.getElementById('researchDrawerStatus'),lab=document.getElementById('researchLabEvidence'),mode=document.getElementById('researchModeStatus'),modeCaption=document.getElementById('researchModeCaption'),mlStatus=document.getElementById('mlStatus'),mlCaption=document.getElementById('mlCaption');if(drawer)drawer.textContent=tier;if(lab)lab.textContent=`MANUAL LIVE · ${tier} EVIDENCE`;if(mode)mode.textContent=replayRunning?'RUNNING':'IDLE';if(modeCaption)modeCaption.textContent=replayRunning?'Historical replay continues in the background':'No active replay state reported';if(mlStatus)mlStatus.textContent=ml.status||'UNAVAILABLE';if(mlCaption)mlCaption.textContent=ml.status==='DISABLED'?'No model influences trading decisions.':ml.sampleN!=null?`${ml.sampleN} samples reported; no champion is active.`:'Model status is unavailable.';if(els.mlResearch){const recent=Array.isArray(ml.recentModels)?ml.recentModels:[],models=ml.models||{},counts=`${models.RESEARCH||0} research · ${models.SHADOW||0} shadow · ${models.CHAMPION||0} champion`;els.mlResearch.innerHTML=recent.length?`<strong>ML registry · ${ml.status||'RESEARCH'}</strong> ${counts}. ${recent.map(model=>`${model.target||model.algorithm}: ${model.status} · ${model.oosN||0} chronological OOS`).join(' · ')}. No model changes a trade decision.`:`<strong>ML research is awaiting a manual run.</strong> Dataset has ${resolved} resolved setups. The first model requires immutable pre-entry features, chronological validation and remains advisory-only.`;}
+        const drawer=document.getElementById('researchDrawerStatus'),lab=document.getElementById('researchLabEvidence'),mode=document.getElementById('researchModeStatus'),modeCaption=document.getElementById('researchModeCaption'),mlStatus=document.getElementById('mlStatus'),mlCaption=document.getElementById('mlCaption');if(drawer)drawer.textContent=tier;if(lab)lab.textContent=`MANUAL LIVE · ${tier} EVIDENCE`;if(mode)mode.textContent=replayRunning?'RUNNING':'IDLE';if(modeCaption)modeCaption.textContent=replayRunning?'Historical replay continues in the background':'No active replay state reported';if(mlStatus)mlStatus.textContent=ml.status||'UNAVAILABLE';if(mlCaption)mlCaption.textContent=ml.status==='DISABLED'?'No model influences trading decisions.':`Score ${mlScanLabel()} — no calibrated champion is active.`;if(els.mlResearch){const recent=Array.isArray(ml.recentModels)?ml.recentModels:[],models=ml.models||{},counts=`${models.RESEARCH||0} research · ${models.SHADOW||0} shadow · ${models.CHAMPION||0} champion`;els.mlResearch.innerHTML=recent.length?`<strong>ML registry · ${ml.status||'RESEARCH'}</strong> ${counts}. ${recent.map(model=>`${model.target||model.algorithm}: ${model.status} · ${model.oosN||0} chronological OOS`).join(' · ')}. No model changes a trade decision unless it has passed validation.`:`<strong>ML research is awaiting a manual run.</strong> Dataset has ${resolved} resolved setups. The first model requires immutable pre-entry features, chronological validation and remains advisory-only.`;}
         els.researchProgress.innerHTML=['BTC','ETH','SOL','XRP','DOGE','LTC'].map(asset=>{const state=states.get(asset)||{},totals=byAsset[asset]||{};return `<div class="replay-asset"><span>${asset} replay</span><strong>${totals.decisionPoints||0} decisions · ${totals.resolved||0} resolved</strong><small>${state.status||'Awaiting cache'}</small></div>`;}).join('')+`<div class="replay-asset"><span>Dataset V1</span><strong>${dataset.status||'Unavailable'}</strong><small>${data.totalDecisionPoints||0} decisions · ${data.totalResolvedTargets||0} resolved</small></div>`;
       } catch { els.researchProgress.innerHTML='<div class="replay-asset"><span>Replay progress</span><strong>Unavailable</strong><small>Live scanner remains independent.</small></div>'; }
     }
@@ -1207,6 +1194,33 @@
       if(!best?.candles?.length){els.dataHealth.innerHTML='<strong>No selected dataset.</strong> A scan must return completed candles before data health can be measured.';return;}
       const report=MarketEdgeResearch.inspectDataset(best.candles,{interval:'4h',asOf:Date.now(),asset:best.symbol,symbol:`${best.symbol}USDT`,exchange:'MULTI-FEED',source:(best.sources||[]).join(' + ')}),meta=report.meta;
       els.dataHealth.innerHTML=`<strong>${best.symbol} 4h · ${meta.dataQualityStatus} · ${meta.dataHealthScore.toFixed(0)}/100.</strong> ${meta.candleCount}/${meta.expectedCandleCount} completed candles · ${(meta.coverage*100).toFixed(2)}% coverage · ${meta.gapCount} gaps · ${meta.partialCandleCount} partial excluded · hash ${meta.datasetHash}. ${report.errors.length?`Rejected: ${report.errors[0]}`:'This verifies the browser sample, not multi-year depth.'}`;
+    }
+    function hasTradeGeometry(q) {
+      return Boolean(q?.risk?.valid&&['long','short'].includes(q.direction)&&[q.entry,q.stop,q.target1].every(value=>Number.isFinite(Number(value)))&&Number(q.rr1||q.rr)>0);
+    }
+    function decisionBlockers(q) {
+      const messages=[];
+      if (q?.reason) messages.push(q.reason);
+      (q?.reasons||[]).forEach(reason=>{if(reason&&!messages.includes(reason))messages.push(reason);});
+      if (!messages.length&&q?.decision!=='TAKE TRADE') messages.push('No completed-candle strategy confirmation produced an executable setup.');
+      return messages.slice(0,6);
+    }
+    function scanBlockerSummary(results) {
+      const counts={};
+      (results||[]).filter(result=>result.quant?.decision!=='TAKE TRADE').forEach(result=>{
+        const text=decisionBlockers(result.quant).join(' ').toLowerCase();
+        const label=/quality|score/.test(text)?'quality':/trend|timeframe|alignment|structure/.test(text)?'trend / structure':/momentum|rsi|volume/.test(text)?'momentum / volume':/regime/.test(text)?'regime':/risk|margin|notional|loss|portfolio/.test(text)?'risk':/data|source|candle/.test(text)?'data quality':'other rule';
+        counts[label]=(counts[label]||0)+1;
+      });
+      const summary=Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0,4).map(([label,count])=>`${label} ${count}`).join(' · ');
+      return summary||'No rejected candidates in this scan.';
+    }
+    function mlScanLabel() {
+      const recent=Array.isArray(researchMlState?.recentModels)?researchMlState.recentModels:[];
+      const model=recent.find(item=>item.status==='CHAMPION'||item.status==='SHADOW')||recent[0];
+      if (!model) return 'UNAVAILABLE';
+      if (model.status==='CHAMPION'&&model.calibrationStatus==='APPLIED') return 'AVAILABLE · validated';
+      return `UNAVAILABLE · ${model.status||'RESEARCH'}${model.calibrationStatus?` / ${model.calibrationStatus}`:''}`;
     }
     function renderQuantRecommendation(best) {
       latestBest = best || null;
@@ -1218,60 +1232,54 @@
         els.rec.innerHTML='<div class="empty"><strong>No reliable analysis</strong>Fresh, valid data is required before any trade plan is generated.</div>';
         return;
       }
-      const q=best.quant, decision=q.decision, displayDecision=q.paperOnly?'PAPER TRADE':decision, direction=q.direction||best.lean||'neutral';
+      const q=best.quant, decision=q.decision, direction=q.direction||best.lean||'neutral';
       const directionText=direction==='short'?'SHORT':direction==='long'?'LONG':'NEUTRAL';
-      const workspaceMode=els.workflowMode.value==='manual'?'MANUAL LIVE':els.workflowMode.value.toUpperCase();
       const decisionClass=decision==='TAKE TRADE'?(direction==='short'?'short':'buy'):decision==='WAIT'?'watch':'avoid';
-      const simpleReason=q.paperOnly?'This is an exploratory paper observation, not a live instruction. Record it, then compare its outcome later.':decision==='TAKE TRADE'?'The setup passed the required checks. Read the exact trade plan before deciding whether to place it manually.':decision==='WAIT'?'There may be an interesting setup, but entering now is not justified.': 'No valid trade right now. Wait for a fresh scan instead of forcing an entry.';
+      const simpleReason=decision==='TAKE TRADE'?'The setup passed the required current-market and risk checks. Review the exact levels before deciding whether to place it manually.':decision==='WAIT'?'A candidate was evaluated, but its current rules do not permit entry.': 'No valid trade is permitted for this candidate right now.';
+      const mlLabel=mlScanLabel();
       els.title.textContent=`${best.symbol} — ${directionText}`;
-      els.badge.className=`badge ${decisionClass}`; els.badge.textContent=displayDecision;
+      els.badge.className=`badge ${decisionClass}`; els.badge.textContent=decision;
       const common=`
         <div class="simple-decision">
           <div class="asset-row"><div class="asset-name"><span class="coin">${best.symbol}</span><span><strong>${best.name}</strong><span>${formatPrice(best.price)} USDT · ${best.sourceCount} independent feeds</span></span></div></div>
-          <div class="decision-state"><h3>${directionText} · ${displayDecision}</h3><span class="badge ${decisionClass}">${q.paperOnly?'PAPER ONLY':decision==='TAKE TRADE'?'TRADE READY':decision}</span></div>
+          <div class="decision-state"><h3>#1 CURRENT CANDIDATE · ${directionText}</h3><span class="badge ${decisionClass}">${decision==='TAKE TRADE'?'TRADE READY':decision}</span></div>
           <div class="score-pair"><div class="score-tile score-gauge" style="--score:${Number.isFinite(q.setupQuality)?q.setupQuality:0}"><span>Setup quality <button type="button" title="How strong the actual trade setup is.">?</button></span><strong>${Number.isFinite(q.setupQuality)?q.setupQuality+' / 100':'—'}</strong></div><div class="score-tile score-gauge" style="--score:${Number.isFinite(q.opportunity?.score)?q.opportunity.score:0}"><span>Opportunity <button type="button" title="How interesting this market is right now.">?</button></span><strong>${q.opportunity?.score??'—'}${q.opportunity?.score!=null?' / 100':''}</strong></div></div>
           <p class="decision-summary">${simpleReason}</p>
           <div class="decision-actions"><button class="secondary-button" type="button" data-toggle-why>Why?</button><button class="secondary-button" type="button" data-toggle-advanced>View details</button></div>
-          <div class="decision-advanced" data-decision-advanced><div class="why-list"><div class="why-line"><b>Bottom line</b><span>${q.reason||simpleReason}</span></div>${(q.reasons||[]).slice(0,4).map(reason=>`<div class="why-line"><b>•</b><span>${reason}</span></div>`).join('')}</div></div>
+          <div class="decision-advanced" data-decision-advanced><div class="why-list"><div class="why-line"><b>Bottom line</b><span>${q.reason||simpleReason}</span></div>${decisionBlockers(q).map(reason=>`<div class="why-line"><b>•</b><span>${reason}</span></div>`).join('')}${q.researchNote?`<div class="why-line"><b>Research</b><span>${q.researchNote}</span></div>`:''}<div class="why-line"><b>Scan audit</b><span>${scanBlockerSummary(latestResults)}</span></div></div></div>
         </div>
         <details class="advanced-details"><summary>Advanced setup data</summary><div class="evidence-grid">
-          <div class="evidence-item"><span>Decision</span><strong>${displayDecision}</strong></div>
+          <div class="evidence-item"><span>Final verdict</span><strong>${decision}</strong></div>
           <div class="evidence-item"><span>Regime</span><strong>${q.regime||'Unavailable'}</strong></div>
           <div class="evidence-item"><span>Strategy</span><strong>${q.strategy||'None qualified'}</strong></div>
           <div class="evidence-item"><span>Structure</span><strong>${q.frame?.structure?.label||'Unavailable'}</strong></div>
           <div class="evidence-item"><span>RSI 14</span><strong>${Number.isFinite(q.frame?.rsi)?q.frame.rsi.toFixed(1):'—'}</strong></div>
           <div class="evidence-item"><span>Relative volume</span><strong>${Number.isFinite(q.frame?.relativeVolume)?q.frame.relativeVolume.toFixed(2)+'×':'Unavailable'}</strong></div>
-          <div class="evidence-item"><span>Workspace</span><strong>${workspaceMode}</strong></div>
-          <div class="evidence-item"><span>ML model</span><strong>NO VALIDATED CHAMPION</strong></div>
+          <div class="evidence-item"><span>Quant score</span><strong>${Number.isFinite(q.setupQuality)?q.setupQuality+'/100':'Unavailable'}</strong></div>
+          <div class="evidence-item"><span>ML score</span><strong>${mlLabel}</strong></div>
         </div></details>
         <div class="evidence-links"><a class="evidence-link" href="${MarketEdgeTradingView.chartUrl('BINANCE',best.symbol,'USDT')}" target="_blank" rel="noopener noreferrer">Verify ${best.symbol} on TradingView</a></div>`;
-      if (decision!=='TAKE TRADE' || !q.risk?.valid) {
+      if (!hasTradeGeometry(q)) {
         els.rec.innerHTML=common+`
-          <div class="invo-entry"><div class="invo-entry-head"><div><h3>Nothing to enter into Invo</h3><p>Wait for another scan. The app will not turn a WAIT or NO TRADE into a trade plan.</p></div><span class="badge ${decisionClass}">${decision}</span></div></div>`;
+          <div class="invo-entry"><div class="invo-entry-head"><div><h3>No actionable setup</h3><p>${decisionBlockers(q).join(' ')||'The strategy did not produce valid entry, stop and target levels from completed market data.'}</p></div><span class="badge ${decisionClass}">${decision}</span></div></div>`;
         bindDecisionControls();
         return;
       }
       const risk=q.risk, isShort=q.direction==='short', currency='USDC';
-      if(q.paperOnly){
-        els.rec.innerHTML=common+`
-          <div class="reasons" style="margin-top:18px">${(q.reasons||[]).slice(0,6).map(reason=>`<div class="reason"><i>◌</i><span>${reason}</span></div>`).join('')}</div>
-          <div class="order-plan"><div class="plan-box"><span>Paper notional</span><strong>${risk.notional.toFixed(2)} ${currency}</strong></div><div class="plan-box"><span>Paper margin</span><strong>${risk.margin.toFixed(2)} ${currency}</strong></div><div class="plan-box"><span>Paper leverage</span><strong>${risk.leverage}×</strong></div><div class="plan-box"><span>Loss at stop</span><strong>${risk.lossAtStop.toFixed(2)} ${currency}</strong></div><div class="plan-box"><span>Risk / reward</span><strong>${q.rr1.toFixed(2)}R / ${q.rr2.toFixed(2)}R</strong></div><div class="plan-box"><span>Outcome</span><strong>Record for review</strong></div></div>
-          <section class="invo-entry"><div class="invo-entry-head"><div><h3>Paper-trade plan only</h3><p>Do not copy this into Invo. The system will record it in the forward-test ledger so the looser rule can be judged on outcomes.</p></div><span class="badge watch">PAPER ONLY</span></div><div class="invo-fields"><div class="invo-field"><b>1</b><span>Direction</span><strong>${directionText}</strong></div><div class="invo-field"><b>2</b><span>Reference entry</span><strong>${formatPrice(q.entry)} USDT</strong></div><div class="invo-field"><b>3</b><span>Stop</span><strong>${formatPrice(q.stop)} USDT</strong></div><div class="invo-field"><b>4</b><span>TP1 / TP2</span><strong>${formatPrice(q.target1)} / ${formatPrice(q.target2)} USDT</strong></div></div></section>`;
-        bindDecisionControls();
-        return;
-      }
       els.rec.innerHTML=common+`
         <div class="reasons" style="margin-top:18px">${(q.reasons||[]).slice(0,6).map(reason=>`<div class="reason"><i>✓</i><span>${reason}</span></div>`).join('')}</div>
         <div class="order-plan">
           <div class="plan-box"><span>Notional position</span><strong>${risk.notional.toFixed(2)} ${currency}</strong></div>
+          <div class="plan-box"><span>Risk allowance</span><strong>${(Number(els.risk.value)*100).toFixed(1)}% · ${risk.maxLoss.toFixed(2)} ${currency}</strong></div>
           <div class="plan-box"><span>Margin required</span><strong>${risk.margin.toFixed(2)} ${currency}</strong></div>
           <div class="plan-box"><span>Leverage selected</span><strong>${risk.leverage}× · lowest required</strong></div>
+          <div class="plan-box"><span>Estimated round-trip fees</span><strong>${(risk.notional*risk.roundTripCostPct).toFixed(2)} ${currency}</strong></div>
           <div class="plan-box"><span>Loss at stop incl. costs</span><strong>${risk.lossAtStop.toFixed(2)} ${currency}</strong></div>
           <div class="plan-box"><span>Risk / reward</span><strong>${q.rr1.toFixed(2)}R / ${q.rr2.toFixed(2)}R</strong></div>
           <div class="plan-box"><span>Liquidation distance</span><strong>${(risk.liquidationDistancePct*100).toFixed(1)}%</strong></div>
         </div>
-        <section class="invo-entry" aria-label="Exact Invo execution card">
-          <div class="invo-entry-head"><div><h3>Enter this into Invo</h3><p>Position/contract value and margin are deliberately shown as different numbers.</p></div><span class="badge ${isShort?'short':'buy'}">${directionText}</span></div>
+        <section class="invo-entry" aria-label="Exact manual trade details">
+          <div class="invo-entry-head"><div><h3>${decision==='TAKE TRADE'?'Exact manual trade details':'Candidate levels — do not enter while verdict is WAIT'}</h3><p>Position/contract value and margin are deliberately shown as different numbers.</p></div><span class="badge ${isShort?'short':'buy'}">${directionText}</span></div>
           <div class="invo-fields">
             <div class="invo-field"><b>1</b><span>Asset</span><strong>${best.name} (${best.symbol})</strong></div>
             <div class="invo-field"><b>2</b><span>Direction</span><strong class="${isShort?'short-value':'long-value'}">${directionText}</strong></div>
@@ -1289,15 +1297,14 @@
           <p class="fresh-note">Only enter while Invo's mark price is close to ${formatPrice(q.entry)}. Confirm Invo's actual liquidation price and active TP/SL before submitting.</p>
         </section>
         <details class="analysis-details"><summary>Why this trade and what invalidates it?</summary><p class="analysis-copy">${q.reason}. A move through ${formatPrice(q.stop)} invalidates the setup. The score is not a probability and historical testing may still be insufficient.</p></details>
-        <div class="confirm"><label class="confirm-note"><input id="ack" type="checkbox">I understand this is research, not guaranteed profit.</label><button id="prepare" class="prepare" type="button" disabled>Copy exact manual values</button></div>
-        <details class="analysis-details" id="manualRecordPanel"><summary>I took this trade manually</summary><p class="analysis-copy">Record what you actually entered after the order is already placed. This is a local journal only—Market Edge has no exchange connection and cannot change the trade.</p><div class="settings-grid" style="margin-top:12px"><div class="field"><label for="manualActualEntry">Actual entry</label><input id="manualActualEntry" type="number" step="any" value="${q.entry}"></div><div class="field"><label for="manualActualSize">Actual notional (USDC)</label><input id="manualActualSize" type="number" min="0.01" step="0.01" value="${risk.notional.toFixed(2)}"></div><div class="field"><label for="manualActualLeverage">Actual leverage</label><input id="manualActualLeverage" type="number" min="1" step="1" value="${risk.leverage}"></div><div class="field"><label for="manualActualStop">Actual stop</label><input id="manualActualStop" type="number" step="any" value="${q.stop}"></div><div class="field"><label for="manualActualTarget1">Actual TP1</label><input id="manualActualTarget1" type="number" step="any" value="${q.target1}"></div><div class="field"><label for="manualActualTarget2">Actual TP2</label><input id="manualActualTarget2" type="number" step="any" value="${q.target2}"></div></div><div class="research-actions" style="margin-top:12px"><button id="recordManualTrade" class="secondary-button" type="button">Record manual trade</button></div></details>`;
+        ${decision==='TAKE TRADE'?`<div class="confirm"><label class="confirm-note"><input id="ack" type="checkbox">I understand this is research, not guaranteed profit.</label><button id="prepare" class="prepare" type="button" disabled>COPY TRADE DETAILS</button></div><details class="analysis-details" id="manualRecordPanel"><summary>I took this trade manually</summary><p class="analysis-copy">Record what you actually entered after the order is already placed. This is a local journal only—Market Edge has no exchange connection and cannot change the trade.</p><div class="settings-grid" style="margin-top:12px"><div class="field"><label for="manualActualEntry">Actual entry</label><input id="manualActualEntry" type="number" step="any" value="${q.entry}"></div><div class="field"><label for="manualActualSize">Actual notional (USDC)</label><input id="manualActualSize" type="number" min="0.01" step="0.01" value="${risk.notional.toFixed(2)}"></div><div class="field"><label for="manualActualLeverage">Actual leverage</label><input id="manualActualLeverage" type="number" min="1" step="1" value="${risk.leverage}"></div><div class="field"><label for="manualActualStop">Actual stop</label><input id="manualActualStop" type="number" step="any" value="${q.stop}"></div><div class="field"><label for="manualActualTarget1">Actual TP1</label><input id="manualActualTarget1" type="number" step="any" value="${q.target1}"></div><div class="field"><label for="manualActualTarget2">Actual TP2</label><input id="manualActualTarget2" type="number" step="any" value="${q.target2}"></div></div><div class="research-actions" style="margin-top:12px"><button id="recordManualTrade" class="secondary-button" type="button">Record manual trade</button></div></details>`:`<p class="fresh-note"><strong>Why not enter:</strong> ${decisionBlockers(q).join(' ')}</p>`}`;
       const ack=document.getElementById('ack'), prepare=document.getElementById('prepare');
-      ack.addEventListener('change',()=>prepare.disabled=!ack.checked);
-      prepare.addEventListener('click',async()=>{
-        const text=`INVO CREATE TRADE\nAsset: ${best.name} (${best.symbol})\nDirection: ${directionText}\nStrategy: ${q.strategy}\nEntry zone: ${formatPrice(q.entryZone.low)}–${formatPrice(q.entryZone.high)} USDT\nIdeal entry: ${formatPrice(q.idealEntry)} USDT\nCurrent reference: ${formatPrice(q.entry)} USDT\nStop-Loss Price: ${formatPrice(q.stop)} USDT\nTP1: ${formatPrice(q.target1)} USDT\nTP2: ${formatPrice(q.target2)} USDT\nLeverage: ${risk.leverage}x isolated\nPosition Size / Margin: ${risk.margin.toFixed(2)} USDC\nContract / Notional Value: ${risk.notional.toFixed(2)} USDC\nEstimated Liquidation: ${formatPrice(risk.estimatedLiquidation)} USDT\nMaximum Planned Loss incl. modeled costs: ${risk.lossAtStop.toFixed(2)} USDC\nRisk/Reward: ${q.rr1.toFixed(2)}R / ${q.rr2.toFixed(2)}R\nInvalidation: ${q.invalidationCondition}\nTrailing rule: ${q.trailingRule}\nSetup Quality: ${q.quality}/100`;
-        await navigator.clipboard.writeText(text).catch(()=>{}); showToast('Exact Invo card copied. Verify every live field before submitting.');
+      ack?.addEventListener('change',()=>prepare.disabled=!ack.checked);
+      prepare?.addEventListener('click',async()=>{
+        const text=`TRADE DETAILS\nASSET: ${best.symbol}\nDIRECTION: ${directionText}\nENTRY: ${formatPrice(q.entry)} USDT\nSTOP: ${formatPrice(q.stop)} USDT\nTP1: ${formatPrice(q.target1)} USDT\nTP2: ${formatPrice(q.target2)} USDT\nR:R: ${Number(q.rr1||q.rr).toFixed(2)}R / ${Number(q.rr2||q.rr).toFixed(2)}R\nRISK: ${(Number(els.risk.value)*100).toFixed(1)}% · ${risk.maxLoss.toFixed(2)} USDC\nPOSITION SIZE: ${risk.notional.toFixed(2)} USDC notional\nLEVERAGE: ${risk.leverage}x\nMARGIN: ${risk.margin.toFixed(2)} USDC\nNOTIONAL: ${risk.notional.toFixed(2)} USDC\nESTIMATED FEES: ${(risk.notional*risk.roundTripCostPct).toFixed(2)} USDC\nLOSS AT STOP: ${risk.lossAtStop.toFixed(2)} USDC\nQUANT SCORE: ${q.setupQuality}/100\nML SCORE: ${mlLabel}\nFINAL VERDICT: ${decision}`;
+        await navigator.clipboard.writeText(text).catch(()=>{}); showToast('Trade details copied. Verify every live field before submitting.');
       });
-      document.getElementById('recordManualTrade').addEventListener('click',()=>recordManualTrade(best,q,risk));
+      document.getElementById('recordManualTrade')?.addEventListener('click',()=>recordManualTrade(best,q,risk));
       bindDecisionControls();
     }
     function bindDecisionControls(){const panel=els.rec.querySelector('[data-decision-advanced]'),why=els.rec.querySelector('[data-toggle-why]'),advanced=els.rec.querySelector('[data-toggle-advanced]');why?.addEventListener('click',()=>{panel?.classList.toggle('open');if(panel)panel.scrollIntoView({block:'nearest',behavior:'smooth'});});advanced?.addEventListener('click',()=>els.rec.querySelector('.advanced-details')?.setAttribute('open',''));}
@@ -1354,29 +1361,10 @@
       try { return MarketEdgeForward.migrate(JSON.parse(localStorage.getItem('market-edge-forward')||'null')); } catch { return MarketEdgeForward.blankLedger(); }
     }
     function saveForward(ledger) { localStorage.setItem('market-edge-forward',JSON.stringify(MarketEdgeForward.migrate(ledger))); }
-    function communitySignal(signal){return{id:signal.id,symbol:signal.symbol,direction:signal.direction,strategy:signal.strategy,regime:signal.regime,timestamp:signal.timestamp,entry:signal.entry,stop:signal.stop,target1:signal.target1,target2:signal.target2,rr1:signal.rr1,rr2:signal.rr2,quality:signal.quality,datasetHash:signal.datasetHash,engineVersion:signal.engineVersion,sourceCount:signal.sourceCount};}
-    async function syncCommunityPaper(ledger,signalIds=[],outcomeIds=[]){
-      if(els.workflowMode.value!=='paper'||localStorage.getItem('market-edge-community-paper-research')!=='shared')return;
-      const base=String(window.MARKET_EDGE_AI_CONFIG?.apiBase||'').replace(/\/$/,'');if(!base)return;
-      let sent={};try{sent=JSON.parse(localStorage.getItem('market-edge-community-paper-sent')||'{}');}catch{}
-      const signals=new Map((ledger.signals||[]).map(signal=>[signal.id,signal])),events=[];
-      signalIds.forEach(id=>{const signal=signals.get(id),key=`SIGNAL:${id}`;if(signal&&!sent[key])events.push({key,payload:{event_type:'SIGNAL',signal:communitySignal(signal)}});});
-      outcomeIds.forEach(id=>{const signal=signals.get(id),outcome=ledger.outcomes?.[id],key=`OUTCOME:${id}:${outcome?.closedAt}`;if(signal&&outcome&&!sent[key])events.push({key,payload:{event_type:'OUTCOME',signal:communitySignal(signal),outcome:{status:outcome.status,resultR:outcome.resultR,closedAt:outcome.closedAt,barsHeld:outcome.barsHeld,tp1Hit:outcome.tp1Hit,costR:outcome.costR}}});});
-      await Promise.all(events.map(async event=>{try{const response=await fetch(`${base}/v1/community/paper-events`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(event.payload)});if(response.ok){sent[event.key]=Date.now();localStorage.setItem('market-edge-community-paper-sent',JSON.stringify(sent));}}catch{}}));
-    }
     function updateForward(results) {
-      const candleMap=Object.fromEntries(results.filter(result=>result?.symbol).map(result=>[result.symbol,result.candles||[]])),before=forwardLedger(),previousOutcomes=before.outcomes||[],addedIds=[];
+      const candleMap=Object.fromEntries(results.filter(result=>result?.symbol).map(result=>[result.symbol,result.candles||[]])),before=forwardLedger();
       let ledger=MarketEdgeForward.settle(before,candleMap,{feePct:.0005,slippagePct:.0003,maxBars:30});
-      if (els.forwardMode.value==='on') results.filter(result=>result.quant?.decision==='TAKE TRADE'&&result.quant?.risk?.valid).forEach(result=>{
-        const q=result.quant,report=MarketEdgeResearch.inspectDataset(result.candles||[],{interval:'4h',asOf:Date.now(),asset:result.symbol,symbol:`${result.symbol}USDT`,exchange:'MULTI-FEED'});
-        const record=MarketEdgeForward.appendSignal(ledger,{
-          symbol:result.symbol,direction:q.direction,strategy:q.strategy,quality:q.quality,entry:q.entry,idealEntry:q.idealEntry,entryZone:q.entryZone,
-          stop:q.stop,target1:q.target1,target2:q.target2,rr1:q.rr1,rr2:q.rr2,leverage:q.risk.leverage,regime:q.regime,macroRegime:q.macroRegime,
-          alignment:q.alignment,features:{rsi:q.frame.rsi,relativeVolume:q.frame.relativeVolume,atrPct:q.frame.atrPct,ema20Slope:q.frame.ema20Slope,structure:q.frame.structure.label},
-          timestamp:q.frame.timestamp,datasetHash:report.meta.datasetHash,datasetVersion:report.meta.datasetVersion,engineVersion:MarketEdgeQuant.VERSION,appVersion:'14',sourceCount:result.sourceCount,executionCostPct:.0016
-        });if(record.added)addedIds.push(record.id);ledger=record.ledger;
-      });
-      const resolvedIds=Object.keys(ledger.outcomes||{}).filter(id=>!previousOutcomes[id]);saveForward(ledger);renderForward();syncCommunityPaper(ledger,addedIds,resolvedIds);
+      saveForward(ledger);renderForward();
     }
     function renderForward() {
       const ledger=forwardLedger(),summary=MarketEdgeForward.stats(ledger);
@@ -1396,10 +1384,7 @@
     function tradeKind(trade){return trade.mode==='MANUAL TRADE'?'MANUAL TRADE':'MARKET EDGE VALIDATED TRADE';}
     function renderManualJournal() {
       const ledger=manualLedger(),summary=MarketEdgeManual.stats(ledger),prices=currentManualPrices();
-      const mode=els.workflowMode.value;
-      els.manualModeNote.innerHTML=mode==='manual'
-        ? '<strong>Manual live mode.</strong> Live market data and your manually entered account balance feed the decision card. Market Edge has no exchange credentials and cannot submit, change or close an order.'
-        : `<strong>${mode==='paper'?'Paper':'Research'} mode selected.</strong> Manual trades remain separate from paper positions and historical research.`;
+      els.manualModeNote.innerHTML='<strong>Manual trading journal.</strong> Live market data and your manually entered account balance feed the decision card. Market Edge has no exchange credentials and cannot submit, change or close an order.';
       els.manualTradeStats.innerHTML=`<div class="metric"><span>Manual trades</span><strong>${summary.trades}</strong></div><div class="metric"><span>Open</span><strong>${summary.open}</strong></div><div class="metric"><span>Closed</span><strong>${summary.closed}</strong></div><div class="metric"><span>Average R</span><strong>${Number.isFinite(summary.averageR)?summary.averageR.toFixed(2)+'R':'—'}</strong></div>`;
       const open=ledger.trades.filter(trade=>!ledger.outcomes[trade.id]),closed=ledger.trades.filter(trade=>ledger.outcomes[trade.id]);
       els.manualTradePositions.innerHTML=open.length?open.map(trade=>{const asset=MarketEdgeManual.assetFor(trade),direction=MarketEdgeManual.directionFor(trade),mark=MarketEdgeManual.liveMark(trade,prices[asset]),snapshot=trade.marketEdgeSnapshot||{},size=trade.actual.size,allocation=trade.actual.allocation;return `<article class="paper-row"><div><strong>${chartEscape(asset)} ${direction.toUpperCase()} · <span class="manual-trade-tag">${tradeKind(trade)}</span></strong><span>Opened ${new Date(trade.actual.timestamp).toLocaleString()} · ${chartEscape(trade.source||'Manual')}</span></div><div><span>Entry / current</span><b>${formatPrice(trade.actual.entry)} / ${mark?formatPrice(mark.price):'—'}</b></div><div><span>Stop / TP1${trade.actual.target2?' / TP2':''}</span><b>${formatPrice(trade.actual.stop)} / ${formatPrice(trade.actual.target1)}${trade.actual.target2?' / '+formatPrice(trade.actual.target2):''}</b></div><div><span>Leverage · size</span><b>${manualNumber(trade.actual.leverage,0)}× · ${size?manualNumber(size):allocation?manualNumber(allocation)+'%':'—'}</b></div><div><span>Market Edge at entry</span><b>${chartEscape(snapshot.decision||'UNKNOWN')}</b><small class="manual-trade-secondary">${snapshot.strategy?chartEscape(snapshot.strategy):'No recommendation implied'}</small></div><div class="manual-actions"><button class="secondary-button" type="button" data-close-manual="${trade.id}">Close trade</button><button class="secondary-button" type="button" data-edit-manual-notes="${trade.id}">Edit notes</button></div></article>`;}).join(''):'<div class="empty"><strong>No manual trade recorded.</strong> Add any trade you placed yourself; it is local only and never becomes a Market Edge recommendation.</div>';
@@ -1438,7 +1423,7 @@
     function renderBacktest(result, symbol) {
       const rows=[['Training 60%',result.training],['Validation 20%',result.validation],['Untouched test 20%',result.test],['Rolling unseen windows',result.walkForward.aggregate]];
       const enough=result.test.trades>=20, positive=result.validation.expectancy>0&&result.test.expectancy>0;
-      const verdict=positive&&result.walkForward.aggregate.expectancy>0&&result.walkForward.stability.stable&&result.overall.trades>=10?'PAPER TRADE ONLY':'NOT READY';
+      const verdict=positive&&result.walkForward.aggregate.expectancy>0&&result.walkForward.stability.stable&&result.overall.trades>=10?'EXPLORATORY EVIDENCE ONLY':'NOT READY';
       const groupBy=key=>Object.entries(result.trades.reduce((groups,trade)=>{ (groups[trade[key]]||=[]).push(trade); return groups; },{}))
         .map(([name,trades])=>`${name}: ${trades.length} trades, ${MarketEdgeQuant.performanceStats(trades).expectancy.toFixed(2)}R expectancy`).join(' · ')||'No qualifying trades';
       const formatGroups=groups=>Object.entries(groups).map(([name,stats])=>`${name}: ${stats.trades} trades, ${(stats.winRate*100).toFixed(1)}% wins, ${stats.expectancy.toFixed(2)}R`).join(' · ')||'No sample';
@@ -1493,26 +1478,26 @@
       if (settings.openDirection===q.direction) return {...result,quant:{...q,decision:'NO TRADE',reason:`Portfolio already has correlated ${q.direction.toUpperCase()} crypto exposure`}};
       return result;
     }
-    function applyHistoricalEvidenceGuard(result) {
+    function annotateHistoricalEvidence(result) {
       const q=result.quant;
       if (!q||q.decision!=='TAKE TRADE') return result;
       let evidence={};
       try { evidence=JSON.parse(localStorage.getItem('market-edge-evidence')||'{}'); } catch {}
       const record=evidence[`${result.symbol}-${q.strategy}-${q.direction}`];
-      if (!record) return {...result,quant:{...q,decision:'WAIT',reason:'No stored out-of-sample evidence for this asset, strategy and direction; run the backtest'}};
-      if (!record.positive) return {...result,quant:{...q,decision:'NO TRADE',reason:'Stored validation/test evidence does not demonstrate positive expectancy'}};
-      if (!record.exactMultiTimeframe) return {...result,quant:{...q,decision:'WAIT',reason:'Historical test is 4h-only and does not exactly reproduce the live five-timeframe logic'}};
-      return result;
+      const researchNote=!record
+        ? 'Browser backtest evidence is not stored for this asset, strategy and direction.'
+        : !record.positive
+          ? 'Browser 4h research did not show positive expectancy for this configuration.'
+          : !record.exactMultiTimeframe
+            ? 'Browser research is 4h-only and does not reproduce the live five-timeframe engine.'
+            : 'Browser research record is available.';
+      return {...result,quant:{...q,researchNote}};
     }
     function applyDirectionResearchGuard(result) {
       const q=result.quant, finding=RESEARCH_GATES[result.symbol];
       if (!q||!finding||!['TAKE TRADE','WAIT'].includes(q.decision)) return result;
+      if (['SOL','DOGE','LTC'].includes(result.symbol) && q.direction!=='long') return result;
       return {...result,quant:{...q,decision:'NO TRADE',reason:`Historical gate disabled ${result.symbol}: ${finding}`}};
-    }
-    function applyPaperCandidate(result) {
-      const q=result?.quant;
-      if (els.workflowMode.value!=='paper'||!q||q.decision!=='TAKE TRADE'||!q.risk?.valid) return result;
-      return {...result,quant:{...q,paperOnly:true,reason:`Paper-only candidate: passed the looser 62/100 exploratory threshold. Historical approval and ML champion gates remain unavailable, so this must not be placed live.`}};
     }
     async function promisePool(items, worker, concurrency=4) {
       const output=new Array(items.length), queue=[...items.keys()];
@@ -1533,24 +1518,25 @@
       try {
         const base=(await promisePool(MARKETS,loadMarket,4)).filter(Boolean);
         if(requestId!==scanSequence)return;
-        const leaders=[...base].sort((a,b)=>(b.quality||0)-(a.quality||0)).slice(0,8);
-        els.status.querySelector('span:last-child').textContent='Validating leading markets across 5m, 15m, 1h, 4h and 1d';
-        const enriched=(await promisePool(leaders,enrichTimeframes,3)).filter(Boolean);
+        els.status.querySelector('span:last-child').textContent='Validating all markets across 5m, 15m, 1h, 4h and 1d';
+        const enriched=(await promisePool(base,enrichTimeframes,3)).filter(Boolean);
         if(requestId!==scanSequence)return;
         const enrichedMap=new Map(enriched.map(result=>[result.symbol,result]));
         const decisionRank={'TAKE TRADE':3,'WAIT':2,'NO TRADE':1,'ANALYSIS UNAVAILABLE':0};
-        const results=base.map(result=>{const guarded=applyPortfolioGuard(enrichedMap.get(result.symbol)||result);return els.workflowMode.value==='paper'?applyPaperCandidate(guarded):applyHistoricalEvidenceGuard(applyDirectionResearchGuard(guarded));}).sort((a,b)=>
+        const results=base.map(result=>{const guarded=applyPortfolioGuard(enrichedMap.get(result.symbol)||result);return annotateHistoricalEvidence(applyDirectionResearchGuard(guarded));}).sort((a,b)=>
           (decisionRank[b.quant?.decision]||0)-(decisionRank[a.quant?.decision]||0) || (b.quality||0)-(a.quality||0)
         );
         if (!results.length) throw new Error('Live market data could not be reached from this browser.');
-        latestResults=results; renderSourceStatus(results); renderQuantRecommendation(results[0]); renderList(results); renderQuantAlternatives(results); loadRadarSignalCounts(results);
+        const fullyEvaluated=results.filter(result=>Array.isArray(result.timeframes?.m5)&&result.timeframes.m5.length&&result.quant);
+        const best=fullyEvaluated.find(result=>hasTradeGeometry(result.quant))||fullyEvaluated[0]||results[0];
+        latestResults=results; renderSourceStatus(results); renderQuantRecommendation(best); renderList(results); renderQuantAlternatives(results); loadRadarSignalCounts(results);
         const aiResults=results.map(result=>MarketEdgeAI.sanitizeQuantSnapshot(result)).filter(Boolean);
-        window.dispatchEvent(new CustomEvent('market-edge:scan',{detail:{best:aiResults[0]||null,results:aiResults}}));
-        updateForward(results); renderManualJournal(); els.runBacktest.disabled=!results[0]?.candles?.length;
+        window.dispatchEvent(new CustomEvent('market-edge:scan',{detail:{best:MarketEdgeAI.sanitizeQuantSnapshot(best)||null,results:aiResults}}));
+        updateForward(results); renderManualJournal(); els.runBacktest.disabled=!best?.candles?.length;
         els.status.className = 'status live'; els.status.querySelector('span:last-child').textContent = `Live · ${new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}`;
         localStorage.setItem('market-edge-settings',JSON.stringify({
           balance:els.balance.value,risk:els.risk.value,leverage:els.leverage.value,minQuality:els.minQuality.value,minRR:els.minRR.value,
-          maxConcurrent:els.maxConcurrent.value,maxExposure:els.maxExposure.value,openDirection:els.openDirection.value,maxDailyLoss:els.maxDailyLoss.value,maxDrawdown:els.maxDrawdown.value,forwardMode:els.forwardMode.value,workflowMode:els.workflowMode.value
+          maxConcurrent:els.maxConcurrent.value,maxExposure:els.maxExposure.value,openDirection:els.openDirection.value,maxDailyLoss:els.maxDailyLoss.value,maxDrawdown:els.maxDrawdown.value
         }));
       } catch (error) {
         if(requestId!==scanSequence)return;
@@ -1573,8 +1559,6 @@
     document.querySelectorAll('[data-chart-action]').forEach(button=>button.addEventListener('click',()=>{const action=button.dataset.chartAction;if(action==='zoom-in')chartState.visibleBars=Math.max(24,chartState.visibleBars-12);if(action==='zoom-out')chartState.visibleBars=Math.min(260,chartState.visibleBars+12);if(action==='latest'){chartState.mode='live';chartState.offset=0;chartState.visibleBars=92;}if(action==='fullscreen'){const canvas=els.chartCanvas;const change=()=>setTimeout(drawInteractiveChart,40);if(document.fullscreenElement)document.exitFullscreen?.().then(change).catch(()=>{});else canvas.requestFullscreen?.().then(change).catch(()=>{});return;}if(action==='latest-signal'){const latest=[...chartStoredSignals()].sort((a,b)=>Number(b.timestamp)-Number(a.timestamp))[0];if(latest)selectHistoricalSignal(latest,{reload:true});else drawInteractiveChart();return;}if(action==='all-signals'){if(chartState.best)loadHistoricalChart(chartState.best.symbol,null,true,true);return;}drawInteractiveChart();}));
     els.chartSignalFocus.addEventListener('change',()=>{const timestamp=Number(els.chartSignalFocus.value),signal=chartStoredSignals().find(item=>Number(item.timestamp)===timestamp);if(signal)selectHistoricalSignal(signal,{reload:true});});
     els.tvExchange.addEventListener('change',()=>updateTradingViewLink());
-    els.workflowMode.addEventListener('change',()=>{renderManualJournal();showToast(`${els.workflowMode.options[els.workflowMode.selectedIndex].text} mode selected. No exchange connection is available.`);if(els.workflowMode.value==='paper')window.marketEdgeShowCommunityNotice?.();});
-    document.querySelectorAll('[data-workspace]').forEach(button=>button.addEventListener('click',()=>{els.workflowMode.value=button.dataset.workspace;els.workflowMode.dispatchEvent(new Event('change'));document.querySelectorAll('[data-workspace]').forEach(item=>item.classList.toggle('active',item===button));}));
     els.runBacktest.addEventListener('click',runBacktest);
     els.importSocial.addEventListener('click',()=>{
       try {
@@ -1586,7 +1570,7 @@
     els.clearForward.addEventListener('click',()=>{ localStorage.removeItem('market-edge-forward'); renderForward(); });
     try {
       const saved=JSON.parse(localStorage.getItem('market-edge-settings')||'{}');
-      const mapping={balance:'balance',risk:'risk',leverage:'leverage',minQuality:'minQuality',minRR:'minRR',maxConcurrent:'maxConcurrent',maxExposure:'maxExposure',openDirection:'openDirection',maxDailyLoss:'maxDailyLoss',maxDrawdown:'maxDrawdown',forwardMode:'forwardMode',workflowMode:'workflowMode'};
+      const mapping={balance:'balance',risk:'risk',leverage:'leverage',minQuality:'minQuality',minRR:'minRR',maxConcurrent:'maxConcurrent',maxExposure:'maxExposure',openDirection:'openDirection',maxDailyLoss:'maxDailyLoss',maxDrawdown:'maxDrawdown'};
       Object.entries(mapping).forEach(([key,element])=>{ if(saved[key]!=null) els[element].value=saved[key]; });
       socialRecords=JSON.parse(localStorage.getItem('market-edge-social')||'[]');
     } catch {}
