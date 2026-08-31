@@ -259,8 +259,11 @@
     const candidates=strategyCandidates(setup);
     const opportunity=opportunityScore(tf);
     if (!candidates.length) return {decision:'NO TRADE',quality:null,setupQuality:null,opportunity,reason:'No independent strategy satisfies its entry rules',regime,macroRegime,frame:primary,timeframes:tf};
-    const best=candidates[0], opposite=candidates.find(candidate=>candidate.direction!==best.direction);
-    if (opposite&&Math.abs(best.score-opposite.score)<10) return {decision:'NO TRADE',quality:Math.round(best.score),reason:`Contradictory ${best.strategy} and ${opposite.strategy} signals`,regime,macroRegime,frame:primary,timeframes:tf};
+    const requested=input.selectedCandidate;
+    const best=requested?candidates.find(candidate=>candidate.strategy===requested.strategy&&candidate.direction===requested.direction):candidates[0];
+    if (!best) return {decision:'NO TRADE',quality:null,setupQuality:null,opportunity,reason:'Requested strategy candidate is no longer legitimate',regime,macroRegime,frame:primary,timeframes:tf};
+    const opposite=candidates.find(candidate=>candidate.direction!==best.direction);
+    if (!requested&&opposite&&Math.abs(best.score-opposite.score)<10) return {decision:'NO TRADE',quality:Math.round(best.score),reason:`Contradictory ${best.strategy} and ${opposite.strategy} signals`,regime,macroRegime,frame:primary,timeframes:tf};
     const direction=best.direction, macroBias=timeframeBias(tf.d1), primaryBias=timeframeBias(primary), setupBias=timeframeBias(setup), confirmationBias=timeframeBias(confirmation), executionBias=timeframeBias(execution);
     const meanReversion=best.strategy==='MEAN REVERSION', reversal=best.strategy==='LIQUIDITY-SWEEP REVERSAL';
     const strongMacroOpposition=(direction==='long'&&macroRegime==='STRONG DOWNTREND')||(direction==='short'&&macroRegime==='STRONG UPTREND');
@@ -295,6 +298,14 @@
     if (quality<settings.minQuality) return {...base,decision:quality>=settings.minQuality-10?'WAIT':'NO TRADE',reason:`Setup quality is below the configured ${settings.minQuality}/100 research threshold`};
     if (!risk.valid) return {...base,decision:'NO TRADE',reason:risk.reason};
     return {...base,decision:'TAKE TRADE',reason:`${best.strategy} passes regime, timeframe, entry, cost and risk checks`};
+  }
+  function evaluateSetupCandidates(input) {
+    const baseline=evaluateSetup(input), setup=baseline.timeframes?.h1?.available?baseline.timeframes.h1:baseline.frame;
+    if (!setup?.available) return [];
+    return strategyCandidates(setup).map(candidate=>{
+      const evaluated=evaluateSetup({...input,selectedCandidate:{strategy:candidate.strategy,direction:candidate.direction}});
+      return {...evaluated,candidateKey:`${candidate.strategy}:${candidate.direction}`,quantStrategyScore:candidate.score};
+    });
   }
   function performanceStats(trades) {
     const results = trades.map(trade => trade.r).filter(Number.isFinite), wins = results.filter(r => r > 0), losses = results.filter(r => r <= 0);
@@ -422,5 +433,5 @@
     const total = longWeight + shortWeight;
     return { sample: relevant.length, reliability: relevant.length ? mean(relevant.map(traderReliability)) : 0, weightedLong: total ? longWeight / total : 0.5, weightedShort: total ? shortWeight / total : 0.5 };
   }
-  return { VERSION, LEVERAGE_CHOICES, clamp, mean, median, std, ema, sma, rsi, atr, rollingVwap, validateCandles, validateFreshness, swingPoints, features, recentStructure, classifyRegime, strategyCandidates, riskPlan, opportunityScore, evaluateSetup, performanceStats, simulateBacktest, walkForwardTest, backtest, traderReliability, aggregateSocial };
+  return { VERSION, LEVERAGE_CHOICES, clamp, mean, median, std, ema, sma, rsi, atr, rollingVwap, validateCandles, validateFreshness, swingPoints, features, recentStructure, classifyRegime, strategyCandidates, riskPlan, opportunityScore, evaluateSetup, evaluateSetupCandidates, performanceStats, simulateBacktest, walkForwardTest, backtest, traderReliability, aggregateSocial };
 });

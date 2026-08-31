@@ -189,6 +189,15 @@ async function mlIngest(request,env,payload,now=Date.now()){
   await env.MARKET_EDGE_DB.batch(clean.map(model=>env.MARKET_EDGE_DB.prepare(`INSERT OR IGNORE INTO model_registry (id,status,algorithm,dataset_hash,metadata_json,created_at,immutable) VALUES (?,?,?,?,?,?,1)`).bind(model.id,model.status,model.algorithm,datasetHash,JSON.stringify(model.metadata),now)));
   return {accepted:true,datasetHash,stored:clean.length,statuses:Object.fromEntries(clean.map(model=>[model.id,model.status]))};
 }
+async function activeMlModel(db){
+  const rows=(await db.prepare(`SELECT id,status,algorithm,dataset_hash,metadata_json,created_at FROM model_registry WHERE status IN ('RESEARCH','SHADOW','CHALLENGER','CHAMPION') ORDER BY CASE status WHEN 'CHAMPION' THEN 4 WHEN 'CHALLENGER' THEN 3 WHEN 'SHADOW' THEN 2 ELSE 1 END DESC, created_at DESC LIMIT 20`).all()).results||[];
+  const parsed=rows.map(row=>{let metadata={};try{metadata=JSON.parse(row.metadata_json||'{}');}catch{}return{row,metadata};}),selected=parsed.find(item=>item.metadata.target==='TP1_BEFORE_SL')||parsed[0];
+  if(!selected)return {available:false,status:'UNAVAILABLE'};
+  const {row,metadata}=selected;
+  const model=metadata?.model;
+  if(!model||!Array.isArray(model.featureNames)||!Array.isArray(model.coefficients)||!Array.isArray(model.means)||!Array.isArray(model.stds))return {available:false,status:row.status,id:row.id,reason:'Stored model artifact is incomplete'};
+  return {available:true,id:row.id,status:row.status,algorithm:row.algorithm,datasetHash:row.dataset_hash,createdAt:row.created_at,target:metadata.target||null,calibration:metadata.calibration||null,model};
+}
 function communityPaperEvent(payload){
   const kind=safeText(payload?.event_type,16).toUpperCase(),input=payload?.signal&&typeof payload.signal==='object'?payload.signal:{},id=safeText(input.id,96),asset=safeAsset(input.symbol),direction=safeText(input.direction,12),strategy=safeText(input.strategy,120),timestamp=Number(input.timestamp),entry=Number(input.entry),stop=Number(input.stop),target1=Number(input.target1),target2=Number(input.target2),rr1=Number(input.rr1),rr2=Number(input.rr2);
   if(!['SIGNAL','OUTCOME'].includes(kind)||!id||!['long','short'].includes(direction)||!strategy||!Number.isFinite(timestamp)||timestamp<=0||![entry,stop,target1,target2,rr1,rr2].every(Number.isFinite))throw Object.assign(new Error('Invalid anonymous paper event'),{status:400,code:'COMMUNITY_EVENT_INVALID'});
@@ -312,6 +321,7 @@ export async function handleRequest(request,env={},ctx={},deps={}) {
   if(request.method==='GET'&&url.pathname==='/v1/research/replay') return json(await replayProgress(env.MARKET_EDGE_DB),200,cors);
   if(request.method==='GET'&&url.pathname==='/v1/research/status') return json(await researchStatus(env.MARKET_EDGE_DB),200,cors);
   if(request.method==='GET'&&url.pathname==='/v1/research/ml/dataset') { try{return json(await mlDataset(request,env,url),200,cors);}catch(error){return json({error:{code:error.code||'ML_DATASET_ERROR',message:safeText(error.message,240)}},error.status||400,cors);} }
+  if(request.method==='GET'&&url.pathname==='/v1/research/ml/active') return json(await activeMlModel(env.MARKET_EDGE_DB),200,cors);
   if(request.method==='GET'&&url.pathname==='/v1/research/chart') return json(await researchChart(env.MARKET_EDGE_DB,safeAsset(url.searchParams.get('asset')),Number(url.searchParams.get('around')),url.searchParams.get('range')==='all'),200,cors);
   if(request.method!=='POST'||!['/v1/analyze','/v1/chat','/v1/tradingview-alert','/v1/research/ingest','/v1/research/ml/ingest','/v1/community/paper-events'].includes(url.pathname)) return json({error:{code:'NOT_FOUND',message:'Endpoint not found'}},404,cors);
   const rate=rateLimit(request,env); if(!rate.allowed) return json({error:{code:'RATE_LIMITED',message:'Too many requests. Try again shortly.'}},429,{...cors,'retry-after':String(rate.retryAfter)});

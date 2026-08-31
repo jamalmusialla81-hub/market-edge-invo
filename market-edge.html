@@ -1033,10 +1033,22 @@
           social:MarketEdgeQuant.aggregateSocial(socialRecords, result.symbol),
           settings:currentSettings()
         });
+        const strategyCandidates=MarketEdgeQuant.evaluateSetupCandidates({
+          timeframes:{ m5, m15, h1, h4:result.candles, d1 },
+          social:MarketEdgeQuant.aggregateSocial(socialRecords, result.symbol),
+          settings:currentSettings()
+        });
+        quant=applyExperimentalMlStrategySelection(quant,strategyCandidates);
         const opinionDirections = result.sourceOpinions.map(item=>item.longScore > item.shortScore ? 'long' : item.shortScore > item.longScore ? 'short' : 'neutral');
         const matchingFeeds = quant.direction ? opinionDirections.filter(side=>side===quant.direction).length : 0;
         if (result.maxPriceDisagreement>.02) quant={...quant,decision:'WAIT',reason:`Exchange prices disagree by up to ${(result.maxPriceDisagreement*100).toFixed(1)}%`};
         if (quant.decision === 'TAKE TRADE' && (result.sourceCount < 2 || matchingFeeds < 2)) quant = { ...quant, decision:'WAIT', reason:'Quantitative setup exists, but fewer than two independent feeds confirm its direction' };
+        quant={...quant,
+          strategyCandidates:strategyCandidates.map(candidate=>({strategy:candidate.strategy,direction:candidate.direction,regime:candidate.regime,quantScore:candidate.setupQuality??candidate.quality??null,decision:candidate.decision,entry:candidate.entry,stop:candidate.stop,target1:candidate.target1,target2:candidate.target2,rr:candidate.rr1??candidate.rr,reason:candidate.reason})),
+          candidateCount:quant.candidateCount??strategyCandidates.length,
+          actionableCandidateCount:quant.actionableCandidateCount??strategyCandidates.filter(candidate=>candidate.decision==='TAKE TRADE'&&candidate.risk?.valid).length,
+          quantStrategyPick:quant.quantStrategyPick||{strategy:quant.strategy||null,direction:quant.direction||null}
+        };
         return { ...result, quant, quality:quant.quality, matchingFeeds, timeframes:{m5,m15,h1,h4:result.candles,d1} };
       } catch (error) {
         return result;
@@ -1181,9 +1193,9 @@
         const response=await fetch(`${base}/v1/research/replay`,{cache:'no-store'});
         if(!response.ok)throw new Error('unavailable');
         const data=await response.json(),states=new Map((data.states||[]).map(item=>[item.asset,item])),byAsset=data.byAsset||{},dataset=data.dataset||{};
-        let researchStatus={};try{const statusResponse=await fetch(`${base}/v1/research/status`,{cache:'no-store'});if(statusResponse.ok)researchStatus=await statusResponse.json();}catch{}
+        let researchStatus={},activeModel={available:false,status:'UNAVAILABLE'};try{const [statusResponse,modelResponse]=await Promise.all([fetch(`${base}/v1/research/status`,{cache:'no-store'}),fetch(`${base}/v1/research/ml/active`,{cache:'no-store'})]);if(statusResponse.ok)researchStatus=await statusResponse.json();if(modelResponse.ok)activeModel=await modelResponse.json();}catch{}
         let datasetSummary={};try{datasetSummary=JSON.parse(dataset.summary_json||'{}');}catch{}
-        const resolved=Number(data.totalResolvedTargets)||0,evidence=document.getElementById('evidenceResolved'),meter=document.getElementById('evidenceMeter'),evidenceCaption=document.getElementById('evidenceCaption'),tier=datasetSummary.sample_gate||(resolved<20?'INSUFFICIENT':resolved<50?'VERY LOW':resolved<100?'EARLY':resolved<200?'MODERATE':'LARGE'),replayRunning=(data.states||[]).some(state=>state.status==='RUNNING'),ml=researchStatus.ml||{};researchMlState=ml;
+        const resolved=Number(data.totalResolvedTargets)||0,evidence=document.getElementById('evidenceResolved'),meter=document.getElementById('evidenceMeter'),evidenceCaption=document.getElementById('evidenceCaption'),tier=datasetSummary.sample_gate||(resolved<20?'INSUFFICIENT':resolved<50?'VERY LOW':resolved<100?'EARLY':resolved<200?'MODERATE':'LARGE'),replayRunning=(data.states||[]).some(state=>state.status==='RUNNING'),ml=researchStatus.ml||{};researchMlState={...ml,activeModel};
         if(evidence)evidence.textContent=resolved>=20?`${resolved} resolved setups · gate met`:`${resolved} / 20 resolved setups`;if(evidenceCaption)evidenceCaption.textContent=resolved>=20?`${tier} evidence tier · not a reliability claim`:'Resolved setups toward the first 20';if(meter)meter.style.width=`${Math.min(100,resolved/20*100)}%`;
         const drawer=document.getElementById('researchDrawerStatus'),lab=document.getElementById('researchLabEvidence'),mode=document.getElementById('researchModeStatus'),modeCaption=document.getElementById('researchModeCaption'),mlStatus=document.getElementById('mlStatus'),mlCaption=document.getElementById('mlCaption');if(drawer)drawer.textContent=tier;if(lab)lab.textContent=`MANUAL LIVE · ${tier} EVIDENCE`;if(mode)mode.textContent=replayRunning?'RUNNING':'IDLE';if(modeCaption)modeCaption.textContent=replayRunning?'Historical replay continues in the background':'No active replay state reported';if(mlStatus)mlStatus.textContent=ml.status||'UNAVAILABLE';if(mlCaption)mlCaption.textContent=ml.status==='DISABLED'?'No model influences trading decisions.':`Score ${mlScanLabel()} — no calibrated champion is active.`;if(els.mlResearch){const recent=Array.isArray(ml.recentModels)?ml.recentModels:[],models=ml.models||{},counts=`${models.RESEARCH||0} research · ${models.SHADOW||0} shadow · ${models.CHAMPION||0} champion`;els.mlResearch.innerHTML=recent.length?`<strong>ML registry · ${ml.status||'RESEARCH'}</strong> ${counts}. ${recent.map(model=>`${model.target||model.algorithm}: ${model.status} · ${model.oosN||0} chronological OOS`).join(' · ')}. No model changes a trade decision unless it has passed validation.`:`<strong>ML research is awaiting a manual run.</strong> Dataset has ${resolved} resolved setups. The first model requires immutable pre-entry features, chronological validation and remains advisory-only.`;}
         els.researchProgress.innerHTML=['BTC','ETH','SOL','XRP','DOGE','LTC'].map(asset=>{const state=states.get(asset)||{},totals=byAsset[asset]||{};return `<div class="replay-asset"><span>${asset} replay</span><strong>${totals.decisionPoints||0} decisions · ${totals.resolved||0} resolved</strong><small>${state.status||'Awaiting cache'}</small></div>`;}).join('')+`<div class="replay-asset"><span>Dataset V1</span><strong>${dataset.status||'Unavailable'}</strong><small>${data.totalDecisionPoints||0} decisions · ${data.totalResolvedTargets||0} resolved</small></div>`;
@@ -1219,8 +1231,27 @@
       const recent=Array.isArray(researchMlState?.recentModels)?researchMlState.recentModels:[];
       const model=recent.find(item=>item.status==='CHAMPION'||item.status==='SHADOW')||recent[0];
       if (!model) return 'UNAVAILABLE';
-      if (model.status==='CHAMPION'&&model.calibrationStatus==='APPLIED') return 'AVAILABLE · validated';
-      return `UNAVAILABLE · ${model.status||'RESEARCH'}${model.calibrationStatus?` / ${model.calibrationStatus}`:''}`;
+      const calibration=model.calibration?.status||model.calibrationStatus;
+      if (model.status==='CHAMPION'&&calibration==='APPLIED') return 'AVAILABLE · validated';
+      return `UNAVAILABLE · ${model.status||'RESEARCH'}${calibration?` / ${calibration}`:''}`;
+    }
+    function mlCandidateLabel(q) { return Number.isFinite(q?.mlRawScore)?`${q.mlRawScore.toFixed(0)} / 100 raw · ${q.modelStatus||'RESEARCH'} experimental`:'INSUFFICIENT EVIDENCE'; }
+    function candidateMlFeatures(candidate) {
+      const frame=candidate.frame||{},m15=candidate.timeframes?.m15||{},strategy=String(candidate.strategy||''),regime=String(candidate.regime||'');
+      return {quality:Number(candidate.setupQuality??candidate.quality??0)/100,rr:Number(candidate.rr1??candidate.rr??0),long:candidate.direction==='long'?1:0,
+        trendContinuation:strategy==='TREND CONTINUATION'?1:0,breakout:strategy==='BREAKOUT + RETEST'?1:0,momentum:strategy==='MOMENTUM CONTINUATION'?1:0,meanReversion:strategy==='MEAN REVERSION'?1:0,liquiditySweep:strategy==='LIQUIDITY-SWEEP REVERSAL'?1:0,
+        regimeTrend:/UPTREND|DOWNTREND/.test(regime)?1:0,regimeRange:/RANGE/.test(regime)?1:0,regimeBreakout:/BREAKOUT/.test(regime)?1:0,regimeCompression:regime==='COMPRESSION'?1:0,
+        h4Rsi:Number(frame.rsi??0)/100,h4Roc5:Number(frame.roc5??0),h4RelativeVolume:Number(frame.relativeVolume??0),m15Rsi:Number(m15.rsi??0)/100,m15RelativeVolume:Number(m15.relativeVolume??0)};
+    }
+    function applyExperimentalMlStrategySelection(quant,candidates) {
+      const model=researchMlState.activeModel;
+      const eligible=(candidates||[]).filter(candidate=>candidate.decision==='TAKE TRADE'&&candidate.risk?.valid);
+      const base={...quant,mlStrategyInfluence:'INSUFFICIENT EVIDENCE',mlWeight:0,mlAssistedStrategyPick:null,candidateCount:candidates?.length||0,actionableCandidateCount:eligible.length,quantStrategyPick:{strategy:quant.strategy||null,direction:quant.direction||null}};
+      if (quant.decision!=='TAKE TRADE'||!model?.available||model.target!=='TP1_BEFORE_SL'||!window.MarketEdgeML?.predictProbability||!eligible.length) return base;
+      const weight=(model.status==='CHAMPION'&&model.calibration?.status==='APPLIED') ? .25 : (model.status==='SHADOW' ? .1 : .05);
+      const ranked=eligible.map(candidate=>{let raw=null;try{raw=MarketEdgeML.predictProbability(model.model,candidateMlFeatures(candidate))*100;}catch{}const combined=Number.isFinite(raw)?candidate.setupQuality*(1-weight)+raw*weight:candidate.setupQuality;return {...candidate,mlRawScore:raw,mlRankScore:raw,combinedScore:combined,modelId:model.id,modelStatus:model.status};}).sort((a,b)=>b.combinedScore-a.combinedScore||b.setupQuality-a.setupQuality||String(a.candidateKey).localeCompare(String(b.candidateKey)));
+      const selected=ranked[0]||quant;
+      return {...selected,mlStrategyInfluence:`${Math.round(weight*100)}% · ${model.status} EXPERIMENTAL`,mlWeight:weight,mlAssistedStrategyPick:{strategy:selected.strategy,direction:selected.direction},quantStrategyPick:{strategy:quant.strategy||null,direction:quant.direction||null},candidateCount:candidates.length,actionableCandidateCount:eligible.length,candidateScores:ranked.map(candidate=>({strategy:candidate.strategy,direction:candidate.direction,quantScore:candidate.setupQuality,mlRawScore:candidate.mlRawScore,combinedScore:candidate.combinedScore,modelId:candidate.modelId,modelStatus:candidate.modelStatus}))};
     }
     function renderQuantRecommendation(best) {
       latestBest = best || null;
@@ -1252,11 +1283,16 @@
           <div class="evidence-item"><span>Final verdict</span><strong>${decision}</strong></div>
           <div class="evidence-item"><span>Regime</span><strong>${q.regime||'Unavailable'}</strong></div>
           <div class="evidence-item"><span>Strategy</span><strong>${q.strategy||'None qualified'}</strong></div>
+          <div class="evidence-item"><span>Legitimate strategy candidates</span><strong>${Number.isFinite(q.candidateCount)?q.candidateCount:'—'} · ${Number.isFinite(q.actionableCandidateCount)?q.actionableCandidateCount+' actionable':'not evaluated'}</strong></div>
+          <div class="evidence-item"><span>Quant strategy pick</span><strong>${q.quantStrategyPick?.strategy?`${q.quantStrategyPick.strategy} · ${String(q.quantStrategyPick.direction||'').toUpperCase()}`:'Unavailable'}</strong></div>
           <div class="evidence-item"><span>Structure</span><strong>${q.frame?.structure?.label||'Unavailable'}</strong></div>
           <div class="evidence-item"><span>RSI 14</span><strong>${Number.isFinite(q.frame?.rsi)?q.frame.rsi.toFixed(1):'—'}</strong></div>
           <div class="evidence-item"><span>Relative volume</span><strong>${Number.isFinite(q.frame?.relativeVolume)?q.frame.relativeVolume.toFixed(2)+'×':'Unavailable'}</strong></div>
           <div class="evidence-item"><span>Quant score</span><strong>${Number.isFinite(q.setupQuality)?q.setupQuality+'/100':'Unavailable'}</strong></div>
           <div class="evidence-item"><span>ML score</span><strong>${mlLabel}</strong></div>
+          <div class="evidence-item"><span>ML candidate score</span><strong>${mlCandidateLabel(q)}</strong></div>
+          <div class="evidence-item"><span>ML strategy influence</span><strong>${q.mlStrategyInfluence||'INSUFFICIENT EVIDENCE'}</strong></div>
+          <div class="evidence-item"><span>Combined ranking</span><strong>${Number.isFinite(q.combinedScore)?q.combinedScore.toFixed(0)+'/100':'Quant-only'}</strong></div>
         </div></details>
         <div class="evidence-links"><a class="evidence-link" href="${MarketEdgeTradingView.chartUrl('BINANCE',best.symbol,'USDT')}" target="_blank" rel="noopener noreferrer">Verify ${best.symbol} on TradingView</a></div>`;
       if (!hasTradeGeometry(q)) {
@@ -1301,7 +1337,7 @@
       const ack=document.getElementById('ack'), prepare=document.getElementById('prepare');
       ack?.addEventListener('change',()=>prepare.disabled=!ack.checked);
       prepare?.addEventListener('click',async()=>{
-        const text=`TRADE DETAILS\nASSET: ${best.symbol}\nDIRECTION: ${directionText}\nENTRY: ${formatPrice(q.entry)} USDT\nSTOP: ${formatPrice(q.stop)} USDT\nTP1: ${formatPrice(q.target1)} USDT\nTP2: ${formatPrice(q.target2)} USDT\nR:R: ${Number(q.rr1||q.rr).toFixed(2)}R / ${Number(q.rr2||q.rr).toFixed(2)}R\nRISK: ${(Number(els.risk.value)*100).toFixed(1)}% · ${risk.maxLoss.toFixed(2)} USDC\nPOSITION SIZE: ${risk.notional.toFixed(2)} USDC notional\nLEVERAGE: ${risk.leverage}x\nMARGIN: ${risk.margin.toFixed(2)} USDC\nNOTIONAL: ${risk.notional.toFixed(2)} USDC\nESTIMATED FEES: ${(risk.notional*risk.roundTripCostPct).toFixed(2)} USDC\nLOSS AT STOP: ${risk.lossAtStop.toFixed(2)} USDC\nQUANT SCORE: ${q.setupQuality}/100\nML SCORE: ${mlLabel}\nFINAL VERDICT: ${decision}`;
+        const text=`MARKET EDGE\n\n${best.symbol} ${directionText}\nStrategy: ${q.strategy}\n\nEntry: ${formatPrice(q.entry)} USDT\nStop: ${formatPrice(q.stop)} USDT\nTP1: ${formatPrice(q.target1)} USDT\nTP2: ${formatPrice(q.target2)} USDT\nR:R: ${Number(q.rr1||q.rr).toFixed(2)}R / ${Number(q.rr2||q.rr).toFixed(2)}R\n\nLeverage: ${risk.leverage}x\nAllocation: ${(risk.margin/Math.max(1,Number(els.balance.value))*100).toFixed(1)}%\nPosition Size: ${risk.notional.toFixed(2)} USDC notional\nMargin: ${risk.margin.toFixed(2)} USDC\nRisk: ${(Number(els.risk.value)*100).toFixed(1)}%\nLoss at Stop: ${risk.lossAtStop.toFixed(2)} USDC\n\nQuant: ${q.setupQuality}/100\nML: ${mlCandidateLabel(q)}\nCombined: ${Number.isFinite(q.combinedScore)?q.combinedScore.toFixed(0)+'/100':'Quant-only'}\nConfidence: ${q.mlStrategyInfluence?.includes('CHAMPION')?'HIGH':q.mlStrategyInfluence?.includes('%')?'EXPERIMENTAL':'INSUFFICIENT EVIDENCE'}\nFinal verdict: ${decision}`;
         await navigator.clipboard.writeText(text).catch(()=>{}); showToast('Trade details copied. Verify every live field before submitting.');
       });
       document.getElementById('recordManualTrade')?.addEventListener('click',()=>recordManualTrade(best,q,risk));

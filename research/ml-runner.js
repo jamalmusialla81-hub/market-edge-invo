@@ -2,7 +2,7 @@
 'use strict';
 // Deliberately on-demand: replay cadence must remain dedicated to evidence collection.
 const crypto=require('node:crypto'),ML=require('../ml-engine.js');
-const API=(process.env.MARKET_EDGE_API||'https://market-edge-ai.jakob-market-edge.workers.dev').replace(/\/$/,''),TOKEN=process.env.MARKET_EDGE_RESEARCH_TOKEN||'',DATASET='EARLY-WINDOW-RESEARCH-V1',CODE_VERSION='ml-research-v1',MIN_TRAIN=25;
+const API=(process.env.MARKET_EDGE_API||'https://market-edge-ai.jakob-market-edge.workers.dev').replace(/\/$/,''),TOKEN=process.env.MARKET_EDGE_RESEARCH_TOKEN||'',DATASET='EARLY-WINDOW-RESEARCH-V1',CODE_VERSION='ml-research-v2-strategy-context',MIN_TRAIN=25;
 const finite=value=>{const n=Number(value);return Number.isFinite(n)?n:null;},mean=values=>values.length?values.reduce((a,b)=>a+b,0)/values.length:0,median=values=>{const v=values.slice().sort((a,b)=>a-b),m=Math.floor(v.length/2);return v.length?v.length%2?v[m]:(v[m-1]+v[m])/2:null;};
 function hash(value){return crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex').slice(0,16);}
 function parse(value){try{return JSON.parse(value||'{}');}catch{return{};}}
@@ -10,7 +10,11 @@ function number(value,fallback=0){const n=finite(value);return n==null?fallback:
 function sample(row){
   const f=parse(row.features_json),t=parse(row.targets_json),h4=f.h4||{},m15=f.m15||{};
   // All values below are immutable fields captured at the decision timestamp.
-  const features={quality:number(row.quality_score)/100,rr:number(row.rr),long:row.direction==='long'?1:0,breakout:row.strategy==='BREAKOUT + RETEST'?1:0,liquiditySweep:row.strategy==='LIQUIDITY-SWEEP REVERSAL'?1:0,h4Rsi:number(h4.rsi)/100,h4Roc5:number(h4.roc5),h4RelativeVolume:number(h4.relativeVolume),m15Rsi:number(m15.rsi)/100,m15RelativeVolume:number(m15.relativeVolume)};
+  const strategy=String(row.strategy||''),regime=String(row.regime||'');
+  const features={quality:number(row.quality_score)/100,rr:number(row.rr),long:row.direction==='long'?1:0,
+    trendContinuation:strategy==='TREND CONTINUATION'?1:0,breakout:strategy==='BREAKOUT + RETEST'?1:0,momentum:strategy==='MOMENTUM CONTINUATION'?1:0,meanReversion:strategy==='MEAN REVERSION'?1:0,liquiditySweep:strategy==='LIQUIDITY-SWEEP REVERSAL'?1:0,
+    regimeTrend:/UPTREND|DOWNTREND/.test(regime)?1:0,regimeRange:/RANGE/.test(regime)?1:0,regimeBreakout:/BREAKOUT/.test(regime)?1:0,regimeCompression:regime==='COMPRESSION'?1:0,
+    h4Rsi:number(h4.rsi)/100,h4Roc5:number(h4.roc5),h4RelativeVolume:number(h4.relativeVolume),m15Rsi:number(m15.rsi)/100,m15RelativeVolume:number(m15.relativeVolume)};
   return ML.makeSample({id:row.signal_id,time:number(row.timestamp),asset:row.asset,strategy:row.strategy,direction:row.direction,regime:row.regime,features,targets:{tp1BeforeSl:t.TP1_BEFORE_SL?1:0,finalR:number(t.FINAL_R)}});
 }
 function classification(predictions,actual){const n=actual.length,base=mean(actual),labels=predictions.map(value=>value>=.5?1:0),tp=labels.filter((v,i)=>v&&actual[i]).length,fp=labels.filter((v,i)=>v&&!actual[i]).length,fn=labels.filter((v,i)=>!v&&actual[i]).length,tn=labels.filter((v,i)=>!v&&!actual[i]).length;return{n,accuracy:n?labels.filter((v,i)=>v===actual[i]).length/n:null,precision:tp+fp?tp/(tp+fp):null,recall:tp+fn?tp/(tp+fn):null,brier:ML.brier(predictions,actual),ece:ML.expectedCalibrationError(predictions,actual,Math.min(5,n)),baselineBrier:ML.brier(actual.map(()=>base),actual),meanProbability:mean(predictions),eventRate:base,confusion:{tp,fp,fn,tn}};}
