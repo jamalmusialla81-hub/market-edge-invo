@@ -1076,7 +1076,7 @@
       if (filter === 'social') visible.sort((a,b)=>MarketEdgeQuant.aggregateSocial(socialRecords,b.symbol).reliability-MarketEdgeQuant.aggregateSocial(socialRecords,a.symbol).reliability);
       if (filter === 'risk') visible.sort((a,b)=>(a.quant?.risk?.lossAtStop||Infinity)-(b.quant?.risk?.lossAtStop||Infinity));
       if (filter === 'liquidity') visible.sort((a,b)=>b.liquidityScore-a.liquidityScore);
-      if (['overall','quality'].includes(filter)) visible.sort((a,b)=>(b.opportunity??-1)-(a.opportunity??-1));
+      if (filter === 'quality') visible.sort((a,b)=>(Number(b.quant?.combinedScore??b.quant?.setupQuality??b.opportunity??-1))-(Number(a.quant?.combinedScore??a.quant?.setupQuality??a.opportunity??-1)));
       els.list.innerHTML = '<div class="market-row table-head"><span>Ranked market</span><span>Bias / verdict</span><span>Quant score</span></div>' + visible.map((r,index)=>{
         const decision = r.quant?.decision || 'ANALYSIS UNAVAILABLE';
         const badgeClass = decision === 'TAKE TRADE' ? (r.quant.direction==='short'?'short':'buy') : decision === 'WAIT' ? 'watch' : 'avoid';
@@ -1263,24 +1263,24 @@
         els.rec.innerHTML='<div class="empty"><strong>No reliable analysis</strong>Fresh, valid data is required before any trade plan is generated.</div>';
         return;
       }
-      const q=best.quant, decision=q.decision, direction=q.direction||best.lean||'neutral';
+      const q=best.quant, decision=q.decision, hasGeometry=hasTradeGeometry(q), strictVerdict=hasGeometry&&decision!=='TAKE TRADE'?'WAIT':decision, direction=q.direction||best.lean||'neutral';
       const directionText=direction==='short'?'SHORT':direction==='long'?'LONG':'NEUTRAL';
-      const decisionClass=decision==='TAKE TRADE'?(direction==='short'?'short':'buy'):decision==='WAIT'?'watch':'avoid';
+      const decisionClass=strictVerdict==='TAKE TRADE'?(direction==='short'?'short':'buy'):strictVerdict==='WAIT'?'watch':'avoid';
       const simpleReason=decision==='TAKE TRADE'?'The setup passed the required current-market and risk checks. Review the exact levels before deciding whether to place it manually.':decision==='WAIT'?'A candidate was evaluated, but its current rules do not permit entry.': 'No valid trade is permitted for this candidate right now.';
       const mlLabel=mlScanLabel();
       els.title.textContent=`${best.symbol} — ${directionText}`;
-      els.badge.className=`badge ${decisionClass}`; els.badge.textContent=decision;
+      els.badge.className=`badge ${decisionClass}`; els.badge.textContent=strictVerdict;
       const common=`
         <div class="simple-decision">
           <div class="asset-row"><div class="asset-name"><span class="coin">${best.symbol}</span><span><strong>${best.name}</strong><span>${formatPrice(best.price)} USDT · ${best.sourceCount} independent feeds</span></span></div></div>
-          <div class="decision-state"><h3>#1 CURRENT CANDIDATE · ${directionText}</h3><span class="badge ${decisionClass}">${decision==='TAKE TRADE'?'TRADE READY':decision}</span></div>
+          <div class="decision-state"><h3>BEST TRADE NOW · ${directionText}</h3><span class="badge ${decisionClass}">${strictVerdict==='TAKE TRADE'?'TRADE READY':`STRICT VERDICT: ${strictVerdict}`}</span></div>
           <div class="score-pair"><div class="score-tile score-gauge" style="--score:${Number.isFinite(q.setupQuality)?q.setupQuality:0}"><span>Setup quality <button type="button" title="How strong the actual trade setup is.">?</button></span><strong>${Number.isFinite(q.setupQuality)?q.setupQuality+' / 100':'—'}</strong></div><div class="score-tile score-gauge" style="--score:${Number.isFinite(q.opportunity?.score)?q.opportunity.score:0}"><span>Opportunity <button type="button" title="How interesting this market is right now.">?</button></span><strong>${q.opportunity?.score??'—'}${q.opportunity?.score!=null?' / 100':''}</strong></div></div>
           <p class="decision-summary">${simpleReason}</p>
           <div class="decision-actions"><button class="secondary-button" type="button" data-toggle-why>Why?</button><button class="secondary-button" type="button" data-toggle-advanced>View details</button></div>
           <div class="decision-advanced" data-decision-advanced><div class="why-list"><div class="why-line"><b>Bottom line</b><span>${q.reason||simpleReason}</span></div>${decisionBlockers(q).map(reason=>`<div class="why-line"><b>•</b><span>${reason}</span></div>`).join('')}${q.researchNote?`<div class="why-line"><b>Research</b><span>${q.researchNote}</span></div>`:''}<div class="why-line"><b>Scan audit</b><span>${scanBlockerSummary(latestResults)}</span></div></div></div>
         </div>
         <details class="advanced-details"><summary>Advanced setup data</summary><div class="evidence-grid">
-          <div class="evidence-item"><span>Final verdict</span><strong>${decision}</strong></div>
+          <div class="evidence-item"><span>Strict verdict</span><strong>${strictVerdict}</strong></div>
           <div class="evidence-item"><span>Regime</span><strong>${q.regime||'Unavailable'}</strong></div>
           <div class="evidence-item"><span>Strategy</span><strong>${q.strategy||'None qualified'}</strong></div>
           <div class="evidence-item"><span>Legitimate strategy candidates</span><strong>${Number.isFinite(q.candidateCount)?q.candidateCount:'—'} · ${Number.isFinite(q.actionableCandidateCount)?q.actionableCandidateCount+' actionable':'not evaluated'}</strong></div>
@@ -1295,7 +1295,7 @@
           <div class="evidence-item"><span>Combined ranking</span><strong>${Number.isFinite(q.combinedScore)?q.combinedScore.toFixed(0)+'/100':'Quant-only'}</strong></div>
         </div></details>
         <div class="evidence-links"><a class="evidence-link" href="${MarketEdgeTradingView.chartUrl('BINANCE',best.symbol,'USDT')}" target="_blank" rel="noopener noreferrer">Verify ${best.symbol} on TradingView</a></div>`;
-      if (!hasTradeGeometry(q)) {
+      if (!hasGeometry) {
         els.rec.innerHTML=common+`
           <div class="invo-entry"><div class="invo-entry-head"><div><h3>No actionable setup</h3><p>${decisionBlockers(q).join(' ')||'The strategy did not produce valid entry, stop and target levels from completed market data.'}</p></div><span class="badge ${decisionClass}">${decision}</span></div></div>`;
         bindDecisionControls();
@@ -1314,8 +1314,8 @@
           <div class="plan-box"><span>Risk / reward</span><strong>${q.rr1.toFixed(2)}R / ${q.rr2.toFixed(2)}R</strong></div>
           <div class="plan-box"><span>Liquidation distance</span><strong>${(risk.liquidationDistancePct*100).toFixed(1)}%</strong></div>
         </div>
-        <section class="invo-entry" aria-label="Exact manual trade details">
-          <div class="invo-entry-head"><div><h3>${decision==='TAKE TRADE'?'Exact manual trade details':'Candidate levels — do not enter while verdict is WAIT'}</h3><p>Position/contract value and margin are deliberately shown as different numbers.</p></div><span class="badge ${isShort?'short':'buy'}">${directionText}</span></div>
+        <section class="invo-entry" aria-label="Invo inputs">
+          <div class="invo-entry-head"><div><h3>Invo inputs</h3><p>Use these current levels only after checking Invo's live mark price. Position/contract value and margin are deliberately shown as different numbers.</p></div><span class="badge ${isShort?'short':'buy'}">${directionText}</span></div>
           <div class="invo-fields">
             <div class="invo-field"><b>1</b><span>Asset</span><strong>${best.name} (${best.symbol})</strong></div>
             <div class="invo-field"><b>2</b><span>Direction</span><strong class="${isShort?'short-value':'long-value'}">${directionText}</strong></div>
@@ -1333,11 +1333,12 @@
           <p class="fresh-note">Only enter while Invo's mark price is close to ${formatPrice(q.entry)}. Confirm Invo's actual liquidation price and active TP/SL before submitting.</p>
         </section>
         <details class="analysis-details"><summary>Why this trade and what invalidates it?</summary><p class="analysis-copy">${q.reason}. A move through ${formatPrice(q.stop)} invalidates the setup. The score is not a probability and historical testing may still be insufficient.</p></details>
-        ${decision==='TAKE TRADE'?`<div class="confirm"><label class="confirm-note"><input id="ack" type="checkbox">I understand this is research, not guaranteed profit.</label><button id="prepare" class="prepare" type="button" disabled>COPY TRADE DETAILS</button></div><details class="analysis-details" id="manualRecordPanel"><summary>I took this trade manually</summary><p class="analysis-copy">Record what you actually entered after the order is already placed. This is a local journal only—Market Edge has no exchange connection and cannot change the trade.</p><div class="settings-grid" style="margin-top:12px"><div class="field"><label for="manualActualEntry">Actual entry</label><input id="manualActualEntry" type="number" step="any" value="${q.entry}"></div><div class="field"><label for="manualActualSize">Actual notional (USDC)</label><input id="manualActualSize" type="number" min="0.01" step="0.01" value="${risk.notional.toFixed(2)}"></div><div class="field"><label for="manualActualLeverage">Actual leverage</label><input id="manualActualLeverage" type="number" min="1" step="1" value="${risk.leverage}"></div><div class="field"><label for="manualActualStop">Actual stop</label><input id="manualActualStop" type="number" step="any" value="${q.stop}"></div><div class="field"><label for="manualActualTarget1">Actual TP1</label><input id="manualActualTarget1" type="number" step="any" value="${q.target1}"></div><div class="field"><label for="manualActualTarget2">Actual TP2</label><input id="manualActualTarget2" type="number" step="any" value="${q.target2}"></div></div><div class="research-actions" style="margin-top:12px"><button id="recordManualTrade" class="secondary-button" type="button">Record manual trade</button></div></details>`:`<p class="fresh-note"><strong>Why not enter:</strong> ${decisionBlockers(q).join(' ')}</p>`}`;
+        <div class="confirm"><label class="confirm-note"><input id="ack" type="checkbox">I understand this is research, not guaranteed profit.</label><button id="prepare" class="prepare" type="button" disabled>COPY INVO SETUP</button></div>
+        ${decision==='TAKE TRADE'?`<details class="analysis-details" id="manualRecordPanel"><summary>I took this trade manually</summary><p class="analysis-copy">Record what you actually entered after the order is already placed. This is a local journal only—Market Edge has no exchange connection and cannot change the trade.</p><div class="settings-grid" style="margin-top:12px"><div class="field"><label for="manualActualEntry">Actual entry</label><input id="manualActualEntry" type="number" step="any" value="${q.entry}"></div><div class="field"><label for="manualActualSize">Actual notional (USDC)</label><input id="manualActualSize" type="number" min="0.01" step="0.01" value="${risk.notional.toFixed(2)}"></div><div class="field"><label for="manualActualLeverage">Actual leverage</label><input id="manualActualLeverage" type="number" min="1" step="1" value="${risk.leverage}"></div><div class="field"><label for="manualActualStop">Actual stop</label><input id="manualActualStop" type="number" step="any" value="${q.stop}"></div><div class="field"><label for="manualActualTarget1">Actual TP1</label><input id="manualActualTarget1" type="number" step="any" value="${q.target1}"></div><div class="field"><label for="manualActualTarget2">Actual TP2</label><input id="manualActualTarget2" type="number" step="any" value="${q.target2}"></div></div><div class="research-actions" style="margin-top:12px"><button id="recordManualTrade" class="secondary-button" type="button">Record manual trade</button></div></details>`:`<p class="fresh-note"><strong>Strict verdict: WAIT.</strong> ${decisionBlockers(q).join(' ')}</p>`}`;
       const ack=document.getElementById('ack'), prepare=document.getElementById('prepare');
       ack?.addEventListener('change',()=>prepare.disabled=!ack.checked);
       prepare?.addEventListener('click',async()=>{
-        const text=`MARKET EDGE\n\n${best.symbol} ${directionText}\nStrategy: ${q.strategy}\n\nEntry: ${formatPrice(q.entry)} USDT\nStop: ${formatPrice(q.stop)} USDT\nTP1: ${formatPrice(q.target1)} USDT\nTP2: ${formatPrice(q.target2)} USDT\nR:R: ${Number(q.rr1||q.rr).toFixed(2)}R / ${Number(q.rr2||q.rr).toFixed(2)}R\n\nLeverage: ${risk.leverage}x\nAllocation: ${(risk.margin/Math.max(1,Number(els.balance.value))*100).toFixed(1)}%\nPosition Size: ${risk.notional.toFixed(2)} USDC notional\nMargin: ${risk.margin.toFixed(2)} USDC\nRisk: ${(Number(els.risk.value)*100).toFixed(1)}%\nLoss at Stop: ${risk.lossAtStop.toFixed(2)} USDC\n\nQuant: ${q.setupQuality}/100\nML: ${mlCandidateLabel(q)}\nCombined: ${Number.isFinite(q.combinedScore)?q.combinedScore.toFixed(0)+'/100':'Quant-only'}\nConfidence: ${q.mlStrategyInfluence?.includes('CHAMPION')?'HIGH':q.mlStrategyInfluence?.includes('%')?'EXPERIMENTAL':'INSUFFICIENT EVIDENCE'}\nFinal verdict: ${decision}`;
+        const text=`MARKET EDGE\n\n${best.symbol} ${directionText}\nStrategy: ${q.strategy}\n\nEntry: ${formatPrice(q.entry)} USDT\nStop: ${formatPrice(q.stop)} USDT\nTP1: ${formatPrice(q.target1)} USDT\nTP2: ${formatPrice(q.target2)} USDT\nR:R: ${Number(q.rr1||q.rr).toFixed(2)}R / ${Number(q.rr2||q.rr).toFixed(2)}R\n\nLeverage: ${risk.leverage}x\nAllocation: ${(risk.margin/Math.max(1,Number(els.balance.value))*100).toFixed(1)}%\nPosition Size: ${risk.notional.toFixed(2)} USDC notional\nMargin: ${risk.margin.toFixed(2)} USDC\nRisk: ${(Number(els.risk.value)*100).toFixed(1)}%\nLoss at Stop: ${risk.lossAtStop.toFixed(2)} USDC\n\nQuant: ${q.setupQuality}/100\nML: ${mlCandidateLabel(q)}\nCombined: ${Number.isFinite(q.combinedScore)?q.combinedScore.toFixed(0)+'/100':'Quant-only'}\nConfidence: ${q.mlStrategyInfluence?.includes('CHAMPION')?'HIGH':q.mlStrategyInfluence?.includes('%')?'EXPERIMENTAL':'INSUFFICIENT EVIDENCE'}\nStrict verdict: ${strictVerdict}`;
         await navigator.clipboard.writeText(text).catch(()=>{}); showToast('Trade details copied. Verify every live field before submitting.');
       });
       document.getElementById('recordManualTrade')?.addEventListener('click',()=>recordManualTrade(best,q,risk));
@@ -1558,9 +1559,13 @@
         const enriched=(await promisePool(base,enrichTimeframes,3)).filter(Boolean);
         if(requestId!==scanSequence)return;
         const enrichedMap=new Map(enriched.map(result=>[result.symbol,result]));
-        const decisionRank={'TAKE TRADE':3,'WAIT':2,'NO TRADE':1,'ANALYSIS UNAVAILABLE':0};
+        const currentTradeRank=result=>{
+          const quant=result.quant||{};
+          const rank=Number(quant.combinedScore??quant.setupQuality??result.quality??-1);
+          return (hasTradeGeometry(quant)?10000:0)+(Number.isFinite(rank)?rank:-1);
+        };
         const results=base.map(result=>{const guarded=applyPortfolioGuard(enrichedMap.get(result.symbol)||result);return annotateHistoricalEvidence(applyDirectionResearchGuard(guarded));}).sort((a,b)=>
-          (decisionRank[b.quant?.decision]||0)-(decisionRank[a.quant?.decision]||0) || (b.quality||0)-(a.quality||0)
+          currentTradeRank(b)-currentTradeRank(a) || (b.quality||0)-(a.quality||0)
         );
         if (!results.length) throw new Error('Live market data could not be reached from this browser.');
         const fullyEvaluated=results.filter(result=>Array.isArray(result.timeframes?.m5)&&result.timeframes.m5.length&&result.quant);
