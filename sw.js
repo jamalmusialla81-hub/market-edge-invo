@@ -1,5 +1,5 @@
-const CACHE = 'market-edge-v17';
-const APP_SHELL = ['./', './index.html', './market-edge.html', './research-engine.js?v=14', './quant-engine.js?v=14', './tradingview-compat.js?v=14', './forward-engine.js?v=14', './manual-trade-engine.js?v=15', './ml-engine.js?v=15', './ai-config.js?v=14', './ai-engine.js?v=14', './ai-ui.js?v=14', './manifest.webmanifest'];
+const CACHE = 'market-edge-v19';
+const APP_SHELL = ['./', './index.html', './market-edge.html', './research-engine.js?v=14', './quant-engine.js?v=14', './tradingview-compat.js?v=14', './forward-engine.js?v=14', './manual-trade-engine.js?v=17', './ml-engine.js?v=15', './ai-config.js?v=14', './ai-engine.js?v=14', './ai-ui.js?v=14', './manifest.webmanifest'];
 
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(APP_SHELL)));

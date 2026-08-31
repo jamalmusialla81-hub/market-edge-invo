@@ -7,4 +7,13 @@ const original=JSON.stringify(recorded.trade.recommended),mark=Manual.liveMark(r
 let closed=Manual.closeTrade(recorded.ledger,recorded.trade.id,{exit:110,reason:'TP1'},3_000);assert.equal(closed.closed,true);assert.equal(closed.outcome.realizedR,1.5);assert.equal(Manual.stats(closed.ledger).wins,1);assert.equal(Manual.closeTrade(closed.ledger,recorded.trade.id,{exit:111}).closed,false);
 recorded=Manual.recordTaken(null,signal,{entry:103,size:25,leverage:2,stop:94,target1:110,target2:115});assert.equal(recorded.trade.deviation.chased,true);assert.equal(recorded.trade.deviation.materialDeviation,true);
 assert.equal(Manual.recordTaken(null,signal,{entry:0,size:1,leverage:1,stop:95,target1:110,target2:115}).added,false);
+const snapshot={decision:'WAIT',setupQuality:61,opportunityScore:48,strategy:'Trend Continuation',regime:'RANGE',assetDirection:'short'};
+const standalone=Manual.recordManual(null,{asset:'UNI',direction:'long',entry:4.8913,stop:4.8,target1:5,target2:'',leverage:10,size:50,allocation:98.28,riskAmount:1.2,openedAt:1_000,source:'Invo',notes:'Independent entry'},snapshot,2_000);
+assert.equal(standalone.added,true);assert.equal(standalone.trade.mode,'MANUAL TRADE');assert.equal(standalone.trade.source,'Invo');assert.equal(standalone.trade.marketEdgeSnapshot.decision,'WAIT');assert.equal(standalone.trade.recommended,null);
+const standaloneOriginal=JSON.stringify(standalone.trade.marketEdgeSnapshot);
+const standaloneClosed=Manual.closeTrade(standalone.ledger,standalone.trade.id,{exit:5,fees:.1,closedAt:3_000,notes:'Closed independently'});
+assert.equal(standaloneClosed.closed,true);assert.equal(standaloneClosed.outcome.priceReturnPct>0,true);assert.equal(standaloneClosed.outcome.leveragedReturnPct>0,true);assert.equal(standaloneClosed.outcome.realizedPnl>0,true);assert.equal(standaloneClosed.outcome.finalR>0,true);assert.equal(JSON.stringify(standaloneClosed.ledger.trades[0].marketEdgeSnapshot),standaloneOriginal);
+const updated=Manual.editNotes(standaloneClosed.ledger,standalone.trade.id,'Updated note');assert.equal(updated.updated,true);assert.equal(updated.ledger.trades[0].notes,'Updated note');
+const noSize=Manual.recordManual(null,{asset:'UNI',direction:'long',entry:4.8913,stop:4.8,target1:5,leverage:10,size:'',allocation:98.28,riskAmount:'',openedAt:1_000,source:'Invo'},snapshot,2_000);
+const noSizeClosed=Manual.closeTrade(noSize.ledger,noSize.trade.id,{exit:5,closedAt:3_000});assert.equal(noSizeClosed.outcome.realizedPnl,null);assert.equal(noSizeClosed.outcome.finalR,null);assert.equal(Manual.stats(noSizeClosed.ledger).averageR,null);
 console.log('Manual live journal tests passed');
