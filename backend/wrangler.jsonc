@@ -15,7 +15,7 @@
   ],
   "observability": { "enabled": true },
   "vars": {
-    "ALLOWED_ORIGINS": "https://jamalmusialla81-hub.github.io",
+    "ALLOWED_ORIGINS": "https://jamalmusialla81-hub.github.io,https://marketedge-app.base44.app",
     "VISION_MODEL": "gpt-5.6-terra",
     "CHAT_MODEL": "gpt-5.6-luna",
     "RATE_LIMIT_PER_MINUTE": "12",
