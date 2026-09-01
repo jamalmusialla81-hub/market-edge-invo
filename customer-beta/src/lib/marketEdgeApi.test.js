@@ -25,6 +25,7 @@ test('accepts every supported Worker status and rejects invalid actionability', 
 test('preserves Worker-ranked results, coverage, and ML applicability metadata', () => {
   const response = structuredClone(fixtures.NO_VALID_SETUP);
   response.universe.evaluated = 2;
+  response.dataQuality.failures = Array.from({ length: 7 }, (_, index) => `Feed failure ${index + 1}`);
   response.dataQuality.coverage = { requested: 40, evaluated: 2, skipped: 38, multiSourceEvaluated: 1, singleSourceEvaluated: 1 };
   response.scanSummary = { rankedOpportunities: 2, actionableNow: 0 };
   response.rankedOpportunities = [
@@ -35,6 +36,7 @@ test('preserves Worker-ranked results, coverage, and ML applicability metadata',
   assert.equal(parsed.rankedOpportunities.length, 2);
   assert.equal(parsed.rankedOpportunities[1].asset, fixtures.WAIT_FOR_ENTRY.bestOpportunity.asset);
   assert.deepEqual(parsed.dataQuality.coverage, response.dataQuality.coverage);
+  assert.equal(parsed.dataQuality.failures.length, 7);
   assert.equal(parsed.rankedOpportunities[0].ml.reason, 'No eligible TAKE TRADE candidate reached ML ranking');
 });
 
