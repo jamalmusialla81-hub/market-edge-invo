@@ -1,14 +1,12 @@
-import { useEffect, useMemo, useState } from 'react';
-import { API_URL, MarketEdgeApiError, hasCompleteTrade, scanMarkets } from './lib/marketEdgeApi.js';
-import { loadJournal, removeLocalTrade, saveAcceptedTrade } from './lib/journal.js';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { API_URL, MarketEdgeApiError, scanMarkets } from './lib/marketEdgeApi.js';
+import { hasJournalAcceptance, loadJournal, removeLocalTrade, saveAcceptedTrade } from './lib/journal.js';
+import { getTradePresentation, isScanFresh, STATUS_LABELS } from './lib/presentation.js';
+import { createScanCoordinator } from './lib/scanCoordinator.js';
 
 const NAV = [
   ['trade', 'Trade'], ['trades', 'My Trades'], ['performance', 'Performance'], ['settings', 'Settings']
 ];
-const LABELS = {
-  TRADE_READY: 'TRADE READY', WAIT_FOR_ENTRY: 'GOOD SETUP — WAIT FOR ENTRY', ENTRY_EXPIRED: 'ENTRY EXPIRED',
-  NO_VALID_SETUP: 'NO VALID SETUP', DATA_UNAVAILABLE: 'DATA UNAVAILABLE'
-};
 const DEFAULT_SETTINGS = { balance: '7', riskPct: '1', maxLeverage: '10', maxExposurePct: '100' };
 
 function loadSettings() {
@@ -22,12 +20,11 @@ function tradeNumber(value, options = {}) {
 function money(value) { return typeof value === 'number' && Number.isFinite(value) ? `${value < 0 ? '−' : ''}$${tradeNumber(Math.abs(value))}` : '—'; }
 function percent(value) { return typeof value === 'number' && Number.isFinite(value) ? `${tradeNumber(value * 100, { maximumFractionDigits: 1 })}%` : '—'; }
 function time(value) { return typeof value === 'number' ? new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) : '—'; }
-function isFresh(scan) { return scan && Date.now() - scan.scannedAt < 15 * 60 * 1000; }
 
 function Brand() {
   return <div className="brand"><div className="brand-mark" aria-hidden="true"><i/><i/><i/></div><span>Market Edge<small>Customer beta</small></span></div>;
 }
-function Badge({ status }) { return <span className={`status-badge ${status?.toLowerCase() || 'neutral'}`}>{LABELS[status] || 'AWAITING SCAN'}</span>; }
+function Badge({ status }) { return <span className={`status-badge ${status?.toLowerCase() || 'neutral'}`}>{STATUS_LABELS[status] || 'AWAITING SCAN'}</span>; }
 function Field({ label, value, className = '' }) { return <div className={`trade-field ${className}`}><span>{label}</span><strong>{value}</strong></div>; }
 
 function ScanButton({ scanning, onClick }) {
@@ -52,10 +49,8 @@ function LevelMap({ trade }) {
 }
 
 function TradeCard({ scan, onTake, taken, onSettings }) {
-  const trade = scan?.bestTradeNow || null;
-  const opportunity = scan?.bestOpportunity || null;
-  const focus = trade || opportunity;
-  const ready = scan?.status === 'TRADE_READY' && hasCompleteTrade(trade) && isFresh(scan);
+  const presentation = getTradePresentation(scan, { alreadyAccepted: taken });
+  const { trade, opportunity, focus, showTakeTrade, takeTradeEnabled, showSeparateOpportunity } = presentation;
   if (!scan) return <section className="trade-card neutral-card"><div className="card-kicker">Best trade now</div><h1>Run a real market scan</h1><p>Market Edge will only show levels, scores and sizing returned by the Worker. It never creates browser-side trading data.</p><div className="empty-pills"><span>Live Worker data</span><span>Manual execution</span><span>No exchange connection</span></div></section>;
   if (scan.status === 'DATA_UNAVAILABLE') return <section className="trade-card neutral-card"><div className="card-row"><div><div className="card-kicker">Market Edge result</div><h1>Data unavailable</h1></div><Badge status={scan.status}/></div><p>Live data did not pass the Worker checks, so no recommendation was generated. Try another scan later.</p><Diagnostic scan={scan}/></section>;
   if (!focus) return <section className="trade-card neutral-card"><div className="card-row"><div><div className="card-kicker">Market Edge result</div><h1>No valid setup</h1></div><Badge status={scan.status}/></div><p>The Worker completed the scan but no trade met the current quality and risk requirements.</p><ScanFootnote scan={scan}/></section>;
@@ -74,11 +69,12 @@ function TradeCard({ scan, onTake, taken, onSettings }) {
     </div>
     {focus.entryZone && <div className="entry-zone"><span>Worker entry zone</span><b>{money(focus.entryZone.low)} — {money(focus.entryZone.high)}</b></div>}
     <div className="trade-actions">
-      {trade && <button className="take-button" type="button" onClick={onTake} disabled={!ready || taken}>{taken ? 'Trade taken ✓' : ready ? 'Take trade' : 'Scan expired — rescan'}</button>}
+      {showTakeTrade && <button className="take-button" type="button" onClick={onTake} disabled={!takeTradeEnabled}>{taken ? 'Trade taken ✓' : takeTradeEnabled ? 'Take trade' : 'Scan expired — rescan'}</button>}
       <button className="secondary-button" type="button" onClick={onSettings}>Risk settings</button>
       <small>{trade ? 'Records your manual confirmation only. No Invo order is sent.' : 'Await a TRADE READY result before accepting a trade.'}</small>
     </div>
     <ScanFootnote scan={scan}/>
+    {showSeparateOpportunity && <div className="opportunity-note"><span>Highest-quality opportunity</span><b>{opportunity.asset} {opportunity.direction?.toUpperCase()} · {STATUS_LABELS[opportunity.entryStatus] || 'WAIT'}</b><small>Best Trade Now remains the actionable Worker result above.</small></div>}
   </section>;
 }
 
@@ -111,8 +107,8 @@ function RiskCard({ scan }) {
 function TradeView({ scan, scanning, error, onScan, onTake, taken, onSettings }) {
   const focus = scan?.bestTradeNow || scan?.bestOpportunity;
   return <main className="trade-view"><section className="hero"><div><span className="eyebrow">Market Edge · live analysis</span><h2>Clear market structure.<br/><em>One decision at a time.</em></h2><p>Real-time recommendations are evaluated in Market Edge’s Worker. Review the plan, then execute manually on your venue.</p></div><div className="hero-actions"><ScanButton scanning={scanning} onClick={onScan}/><span className="allowance">Scan allowance enforcement pending</span></div></section>
-    {error && <div className="error-state"><b>Data unavailable</b><span>{error.message}</span>{error.httpStatus && <small>HTTP {error.httpStatus} · {error.code}</small>}</div>}
-    {scanning && <section className="scan-progress"><div className="scan-progress-top"><span><i className="scan-spinner"/> Validating current market data</span><small>This can take up to 45 seconds.</small></div><div className="progress-bar"><i/></div><p>Market Edge is requesting a single live server-side scan. Assets are not named until the Worker supplies a result.</p></section>}
+    {error && <div className="error-state" role="alert"><b>Data unavailable</b><span>{error.message}</span>{error.httpStatus && <small>HTTP {error.httpStatus} · {error.code}</small>}</div>}
+    {scanning && <section className="scan-progress" role="status" aria-live="polite"><div className="scan-progress-top"><span><i className="scan-spinner"/> Validating current market data</span><small>This can take up to 45 seconds.</small></div><div className="progress-bar"><i/></div><p>Market Edge is requesting a single live server-side scan. Assets are not named until the Worker supplies a result.</p></section>}
     <div className="trade-layout"><div className="primary-column"><TradeCard scan={scan} onTake={onTake} taken={taken} onSettings={onSettings}/><SupportingDetails scan={scan}/></div><aside className="side-column"><LevelMap trade={focus}/><RiskCard scan={scan}/></aside></div>
   </main>;
 }
@@ -139,21 +135,35 @@ export default function App() {
   const [scanning, setScanning] = useState(false);
   const [error, setError] = useState(null);
   const [records, setRecords] = useState(loadJournal);
-  const [takenId, setTakenId] = useState(null);
+  const coordinatorRef = useRef(null);
+  if (!coordinatorRef.current) coordinatorRef.current = createScanCoordinator();
   const workerSettings = useMemo(() => ({ balance: Number(settings.balance), riskPct: Number(settings.riskPct) / 100, maxLeverage: Number(settings.maxLeverage), maxExposurePct: Number(settings.maxExposurePct) / 100 }), [settings]);
-  useEffect(() => { const handle = () => setTakenId(null); window.addEventListener('focus', handle); return () => window.removeEventListener('focus', handle); }, []);
+  useEffect(() => () => coordinatorRef.current?.abort(), []);
   const startScan = async () => {
-    setScanning(true); setError(null); setTakenId(null);
-    try { setScan(await scanMarkets({ settings: workerSettings })); }
-    catch (cause) { setScan(null); setError(cause instanceof MarketEdgeApiError ? cause : new MarketEdgeApiError('Data unavailable')); }
-    finally { setScanning(false); }
+    const request = coordinatorRef.current.begin();
+    // A new scan invalidates the old snapshot immediately. The UI must never
+    // imply that yesterday's trade remains current while new data is loading.
+    setScanning(true); setScan(null); setError(null);
+    try {
+      const next = await scanMarkets({ settings: workerSettings, signal: request.signal });
+      if (coordinatorRef.current.isCurrent(request)) setScan(next);
+    } catch (cause) {
+      if (coordinatorRef.current.isCurrent(request)) {
+        setScan(null);
+        setError(cause instanceof MarketEdgeApiError ? cause : new MarketEdgeApiError('Data unavailable'));
+      }
+    } finally {
+      if (coordinatorRef.current.isCurrent(request)) {
+        coordinatorRef.current.complete(request);
+        setScanning(false);
+      }
+    }
   };
   const takeTrade = () => {
-    if (!scan || !isFresh(scan)) return;
+    if (!scan || !isScanFresh(scan) || hasJournalAcceptance(records, scan)) return;
     const saved = saveAcceptedTrade(records, scan);
     setRecords(saved.records);
-    if (saved.record) setTakenId(saved.record.id);
   };
   const goSettings = () => setPage('settings');
-  return <div className="app-shell"><header className="topbar"><Brand/><nav>{NAV.map(([key, label]) => <button type="button" key={key} className={page === key ? 'active' : ''} onClick={() => setPage(key)}>{label}</button>)}</nav><div className="live-indicator"><i/>Worker connected</div></header>{page === 'trade' && <TradeView scan={scan} scanning={scanning} error={error} onScan={startScan} onTake={takeTrade} taken={Boolean(takenId)} onSettings={goSettings}/>} {page === 'trades' && <MyTrades records={records} onDelete={id => setRecords(removeLocalTrade(records, id))}/>} {page === 'performance' && <Performance records={records}/>} {page === 'settings' && <Settings settings={settings} setSettings={setSettings}/>}<footer><span>Market Edge does not place orders.</span><span>Customer beta · Manual execution only</span></footer></div>;
+  return <div className="app-shell"><header className="topbar"><Brand/><nav aria-label="Customer beta navigation">{NAV.map(([key, label]) => <button type="button" key={key} className={page === key ? 'active' : ''} aria-current={page === key ? 'page' : undefined} onClick={() => setPage(key)}>{label}</button>)}</nav><div className="live-indicator"><i/>Worker ready</div></header>{page === 'trade' && <TradeView scan={scan} scanning={scanning} error={error} onScan={startScan} onTake={takeTrade} taken={hasJournalAcceptance(records, scan)} onSettings={goSettings}/>} {page === 'trades' && <MyTrades records={records} onDelete={id => setRecords(removeLocalTrade(records, id))}/>} {page === 'performance' && <Performance records={records}/>} {page === 'settings' && <Settings settings={settings} setSettings={setSettings}/>}<footer><span>Market Edge does not place orders.</span><span>Customer beta · Manual execution only</span></footer></div>;
 }

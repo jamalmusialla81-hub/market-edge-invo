@@ -80,6 +80,7 @@ export function parseScanResponse(value) {
     raw: value
   };
   if (result.status === 'TRADE_READY' && !hasCompleteTrade(result.bestTradeNow)) invalid('TRADE_READY requires a complete bestTradeNow');
+  if (result.status !== 'TRADE_READY' && result.bestTradeNow) invalid('Only TRADE_READY may include bestTradeNow');
   return result;
 }
 
@@ -87,14 +88,14 @@ export function hasCompleteTrade(trade) {
   return Boolean(trade && ['long', 'short'].includes(trade.direction) && [trade.entry, trade.stop, trade.tp1, trade.tp2, trade.rr1, trade.position?.notional, trade.position?.margin, trade.position?.leverage, trade.position?.riskAmount].every(isFiniteNumber));
 }
 
-export async function scanMarkets({ settings = {}, signal, timeoutMs = 45000 } = {}) {
+export async function scanMarkets({ settings = {}, signal, timeoutMs = 45000, fetchImpl = fetch, endpoint = API_URL, requestId: requestIdInput } = {}) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  const requestId = globalThis.crypto?.randomUUID?.() || `scan-request-${Date.now()}`;
+  const requestId = requestIdInput || globalThis.crypto?.randomUUID?.() || `scan-request-${Date.now()}`;
   const cancellation = () => controller.abort();
   signal?.addEventListener('abort', cancellation, { once: true });
   try {
-    const response = await fetch(API_URL, {
+    const response = await fetchImpl(endpoint, {
       // The request id stays in the JSON payload. Keeping headers simple lets the
       // existing explicit CORS policy remain narrow without a new custom header.
       method: 'POST', headers: { 'content-type': 'application/json' }, signal: controller.signal,

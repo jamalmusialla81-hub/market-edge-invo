@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { saveAcceptedTrade } from './journal.js';
+import { hasJournalAcceptance, loadJournal, saveAcceptedTrade, STORAGE_MODE } from './journal.js';
+import { parseScanResponse } from './marketEdgeApi.js';
+import { fixtures } from '../test/workerFixtures.js';
 
 globalThis.localStorage = {
   store: new Map(),
@@ -8,18 +10,32 @@ globalThis.localStorage = {
   setItem(key, value) { this.store.set(key, value); }
 };
 
-const scan = {
-  scanId: 'server-scan-1', scannedAt: 1730332800000,
-  raw: { scanId: 'server-scan-1', proof: 'exact-worker-response' },
-  bestTradeNow: { asset: 'BTC', direction: 'short', entry: 72450, stop: 72663.19, tp1: 71710.4, tp2: 71070, rr1: 1.8, scanSnapshotId: 'frozen-1' }
-};
+const scan = parseScanResponse(fixtures.TRADE_READY);
 
 test('freezes one exact Worker recommendation and blocks duplicate confirmation', () => {
+  globalThis.localStorage.store.clear();
   const first = saveAcceptedTrade([], scan);
   assert.equal(first.added, true);
-  assert.equal(first.record.snapshot.entry, 72450);
+  assert.deepEqual(first.record.snapshot, scan.bestTradeNow);
   assert.deepEqual(first.record.rawWorkerResponse, scan.raw);
+  assert.equal(first.record.storage, STORAGE_MODE);
+  scan.bestTradeNow.entry = 1;
+  assert.notEqual(first.record.snapshot.entry, 1);
   const second = saveAcceptedTrade(first.records, scan);
+  assert.equal(second.added, false);
+  assert.equal(second.records.length, 1);
+});
+
+test('survives refresh and blocks the same recommendation under a new scan id', () => {
+  globalThis.localStorage.store.clear();
+  const original = parseScanResponse(fixtures.TRADE_READY);
+  const first = saveAcceptedTrade([], original);
+  const reloaded = loadJournal();
+  const repeatRaw = structuredClone(fixtures.TRADE_READY);
+  repeatRaw.scanId = 'server-scan-after-refresh';
+  const repeat = parseScanResponse(repeatRaw);
+  assert.equal(hasJournalAcceptance(reloaded, repeat), true);
+  const second = saveAcceptedTrade(reloaded, repeat);
   assert.equal(second.added, false);
   assert.equal(second.records.length, 1);
 });
