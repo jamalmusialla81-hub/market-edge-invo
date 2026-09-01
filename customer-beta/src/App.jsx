@@ -82,7 +82,10 @@ function TradeCard({ scan, onTake, taken, onSettings }) {
 }
 
 function ScanFootnote({ scan }) {
-  return <div className="scan-footnote"><span>Scan {scan.scanId}</span><span>{time(scan.scannedAt)}</span><span>{scan.universe.scanned ?? '—'} markets checked</span>{scan.dataQuality.status === 'PARTIAL' && <span>Partial feed coverage</span>}</div>;
+  const coverage = scan.dataQuality?.coverage;
+  const evaluated = coverage?.evaluated ?? scan.universe.evaluated ?? scan.universe.scanned;
+  const requested = coverage?.requested ?? scan.universe.scanned;
+  return <div className="scan-footnote"><span>Scan {scan.scanId}</span><span>{time(scan.scannedAt)}</span><span>{evaluated} / {requested} markets evaluated</span>{scan.dataQuality.status === 'PARTIAL' && <span>Partial feed coverage</span>}</div>;
 }
 function Diagnostic({ scan }) {
   const first = scan?.dataQuality?.failures?.[0];
