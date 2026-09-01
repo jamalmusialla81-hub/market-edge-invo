@@ -115,7 +115,7 @@ export function hasCompleteTrade(trade) {
   return Boolean(trade && ['long', 'short'].includes(trade.direction) && [trade.entry, trade.stop, trade.tp1, trade.tp2, trade.rr1, trade.position?.notional, trade.position?.margin, trade.position?.leverage, trade.position?.riskAmount].every(isFiniteNumber));
 }
 
-export async function scanMarkets({ settings = {}, signal, timeoutMs = 45000, fetchImpl = fetch, endpoint = API_URL, requestId: requestIdInput } = {}) {
+export async function scanMarkets({ settings = {}, signal, timeoutMs = 60000, fetchImpl = fetch, endpoint = API_URL, requestId: requestIdInput } = {}) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   const requestId = requestIdInput || globalThis.crypto?.randomUUID?.() || `scan-request-${Date.now()}`;

@@ -374,8 +374,11 @@ async function customerScan(env,payload,fetchImpl,now=Date.now()) {
   const settings=payload?.settings&&typeof payload.settings==='object'?payload.settings:{};
   if(env.MARKET_EVALUATOR){
     const startedAt=now;
+    // The model is immutable for a scan. Loading it once also prevents every
+    // evaluator child from repeating the same D1 query and JSON parse.
+    const model=env.MARKET_EDGE_DB?await activeMlModel(env.MARKET_EDGE_DB).catch(()=>({available:false,status:'UNAVAILABLE'})):{available:false,status:'UNAVAILABLE'};
     const marketRunner=async(market,context)=>{
-      const response=await env.MARKET_EVALUATOR.fetch('https://market-edge-evaluator/internal/evaluate',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({scanId:payload?.requestId||null,market,settings:context.settings,now:context.now})});
+      const response=await env.MARKET_EVALUATOR.fetch('https://market-edge-evaluator/internal/evaluate',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({scanId:payload?.requestId||null,market,settings:context.settings,now:context.now,activeModel:model})});
       const body=await response.json();
       if(!response.ok||!body?.result)throw new Error(`${market.invoInstrument}: ${body?.error?.message||'Internal market evaluation failed'}`);
       return body.result;
