@@ -375,7 +375,7 @@ async function customerScan(env,payload,fetchImpl,now=Date.now()) {
   if(env.MARKET_EVALUATOR){
     const startedAt=now;
     const marketRunner=async(market,context)=>{
-      const response=await env.MARKET_EVALUATOR.fetch('https://market-edge-evaluator/internal/evaluate',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({scanId:payload?.requestId||null,market:market.invoInstrument,settings:context.settings,now:context.now})});
+      const response=await env.MARKET_EVALUATOR.fetch('https://market-edge-evaluator/internal/evaluate',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({scanId:payload?.requestId||null,market,settings:context.settings,now:context.now})});
       const body=await response.json();
       if(!response.ok||!body?.result)throw new Error(`${market.invoInstrument}: ${body?.error?.message||'Internal market evaluation failed'}`);
       return body.result;

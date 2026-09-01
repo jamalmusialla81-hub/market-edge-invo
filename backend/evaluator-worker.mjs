@@ -10,7 +10,7 @@ export default {
     try {
       const payload=await request.json();
       const model=env.MARKET_EDGE_DB?await activeMlModel(env.MARKET_EDGE_DB).catch(()=>({available:false,status:'UNAVAILABLE'})):{available:false,status:'UNAVAILABLE'};
-      const scan=await runLiveScan({market:payload.market,settings:payload.settings,now:Number(payload.now)||Date.now(),activeModel:model});
+      const scan=await runLiveScan({market:payload.market?.invoInstrument,marketMetadata:payload.market,settings:payload.settings,now:Number(payload.now)||Date.now(),activeModel:model});
       const result=scan.rankedOpportunities[0];
       if(!result)throw new Error(scan.dataQuality?.failures?.[0]||'Market produced no evaluation result');
       return json({result,completedAt:Date.now()});
