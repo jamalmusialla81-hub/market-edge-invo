@@ -3,12 +3,13 @@ const CHART_URL = API_URL.replace(/\/api\/scan$/, '/api/chart');
 const STATUSES = new Set(['TRADE_READY', 'WAIT_FOR_ENTRY', 'ENTRY_EXPIRED', 'NO_VALID_SETUP', 'DATA_UNAVAILABLE']);
 
 export class MarketEdgeApiError extends Error {
-  constructor(message, { code = 'DATA_UNAVAILABLE', httpStatus = null, cause = null } = {}) {
+  constructor(message, { code = 'DATA_UNAVAILABLE', httpStatus = null, cause = null, entitlement = null } = {}) {
     super(message);
     this.name = 'MarketEdgeApiError';
     this.code = code;
     this.httpStatus = httpStatus;
     this.cause = cause;
+    this.entitlement = entitlement;
   }
 }
 
@@ -62,6 +63,11 @@ function parseTrade(value, path) {
     scanSnapshotId: nullableText(value.scan_snapshot_id, `${path}.scan_snapshot_id`), raw: value
   };
 }
+function parseEntitlement(value) {
+  if (value == null) return null;
+  if (!isRecord(value)) invalid('account.entitlement must be an object');
+  return { plan: nullableText(value.plan, 'account.entitlement.plan') || 'FREE', role: nullableText(value.role, 'account.entitlement.role') || 'USER', dailyLimit: nullableNumber(value.dailyLimit, 'account.entitlement.dailyLimit'), usedToday: nullableNumber(value.usedToday, 'account.entitlement.usedToday'), remainingToday: nullableNumber(value.remainingToday, 'account.entitlement.remainingToday'), unlimited: value.unlimited === true };
+}
 
 export function parseScanResponse(value) {
   if (!isRecord(value)) invalid('response is not an object');
@@ -82,6 +88,7 @@ export function parseScanResponse(value) {
     bestOpportunity: parseTrade(value.bestOpportunity, 'bestOpportunity'),
     bestTradeNow: parseTrade(value.bestTradeNow, 'bestTradeNow'),
     rankedOpportunities: value.rankedOpportunities == null ? [] : Array.isArray(value.rankedOpportunities) ? value.rankedOpportunities.map((trade, index) => parseTrade(trade, `rankedOpportunities[${index}]`)).filter(Boolean) : invalid('rankedOpportunities must be an array'),
+    account: value.account == null ? null : isRecord(value.account) ? { entitlement: parseEntitlement(value.account.entitlement), principalType: nullableText(value.account.principalType, 'account.principalType'), recommendationId: nullableText(value.account.recommendationId, 'account.recommendationId') } : invalid('account must be an object'),
     raw: value
   };
   if (result.status === 'TRADE_READY' && !hasCompleteTrade(result.bestTradeNow)) invalid('TRADE_READY requires a complete bestTradeNow');
@@ -115,7 +122,8 @@ export function hasCompleteTrade(trade) {
   return Boolean(trade && ['long', 'short'].includes(trade.direction) && [trade.entry, trade.stop, trade.tp1, trade.tp2, trade.rr1, trade.position?.notional, trade.position?.margin, trade.position?.leverage, trade.position?.riskAmount].every(isFiniteNumber));
 }
 
-export async function scanMarkets({ settings = {}, signal, timeoutMs = 60000, fetchImpl = fetch, endpoint = API_URL, requestId: requestIdInput } = {}) {
+function authHeaders(accessToken) { return accessToken ? { authorization: `Bearer ${accessToken}` } : {}; }
+export async function scanMarkets({ settings = {}, accessToken = null, signal, timeoutMs = 60000, fetchImpl = fetch, endpoint = API_URL, requestId: requestIdInput } = {}) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   const requestId = requestIdInput || globalThis.crypto?.randomUUID?.() || `scan-request-${Date.now()}`;
@@ -125,11 +133,11 @@ export async function scanMarkets({ settings = {}, signal, timeoutMs = 60000, fe
     const response = await fetchImpl(endpoint, {
       // The request id stays in the JSON payload. Keeping headers simple lets the
       // existing explicit CORS policy remain narrow without a new custom header.
-      method: 'POST', headers: { 'content-type': 'application/json' }, signal: controller.signal,
+      method: 'POST', credentials: 'include', headers: { 'content-type': 'application/json', ...authHeaders(accessToken) }, signal: controller.signal,
       body: JSON.stringify({ requestId, settings })
     });
     const body = await response.json().catch(() => { throw new MarketEdgeApiError('Worker returned invalid JSON', { code: 'RESPONSE_INVALID', httpStatus: response.status }); });
-    if (!response.ok) throw new MarketEdgeApiError(body?.error?.message || `Worker request failed (${response.status})`, { code: body?.error?.code || 'HTTP_ERROR', httpStatus: response.status });
+    if (!response.ok) throw new MarketEdgeApiError(body?.error?.message || `Worker request failed (${response.status})`, { code: body?.error?.code || 'HTTP_ERROR', httpStatus: response.status, entitlement: body?.error?.entitlement || null });
     return parseScanResponse(body);
   } catch (error) {
     if (error instanceof MarketEdgeApiError) throw error;
@@ -140,5 +148,22 @@ export async function scanMarkets({ settings = {}, signal, timeoutMs = 60000, fe
     signal?.removeEventListener('abort', cancellation);
   }
 }
+
+const API_BASE = API_URL.replace(/\/api\/scan$/, '');
+async function accountRequest(path, { method = 'GET', body, accessToken = null, fetchImpl = fetch } = {}) {
+  try {
+    const response = await fetchImpl(`${API_BASE}${path}`, { method, credentials: 'include', headers: { ...(body ? { 'content-type': 'application/json' } : {}), ...authHeaders(accessToken) }, body: body ? JSON.stringify(body) : undefined });
+    const result = await response.json().catch(() => { throw new MarketEdgeApiError('Worker returned invalid JSON', { code: 'RESPONSE_INVALID', httpStatus: response.status }); });
+    if (!response.ok) throw new MarketEdgeApiError(result?.error?.message || 'Account request failed.', { code: result?.error?.code || 'HTTP_ERROR', httpStatus: response.status });
+    return result;
+  } catch (error) {
+    if (error instanceof MarketEdgeApiError) throw error;
+    throw new MarketEdgeApiError('Account service is unavailable.', { code: 'NETWORK_ERROR', cause: error });
+  }
+}
+export const getAccount = options => accountRequest('/v1/account', options);
+export const getCloudTrades = options => accountRequest('/v1/trades', options);
+export const takeCloudTrade = (recommendationId, options = {}) => accountRequest('/v1/trades/take', { ...options, method: 'POST', body: { recommendationId } });
+export const closeCloudTrade = (id, exitPrice, options = {}) => accountRequest(`/v1/trades/${encodeURIComponent(id)}/close`, { ...options, method: 'POST', body: { exitPrice } });
 
 export { API_URL, CHART_URL, STATUSES };

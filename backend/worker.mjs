@@ -2,6 +2,7 @@ import {runMonitor, latestMonitor, MONITOR_VERSION, WATCHLIST} from './monitor-c
 import {runHistoricalBackfill,latestHistorical,HISTORICAL_VERSION,PRIORITY_ASSETS} from './historical-core.mjs';
 import {runReplayChunk,replayProgress,materializeDataset} from './replay-core.mjs';
 import {fetchLiveMarketChart,runLiveScan} from './scan-core.mjs';
+import {accountError,accountState,acceptTrade,closeTrade,entitlement,finalizeScan,listTrades,releaseScan,resolvePrincipal,reserveScan,storeRecommendation,successfulScan} from './account-core.mjs';
 
 const DEFAULT_ORIGINS = ['https://jamalmusialla81-hub.github.io', 'http://127.0.0.1:4173', 'http://127.0.0.1:4174', 'http://localhost:4173'];
 const MAX_BODY_BYTES = 8_500_000;
@@ -57,7 +58,7 @@ function allowedOrigins(env) {
 }
 function corsHeaders(request,env) {
   const origin=request.headers.get('origin')||'';
-  return allowedOrigins(env).includes(origin)?{'access-control-allow-origin':origin,'vary':'Origin','access-control-allow-methods':'GET,POST,OPTIONS','access-control-allow-headers':'content-type,x-market-edge-token','access-control-max-age':'86400'}:{};
+  return allowedOrigins(env).includes(origin)?{'access-control-allow-origin':origin,'vary':'Origin','access-control-allow-methods':'GET,POST,OPTIONS','access-control-allow-headers':'content-type,authorization,x-market-edge-token','access-control-allow-credentials':'true','access-control-max-age':'86400'}:{};
 }
 function isAllowedOrigin(request,env) {
   const origin=request.headers.get('origin');
@@ -390,6 +391,37 @@ async function customerScan(env,payload,fetchImpl,now=Date.now()) {
   return runLiveScan({fetchImpl,now,settings,activeModel:model,scanStartedAt:now});
 }
 
+function entitlementAfterFinalization(row) {
+  const result=entitlement(row);
+  if (!result.unlimited) result.usedToday+=1;
+  return result;
+}
+function entitlementAfterRelease(row) {
+  const result=entitlement(row);
+  if (!result.unlimited) result.remainingToday=Math.min(result.dailyLimit,result.remainingToday+1);
+  return result;
+}
+async function entitledCustomerScan(request,env,payload,fetchImpl,now) {
+  const principal=await resolvePrincipal(request,env,fetchImpl);
+  const requestId=safeText(payload?.requestId||payload?.scan_id||crypto.randomUUID(),160);
+  if (requestId.length<8) throw accountError('A valid scan request ID is required.', 'REQUEST_ID_INVALID', 400);
+  const reservation=await reserveScan(principal,requestId,env,fetchImpl,now);
+  if (!reservation.allowed) throw Object.assign(accountError('Daily scan limit reached.', 'SCAN_LIMIT_REACHED', 429),{entitlement:entitlement(reservation),setCookie:principal.setCookie});
+  try {
+    const scan=await customerScan(env,payload,fetchImpl,now);
+    if (!successfulScan(scan)) {
+      await releaseScan(reservation.reservation_id,env,fetchImpl);
+      return {...scan,account:{entitlement:entitlementAfterRelease(reservation),principalType:principal.type,recommendationId:null},_setCookie:principal.setCookie};
+    }
+    await finalizeScan(reservation.reservation_id,scan.scanId,env,fetchImpl);
+    const recommendationId=await storeRecommendation(principal,scan,env,fetchImpl,now);
+    return {...scan,account:{entitlement:entitlementAfterFinalization(reservation),principalType:principal.type,recommendationId},_setCookie:principal.setCookie};
+  } catch(error) {
+    await releaseScan(reservation.reservation_id,env,fetchImpl);
+    throw error;
+  }
+}
+
 export async function handleRequest(request,env={},ctx={},deps={}) {
   const fetchImpl=deps.fetch||fetch,cors=corsHeaders(request,env),url=new URL(request.url);
   if(request.method==='OPTIONS') return isAllowedOrigin(request,env)?new Response(null,{status:204,headers:cors}):json({error:{code:'ORIGIN_DENIED',message:'Origin is not allowed'}},403);
@@ -397,6 +429,14 @@ export async function handleRequest(request,env={},ctx={},deps={}) {
   if(request.method==='GET'&&url.pathname==='/health') {
     const [monitor,historical]=await Promise.all([latestMonitor(env.MARKET_EDGE_DB).catch(()=>({storage:'error',latestRun:null,states:[],events:[]})),latestHistorical(env.MARKET_EDGE_DB).catch(()=>({storage:'error',manifests:[]}))]);
     return json({ok:true,service:'market-edge-ai',configured:!!env.OPENAI_API_KEY,tradingview_webhook_configured:!!env.TV_WEBHOOK_TOKEN,monitor:{storage:monitor.storage,latest_run:monitor.latestRun,asset_states:monitor.states.length,engine_version:MONITOR_VERSION,execution:'disabled'},historical:{storage:historical.storage,manifests:historical.manifests.length,engine_version:HISTORICAL_VERSION,execution:'disabled'},vision_model:env.VISION_MODEL||'gpt-5.6-terra',chat_model:env.CHAT_MODEL||'gpt-5.6-luna'},200,cors);
+  }
+  if(request.method==='GET'&&url.pathname==='/v1/account') {
+    try { const principal=await resolvePrincipal(request,env,fetchImpl); const data={principalType:principal.type,email:principal.email,displayName:principal.profile?.displayName||null,...await accountState(principal,env,fetchImpl,deps.now||Date.now())}; return json(data,200,{...cors,...(principal.setCookie?{'set-cookie':principal.setCookie}:{})}); }
+    catch(error) { return json({error:{code:error.code||'ACCOUNT_ERROR',message:safeText(error.message,240)}},error.status||400,cors); }
+  }
+  if(request.method==='GET'&&url.pathname==='/v1/trades') {
+    try { const principal=await resolvePrincipal(request,env,fetchImpl); const data=await listTrades(principal,env,fetchImpl); return json({trades:data},200,{...cors,...(principal.setCookie?{'set-cookie':principal.setCookie}:{})}); }
+    catch(error) { return json({error:{code:error.code||'ACCOUNT_ERROR',message:safeText(error.message,240)}},error.status||400,cors); }
   }
   if(request.method==='GET'&&url.pathname==='/v1/monitor/latest') return json(await latestMonitor(env.MARKET_EDGE_DB),200,cors);
   if(request.method==='GET'&&url.pathname==='/v1/research/historical') return json(await latestHistorical(env.MARKET_EDGE_DB),200,cors);
@@ -410,7 +450,8 @@ export async function handleRequest(request,env={},ctx={},deps={}) {
   if(request.method==='GET'&&url.pathname==='/v1/research/ml/readiness-source') { try{return json(await readinessSource(request,env),200,cors);}catch(error){return json({error:{code:error.code||'READINESS_SOURCE_ERROR',message:safeText(error.message,240)}},error.status||400,cors);} }
   if(request.method==='GET'&&url.pathname==='/v1/research/chart') return json(await researchChart(env.MARKET_EDGE_DB,safeAsset(url.searchParams.get('asset')),Number(url.searchParams.get('around')),url.searchParams.get('range')==='all'),200,cors);
   if(request.method==='GET'&&['/v1/chart','/api/chart'].includes(url.pathname)) return json(await fetchLiveMarketChart({asset:url.searchParams.get('asset'),timeframe:url.searchParams.get('timeframe')||'15m',fetchImpl,now:deps.now||Date.now()}),200,cors);
-  if(request.method!=='POST'||!['/v1/scan','/api/scan','/v1/analyze','/v1/chat','/v1/tradingview-alert','/v1/research/ingest','/v1/research/ml/ingest','/v1/research/ml/shadow-scan','/v1/research/forward-selections','/v1/community/paper-events'].includes(url.pathname)) return json({error:{code:'NOT_FOUND',message:'Endpoint not found'}},404,cors);
+  const closingTrade=url.pathname.match(/^\/v1\/trades\/([0-9a-f-]{36})\/close$/i);
+  if(request.method!=='POST'||!['/v1/scan','/api/scan','/v1/trades/take','/v1/analyze','/v1/chat','/v1/tradingview-alert','/v1/research/ingest','/v1/research/ml/ingest','/v1/research/ml/shadow-scan','/v1/research/forward-selections','/v1/community/paper-events'].includes(url.pathname)&&!closingTrade) return json({error:{code:'NOT_FOUND',message:'Endpoint not found'}},404,cors);
   const rate=rateLimit(request,env); if(!rate.allowed) return json({error:{code:'RATE_LIMITED',message:'Too many requests. Try again shortly.'}},429,{...cors,'retry-after':String(rate.retryAfter)});
   if(!String(request.headers.get('content-type')||'').toLowerCase().includes('application/json')) return json({error:{code:'UNSUPPORTED_MEDIA',message:'Use application/json'}},415,cors);
   const declared=Number(request.headers.get('content-length')||0); if(declared>MAX_BODY_BYTES) return json({error:{code:'REQUEST_TOO_LARGE',message:'Request is too large'}},413,cors);
@@ -418,11 +459,15 @@ export async function handleRequest(request,env={},ctx={},deps={}) {
   try { const text=await request.text(); if(new TextEncoder().encode(text).byteLength>MAX_BODY_BYTES) throw Object.assign(new Error('Request is too large'),{status:413,code:'REQUEST_TOO_LARGE'}); payload=JSON.parse(text); }
   catch(error) { return json({error:{code:error.code||'BAD_JSON',message:error.message==='Request is too large'?error.message:'Request body must be valid JSON'}},error.status||400,cors); }
   try {
-    const data=['/v1/scan','/api/scan'].includes(url.pathname)?await customerScan(env,payload,fetchImpl,deps.now||Date.now()):url.pathname==='/v1/analyze'?await analyze(request,env,payload,fetchImpl):url.pathname==='/v1/chat'?await chat(request,env,payload,fetchImpl):url.pathname==='/v1/tradingview-alert'?await acceptTradingViewAlert(request,env,payload,deps.now||Date.now()):url.pathname==='/v1/research/ml/ingest'?await mlIngest(request,env,payload,deps.now||Date.now()):url.pathname==='/v1/research/ml/shadow-scan'?await shadowScanIngest(payload,env,deps.now||Date.now()):url.pathname==='/v1/research/forward-selections'?await forwardSelectionIngest(payload,env,deps.now||Date.now()):url.pathname==='/v1/community/paper-events'?await communityPaperIngest(payload,env,deps.now||Date.now()):await researchIngest(request,env,payload,deps.now||Date.now());
-    return json(data,200,{...cors,'x-ratelimit-remaining':String(rate.remaining)});
+    let data,headers={...cors,'x-ratelimit-remaining':String(rate.remaining)};
+    if(['/v1/scan','/api/scan'].includes(url.pathname)) { data=await entitledCustomerScan(request,env,payload,fetchImpl,deps.now||Date.now()); if(data._setCookie){headers['set-cookie']=data._setCookie;delete data._setCookie;} }
+    else if(url.pathname==='/v1/trades/take') { const principal=await resolvePrincipal(request,env,fetchImpl); data=await acceptTrade(principal,payload?.recommendationId,env,fetchImpl); if(principal.setCookie)headers['set-cookie']=principal.setCookie; }
+    else if(closingTrade) { const principal=await resolvePrincipal(request,env,fetchImpl); data={trade:await closeTrade(principal,closingTrade[1],payload?.exitPrice,env,fetchImpl,deps.now||Date.now())}; if(principal.setCookie)headers['set-cookie']=principal.setCookie; }
+    else data=url.pathname==='/v1/analyze'?await analyze(request,env,payload,fetchImpl):url.pathname==='/v1/chat'?await chat(request,env,payload,fetchImpl):url.pathname==='/v1/tradingview-alert'?await acceptTradingViewAlert(request,env,payload,deps.now||Date.now()):url.pathname==='/v1/research/ml/ingest'?await mlIngest(request,env,payload,deps.now||Date.now()):url.pathname==='/v1/research/ml/shadow-scan'?await shadowScanIngest(payload,env,deps.now||Date.now()):url.pathname==='/v1/research/forward-selections'?await forwardSelectionIngest(payload,env,deps.now||Date.now()):await researchIngest(request,env,payload,deps.now||Date.now());
+    return json(data,200,headers);
   } catch(error) {
     const status=error.status||(/too large/i.test(error.message)?413:400),code=error.code||(status===413?'REQUEST_TOO_LARGE':'INVALID_REQUEST');
-    return json({error:{code,message:safeText(error.message||'Request failed',240)}},status,cors);
+    return json({error:{code,message:safeText(error.message||'Request failed',240),entitlement:error.entitlement||undefined}},status,{...cors,...(error.setCookie?{'set-cookie':error.setCookie}:{})});
   }
 }
 

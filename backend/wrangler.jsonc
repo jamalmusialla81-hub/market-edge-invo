@@ -20,6 +20,8 @@
     "VISION_MODEL": "gpt-5.6-terra",
     "CHAT_MODEL": "gpt-5.6-luna",
     "RATE_LIMIT_PER_MINUTE": "12",
-    "OPENAI_TIMEOUT_MS": "25000"
+    "OPENAI_TIMEOUT_MS": "25000",
+    "SUPABASE_URL": "https://hnwqagnevjgymuoqgfmp.supabase.co",
+    "MARKET_EDGE_ADMIN_EMAILS": "jamalmusialla81@gmail.com"
   }
 }
