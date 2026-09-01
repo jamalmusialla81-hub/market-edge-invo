@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {runLiveScan} from './scan-core.mjs';
+import {fetchLiveMarketChart,runLiveScan} from './scan-core.mjs';
 
 const NOW=1_800_000_000_000;
 const MS={'5m':300000,'15m':900000,'1h':3600000,'4h':14400000,'1d':86400000};
@@ -24,11 +24,22 @@ async function fixtureFetch(url,options={}){
 const result=await runLiveScan({fetchImpl:fixtureFetch,now:NOW,settings:{balance:1000,riskPct:.01,maxLeverage:5,maxExposurePct:.2}});
 assert.equal(result.universe.found,1);
 assert.equal(result.universe.scanned,1);
+assert.equal(result.universe.evaluated,1);
 assert.equal(result.dataQuality.status,'MULTI_SOURCE');
+assert.deepEqual(result.dataQuality.coverage,{requested:1,evaluated:1,skipped:0,multiSourceEvaluated:1,singleSourceEvaluated:0});
+assert.equal(result.rankedOpportunities.length,1);
+assert.equal(result.rankedOpportunities[0].rank,1);
 assert.ok(['TRADE_READY','WAIT_FOR_ENTRY','NO_VALID_SETUP'].includes(result.status));
 assert.equal(result.bestOpportunity.asset,'BTC');
 assert.equal(result.bestOpportunity.instrument,'BTC');
 assert.ok(['TRADE_READY','WAIT_FOR_ENTRY','NO_VALID_SETUP','DATA_UNAVAILABLE'].includes(result.bestOpportunity.entry_status));
 assert.equal(result.bestOpportunity.ml.weight,0);
+assert.equal(result.bestOpportunity.ml.status,'NOT_APPLICABLE');
 assert.equal(result.bestOpportunity.position,null);
+const chart=await fetchLiveMarketChart({asset:'BTC',timeframe:'15m',fetchImpl:fixtureFetch,now:NOW});
+assert.equal(chart.asset,'BTC');
+assert.equal(chart.timeframe,'15m');
+assert.equal(chart.source,'HYPERLIQUID');
+assert.ok(chart.candles.length>=60);
+await assert.rejects(()=>fetchLiveMarketChart({asset:'BTC',timeframe:'2m',fetchImpl:fixtureFetch,now:NOW}),/Unsupported chart timeframe/);
 console.log('Customer scan adapter tests passed');

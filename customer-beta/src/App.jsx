@@ -3,6 +3,7 @@ import { API_URL, MarketEdgeApiError, scanMarkets } from './lib/marketEdgeApi.js
 import { hasJournalAcceptance, loadJournal, removeLocalTrade, saveAcceptedTrade } from './lib/journal.js';
 import { getTradePresentation, isScanFresh, STATUS_LABELS } from './lib/presentation.js';
 import { createScanCoordinator } from './lib/scanCoordinator.js';
+import MarketChart from './components/MarketChart.jsx';
 
 const NAV = [
   ['trade', 'Trade'], ['trades', 'My Trades'], ['performance', 'Performance'], ['settings', 'Settings']
@@ -54,20 +55,22 @@ function TradeCard({ scan, onTake, taken, onSettings }) {
   if (!scan) return <section className="trade-card neutral-card"><div className="card-kicker">Best trade now</div><h1>Run a real market scan</h1><p>Market Edge will only show levels, scores and sizing returned by the Worker. It never creates browser-side trading data.</p><div className="empty-pills"><span>Live Worker data</span><span>Manual execution</span><span>No exchange connection</span></div></section>;
   if (scan.status === 'DATA_UNAVAILABLE') return <section className="trade-card neutral-card"><div className="card-row"><div><div className="card-kicker">Market Edge result</div><h1>Data unavailable</h1></div><Badge status={scan.status}/></div><p>Live data did not pass the Worker checks, so no recommendation was generated. Try another scan later.</p><Diagnostic scan={scan}/></section>;
   if (!focus) return <section className="trade-card neutral-card"><div className="card-row"><div><div className="card-kicker">Market Edge result</div><h1>No valid setup</h1></div><Badge status={scan.status}/></div><p>The Worker completed the scan but no trade met the current quality and risk requirements.</p><ScanFootnote scan={scan}/></section>;
+  const hasPlan = [focus.entry, focus.stop, focus.tp1, focus.tp2, focus.rr1].every(value => typeof value === 'number');
+  const noSetup = focus.entryStatus === 'NO_VALID_SETUP';
   return <section className={`trade-card ${trade ? `direction-${trade.direction}` : 'opportunity-card'}`}>
     <div className="card-row">
-      <div><div className="card-kicker">{trade ? 'Best trade now' : 'Best opportunity'}</div><h1>{focus.asset || 'Market'} <span>{focus.direction?.toUpperCase() || 'SETUP'}</span></h1><p className="strategy">{focus.strategy || 'Market Edge evaluation'} {focus.instrument ? `· ${focus.instrument} on Invo` : ''}</p></div>
+      <div><div className="card-kicker">{trade ? 'Best trade now' : noSetup ? 'Best available market' : 'Best opportunity'}</div><h1>{focus.asset || 'Market'} {focus.direction && <span>{focus.direction.toUpperCase()}</span>}</h1><p className="strategy">{focus.strategy || 'No qualifying strategy setup'} {focus.instrument ? `· ${focus.instrument} on Invo` : ''}</p></div>
       <Badge status={scan.status}/>
     </div>
-    {trade ? <p className="card-intro">This is the highest-ranked actionable setup from the current Worker response. Market Edge does not place the order.</p> : <p className="card-intro">This is the best available setup, but it is not currently enterable. Do not chase it.</p>}
-    <div className="price-grid">
+    {trade ? <p className="card-intro">This is the highest-ranked actionable setup from the current Worker response. Market Edge does not place the order.</p> : noSetup ? <p className="card-intro">This market was the highest-ranked evaluated result, but no qualifying entry setup exists right now. No trade plan was generated.</p> : <p className="card-intro">This is the best available setup, but it is not currently enterable. Do not chase it.</p>}
+    {typeof focus.currentPrice === 'number' && <div className="scan-price">Scan price <b>{money(focus.currentPrice)}</b> · frozen at scan time</div>}
+    {hasPlan && <><div className="price-grid">
       <Field label="Entry" value={money(focus.entry)} />
       <Field label="Stop" value={money(focus.stop)} className="stop" />
       <Field label="TP1" value={money(focus.tp1)} className="tp1" />
       <Field label="TP2" value={money(focus.tp2)} className="tp2" />
       <Field label="R : R" value={focus.rr1 ? `${tradeNumber(focus.rr1)}R` : '—'} />
-    </div>
-    {focus.entryZone && <div className="entry-zone"><span>Worker entry zone</span><b>{money(focus.entryZone.low)} — {money(focus.entryZone.high)}</b></div>}
+    </div>{focus.entryZone && <div className="entry-zone"><span>Worker entry zone</span><b>{money(focus.entryZone.low)} — {money(focus.entryZone.high)}</b></div>}</>}
     <div className="trade-actions">
       {showTakeTrade && <button className="take-button" type="button" onClick={onTake} disabled={!takeTradeEnabled}>{taken ? 'Trade taken ✓' : takeTradeEnabled ? 'Take trade' : 'Scan expired — rescan'}</button>}
       <button className="secondary-button" type="button" onClick={onSettings}>Risk settings</button>
@@ -86,30 +89,43 @@ function Diagnostic({ scan }) {
   return first ? <div className="diagnostic"><b>Worker note</b><span>{first}</span></div> : null;
 }
 
-function SupportingDetails({ scan }) {
-  const trade = scan?.bestTradeNow || scan?.bestOpportunity;
+function SupportingDetails({ scan, selected }) {
+  const trade = selected || scan?.bestTradeNow || scan?.bestOpportunity;
   if (!scan || !trade) return <section className="details-card"><div className="section-heading"><span>Setup intelligence</span><small>Results appear after a Worker scan</small></div><div className="details-empty">The browser does not calculate a score, entry, or target.</div></section>;
   return <section className="details-card">
     <div className="section-heading"><span>Setup intelligence</span><small>{trade.dataQuality || 'Worker data'}</small></div>
     <div className="detail-columns">
-      <div className="score-grid"><Field label="Setup quality" value={trade.setupQuality == null ? '—' : `${tradeNumber(trade.setupQuality)} / 100`} /><Field label="Quant" value={trade.quantScore == null ? '—' : tradeNumber(trade.quantScore)} /><Field label="ML" value={trade.mlScore == null ? 'Not available' : tradeNumber(trade.mlScore)} /><Field label="Combined" value={trade.combinedScore == null ? '—' : tradeNumber(trade.combinedScore)} /></div>
-      <div className="reasoning"><span>Market Edge reasoning</span><p>{trade.reasoning || 'No additional reasoning was supplied by the Worker.'}</p>{trade.caution && <div className="caution"><b>Caution</b>{trade.caution}</div>}{trade.ml?.modelId && <small>Model {trade.ml.modelId} · {trade.ml.status || 'status unavailable'} · {percent(trade.ml.weight)} influence</small>}</div>
+      <div className="score-grid"><Field label="Setup quality" value={trade.setupQuality == null ? 'Not applicable' : `${tradeNumber(trade.setupQuality)} / 100`} /><Field label="Quant" value={trade.quantScore == null ? 'Not applicable' : tradeNumber(trade.quantScore)} /><Field label="ML" value={trade.mlScore == null ? trade.ml?.status === 'NOT_APPLICABLE' ? 'Not applicable' : 'Not available' : tradeNumber(trade.mlScore)} /><Field label="Combined" value={trade.combinedScore == null ? 'Not applicable' : tradeNumber(trade.combinedScore)} /></div>
+      <div className="reasoning"><span>Market Edge reasoning</span><p>{trade.reasoning || 'No additional reasoning was supplied by the Worker.'}</p>{trade.caution && <div className="caution"><b>Caution</b>{trade.caution}</div>}{trade.ml?.reason && <small>{trade.ml.reason}</small>}{trade.ml?.modelId && <small>Model {trade.ml.modelId} · {trade.ml.status || 'status unavailable'} · {percent(trade.ml.weight)} influence</small>}</div>
     </div>
   </section>;
 }
 
-function RiskCard({ scan }) {
-  const trade = scan?.bestTradeNow || scan?.bestOpportunity;
+function RiskCard({ scan, selected }) {
+  const trade = selected || scan?.bestTradeNow || scan?.bestOpportunity;
   const position = trade?.position;
   return <section className="risk-card"><div className="section-heading"><span>Server-calculated execution</span><small>Manual execution only</small></div>{position ? <div className="risk-grid"><Field label="Position size" value={money(position.notional)} /><Field label="Margin" value={money(position.margin)} /><Field label="Leverage" value={position.leverage == null ? '—' : `${tradeNumber(position.leverage)}×`} /><Field label="Risk" value={money(position.riskAmount)} /><Field label="Allocation" value={position.allocation == null ? '—' : percent(position.allocation)} /><Field label="Est. costs" value={money(position.estimatedCosts)} /></div> : <div className="details-empty">Position sizing will appear only when the Worker returns complete trade geometry.</div>}</section>;
 }
 
-function TradeView({ scan, scanning, error, onScan, onTake, taken, onSettings }) {
+function ScanCoverage({ scan }) {
+  const coverage = scan?.dataQuality?.coverage;
+  if (!scan || !coverage) return null;
+  return <section className="coverage-card"><div className="section-heading"><span>Scan coverage</span><small>{scan.dataQuality.status === 'PARTIAL' ? 'Partial feed coverage' : 'Complete feed coverage'}</small></div><div className="coverage-stats"><span><b>{coverage.evaluated ?? '—'} / {coverage.requested ?? scan.universe.scanned ?? '—'}</b> markets evaluated</span><span><b>{coverage.multiSourceEvaluated ?? '—'}</b> multi-source</span><span><b>{coverage.skipped ?? '—'}</b> skipped</span><span><b>{scan.scanSummary?.rankedOpportunities ?? '—'}</b> ranked results</span></div>{coverage.skipped > 0 && <details><summary>Why coverage was partial</summary><p>Some markets were skipped because their live data could not pass the existing feed-completeness checks in this scan. No data-quality standards were lowered.</p>{scan.dataQuality.failures.length > 0 && <ul>{scan.dataQuality.failures.map((failure, index) => <li key={`${index}-${failure}`}>{failure}</li>)}</ul>}</details>}</section>;
+}
+
+function OpportunityList({ scan, selected, onSelect }) {
+  const items = scan?.rankedOpportunities || [];
+  if (!scan) return null;
+  return <section className="opportunity-list"><div className="section-heading"><div><span>Market opportunities</span><small>Exact Worker order · inspection only</small></div><small>{items.length} evaluated result{items.length === 1 ? '' : 's'}</small></div>{items.length ? <div className="opportunity-grid">{items.map(item => <button type="button" key={item.scanSnapshotId || `${item.asset}-${item.rank}`} className={`opportunity-item ${selected?.scanSnapshotId === item.scanSnapshotId ? 'selected' : ''}`} onClick={() => onSelect(item)} aria-pressed={selected?.scanSnapshotId === item.scanSnapshotId}><span className="opportunity-rank">#{item.rank ?? '—'}</span><span className="opportunity-main"><b>{item.asset}</b><small>{item.direction ? item.direction.toUpperCase() : 'NO DIRECTION'} · {item.strategy || 'No qualifying strategy'}</small></span><span className={`opportunity-status ${item.entryStatus?.toLowerCase()}`}>{STATUS_LABELS[item.entryStatus] || item.entryStatus || 'UNAVAILABLE'}</span><span className="opportunity-metrics"><small>Price</small><b>{money(item.currentPrice)}</b></span><span className="opportunity-metrics"><small>Quality</small><b>{item.setupQuality == null ? '—' : tradeNumber(item.setupQuality)}</b></span><span className="opportunity-metrics"><small>Combined</small><b>{item.combinedScore == null ? '—' : tradeNumber(item.combinedScore)}</b></span></button>)}</div> : <div className="details-empty">No market completed the existing data-quality checks in this scan.</div>}</section>;
+}
+
+function TradeView({ scan, scanning, error, onScan, onTake, taken, onSettings, selected, onSelect }) {
   const focus = scan?.bestTradeNow || scan?.bestOpportunity;
   return <main className="trade-view"><section className="hero"><div><span className="eyebrow">Market Edge · live analysis</span><h2>Clear market structure.<br/><em>One decision at a time.</em></h2><p>Real-time recommendations are evaluated in Market Edge’s Worker. Review the plan, then execute manually on your venue.</p></div><div className="hero-actions"><ScanButton scanning={scanning} onClick={onScan}/><span className="allowance">Scan allowance enforcement pending</span></div></section>
     {error && <div className="error-state" role="alert"><b>Data unavailable</b><span>{error.message}</span>{error.httpStatus && <small>HTTP {error.httpStatus} · {error.code}</small>}</div>}
     {scanning && <section className="scan-progress" role="status" aria-live="polite"><div className="scan-progress-top"><span><i className="scan-spinner"/> Validating current market data</span><small>This can take up to 45 seconds.</small></div><div className="progress-bar"><i/></div><p>Market Edge is requesting a single live server-side scan. Assets are not named until the Worker supplies a result.</p></section>}
-    <div className="trade-layout"><div className="primary-column"><TradeCard scan={scan} onTake={onTake} taken={taken} onSettings={onSettings}/><SupportingDetails scan={scan}/></div><aside className="side-column"><LevelMap trade={focus}/><RiskCard scan={scan}/></aside></div>
+    <div className="trade-layout"><div className="primary-column"><TradeCard scan={scan} onTake={onTake} taken={taken} onSettings={onSettings}/><SupportingDetails scan={scan} selected={selected}/></div><aside className="side-column"><MarketChart trade={selected || focus}/><RiskCard scan={scan} selected={selected}/></aside></div>
+    <OpportunityList scan={scan} selected={selected} onSelect={onSelect}/><ScanCoverage scan={scan}/>
   </main>;
 }
 
@@ -134,6 +150,7 @@ export default function App() {
   const [scan, setScan] = useState(null);
   const [scanning, setScanning] = useState(false);
   const [error, setError] = useState(null);
+  const [selected, setSelected] = useState(null);
   const [records, setRecords] = useState(loadJournal);
   const coordinatorRef = useRef(null);
   if (!coordinatorRef.current) coordinatorRef.current = createScanCoordinator();
@@ -143,13 +160,13 @@ export default function App() {
     const request = coordinatorRef.current.begin();
     // A new scan invalidates the old snapshot immediately. The UI must never
     // imply that yesterday's trade remains current while new data is loading.
-    setScanning(true); setScan(null); setError(null);
+    setScanning(true); setScan(null); setSelected(null); setError(null);
     try {
       const next = await scanMarkets({ settings: workerSettings, signal: request.signal });
-      if (coordinatorRef.current.isCurrent(request)) setScan(next);
+      if (coordinatorRef.current.isCurrent(request)) { setScan(next); setSelected(next.bestTradeNow || next.bestOpportunity || next.rankedOpportunities[0] || null); }
     } catch (cause) {
       if (coordinatorRef.current.isCurrent(request)) {
-        setScan(null);
+        setScan(null); setSelected(null);
         setError(cause instanceof MarketEdgeApiError ? cause : new MarketEdgeApiError('Data unavailable'));
       }
     } finally {
@@ -165,5 +182,5 @@ export default function App() {
     setRecords(saved.records);
   };
   const goSettings = () => setPage('settings');
-  return <div className="app-shell"><header className="topbar"><Brand/><nav aria-label="Customer beta navigation">{NAV.map(([key, label]) => <button type="button" key={key} className={page === key ? 'active' : ''} aria-current={page === key ? 'page' : undefined} onClick={() => setPage(key)}>{label}</button>)}</nav><div className="live-indicator"><i/>Worker ready</div></header>{page === 'trade' && <TradeView scan={scan} scanning={scanning} error={error} onScan={startScan} onTake={takeTrade} taken={hasJournalAcceptance(records, scan)} onSettings={goSettings}/>} {page === 'trades' && <MyTrades records={records} onDelete={id => setRecords(removeLocalTrade(records, id))}/>} {page === 'performance' && <Performance records={records}/>} {page === 'settings' && <Settings settings={settings} setSettings={setSettings}/>}<footer><span>Market Edge does not place orders.</span><span>Customer beta · Manual execution only</span></footer></div>;
+  return <div className="app-shell"><header className="topbar"><Brand/><nav aria-label="Customer beta navigation">{NAV.map(([key, label]) => <button type="button" key={key} className={page === key ? 'active' : ''} aria-current={page === key ? 'page' : undefined} onClick={() => setPage(key)}>{label}</button>)}</nav><div className="live-indicator"><i/>Worker ready</div></header>{page === 'trade' && <TradeView scan={scan} scanning={scanning} error={error} onScan={startScan} onTake={takeTrade} taken={hasJournalAcceptance(records, scan)} onSettings={goSettings} selected={selected} onSelect={setSelected}/>} {page === 'trades' && <MyTrades records={records} onDelete={id => setRecords(removeLocalTrade(records, id))}/>} {page === 'performance' && <Performance records={records}/>} {page === 'settings' && <Settings settings={settings} setSettings={setSettings}/>}<footer><span>Market Edge does not place orders.</span><span>Customer beta · Manual execution only</span></footer></div>;
 }

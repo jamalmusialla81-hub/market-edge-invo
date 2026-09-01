@@ -1,7 +1,7 @@
 import {runMonitor, latestMonitor, MONITOR_VERSION, WATCHLIST} from './monitor-core.mjs';
 import {runHistoricalBackfill,latestHistorical,HISTORICAL_VERSION,PRIORITY_ASSETS} from './historical-core.mjs';
 import {runReplayChunk,replayProgress,materializeDataset} from './replay-core.mjs';
-import {runLiveScan} from './scan-core.mjs';
+import {fetchLiveMarketChart,runLiveScan} from './scan-core.mjs';
 
 const DEFAULT_ORIGINS = ['https://jamalmusialla81-hub.github.io', 'http://127.0.0.1:4173', 'http://127.0.0.1:4174', 'http://localhost:4173'];
 const MAX_BODY_BYTES = 8_500_000;
@@ -395,6 +395,7 @@ export async function handleRequest(request,env={},ctx={},deps={}) {
   if(request.method==='GET'&&url.pathname==='/v1/research/ml/evolution') return json(await mlEvolution(env.MARKET_EDGE_DB,env),200,cors);
   if(request.method==='GET'&&url.pathname==='/v1/research/ml/readiness-source') { try{return json(await readinessSource(request,env),200,cors);}catch(error){return json({error:{code:error.code||'READINESS_SOURCE_ERROR',message:safeText(error.message,240)}},error.status||400,cors);} }
   if(request.method==='GET'&&url.pathname==='/v1/research/chart') return json(await researchChart(env.MARKET_EDGE_DB,safeAsset(url.searchParams.get('asset')),Number(url.searchParams.get('around')),url.searchParams.get('range')==='all'),200,cors);
+  if(request.method==='GET'&&['/v1/chart','/api/chart'].includes(url.pathname)) return json(await fetchLiveMarketChart({asset:url.searchParams.get('asset'),timeframe:url.searchParams.get('timeframe')||'15m',fetchImpl,now:deps.now||Date.now()}),200,cors);
   if(request.method!=='POST'||!['/v1/scan','/api/scan','/v1/analyze','/v1/chat','/v1/tradingview-alert','/v1/research/ingest','/v1/research/ml/ingest','/v1/research/ml/shadow-scan','/v1/research/forward-selections','/v1/community/paper-events'].includes(url.pathname)) return json({error:{code:'NOT_FOUND',message:'Endpoint not found'}},404,cors);
   const rate=rateLimit(request,env); if(!rate.allowed) return json({error:{code:'RATE_LIMITED',message:'Too many requests. Try again shortly.'}},429,{...cors,'retry-after':String(rate.retryAfter)});
   if(!String(request.headers.get('content-type')||'').toLowerCase().includes('application/json')) return json({error:{code:'UNSUPPORTED_MEDIA',message:'Use application/json'}},415,cors);

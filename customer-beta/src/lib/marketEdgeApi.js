@@ -1,4 +1,5 @@
 const API_URL = import.meta.env?.VITE_MARKET_EDGE_API_URL || 'https://market-edge-ai.jakob-market-edge.workers.dev/api/scan';
+const CHART_URL = API_URL.replace(/\/api\/scan$/, '/api/chart');
 const STATUSES = new Set(['TRADE_READY', 'WAIT_FOR_ENTRY', 'ENTRY_EXPIRED', 'NO_VALID_SETUP', 'DATA_UNAVAILABLE']);
 
 export class MarketEdgeApiError extends Error {
@@ -42,9 +43,11 @@ function parseTrade(value, path) {
   const ml = value.ml == null ? null : isRecord(value.ml) ? {
     modelId: nullableText(value.ml.model_id, `${path}.ml.model_id`),
     status: nullableText(value.ml.status, `${path}.ml.status`),
-    weight: nullableNumber(value.ml.weight, `${path}.ml.weight`)
+    weight: nullableNumber(value.ml.weight, `${path}.ml.weight`),
+    reason: nullableText(value.ml.reason, `${path}.ml.reason`)
   } : invalid(`${path}.ml must be an object`);
   return {
+    rank: nullableNumber(value.rank, `${path}.rank`),
     asset: nullableText(value.asset, `${path}.asset`), instrument: nullableText(value.instrument, `${path}.instrument`), direction,
     strategy: nullableText(value.strategy, `${path}.strategy`), currentPrice: nullableNumber(value.current_price, `${path}.current_price`),
     entry: nullableNumber(value.entry, `${path}.entry`), entryZone: entryZone ? { low: entryZone.low, high: entryZone.high } : null,
@@ -72,16 +75,40 @@ export function parseScanResponse(value) {
     status: value.status,
     universe: {
       found: nullableNumber(value.universe.found, 'universe.found'), scanned: nullableNumber(value.universe.scanned, 'universe.scanned'),
-      excluded: nullableNumber(value.universe.excluded, 'universe.excluded'), dataFailures: nullableNumber(value.universe.dataFailures, 'universe.dataFailures')
+      evaluated: nullableNumber(value.universe.evaluated, 'universe.evaluated'), excluded: nullableNumber(value.universe.excluded, 'universe.excluded'), dataFailures: nullableNumber(value.universe.dataFailures, 'universe.dataFailures')
     },
-    dataQuality: { status: nullableText(value.dataQuality.status, 'dataQuality.status'), failures: Array.isArray(value.dataQuality.failures) ? value.dataQuality.failures.filter(item => typeof item === 'string').slice(0, 6) : [] },
+    dataQuality: { status: nullableText(value.dataQuality.status, 'dataQuality.status'), failures: Array.isArray(value.dataQuality.failures) ? value.dataQuality.failures.filter(item => typeof item === 'string').slice(0, 6) : [], coverage: value.dataQuality.coverage == null ? null : isRecord(value.dataQuality.coverage) ? { requested: nullableNumber(value.dataQuality.coverage.requested, 'dataQuality.coverage.requested'), evaluated: nullableNumber(value.dataQuality.coverage.evaluated, 'dataQuality.coverage.evaluated'), skipped: nullableNumber(value.dataQuality.coverage.skipped, 'dataQuality.coverage.skipped'), multiSourceEvaluated: nullableNumber(value.dataQuality.coverage.multiSourceEvaluated, 'dataQuality.coverage.multiSourceEvaluated'), singleSourceEvaluated: nullableNumber(value.dataQuality.coverage.singleSourceEvaluated, 'dataQuality.coverage.singleSourceEvaluated') } : invalid('dataQuality.coverage must be an object') },
+    scanSummary: value.scanSummary == null ? null : isRecord(value.scanSummary) ? { rankedOpportunities: nullableNumber(value.scanSummary.rankedOpportunities, 'scanSummary.rankedOpportunities'), actionableNow: nullableNumber(value.scanSummary.actionableNow, 'scanSummary.actionableNow') } : invalid('scanSummary must be an object'),
     bestOpportunity: parseTrade(value.bestOpportunity, 'bestOpportunity'),
     bestTradeNow: parseTrade(value.bestTradeNow, 'bestTradeNow'),
+    rankedOpportunities: value.rankedOpportunities == null ? [] : Array.isArray(value.rankedOpportunities) ? value.rankedOpportunities.map((trade, index) => parseTrade(trade, `rankedOpportunities[${index}]`)).filter(Boolean) : invalid('rankedOpportunities must be an array'),
     raw: value
   };
   if (result.status === 'TRADE_READY' && !hasCompleteTrade(result.bestTradeNow)) invalid('TRADE_READY requires a complete bestTradeNow');
   if (result.status !== 'TRADE_READY' && result.bestTradeNow) invalid('Only TRADE_READY may include bestTradeNow');
   return result;
+}
+
+export async function fetchMarketChart({ asset, timeframe = '15m', signal, fetchImpl = fetch, endpoint = CHART_URL } = {}) {
+  const url = new URL(endpoint);
+  url.searchParams.set('asset', String(asset || ''));
+  url.searchParams.set('timeframe', timeframe);
+  try {
+    const response = await fetchImpl(url, { headers: { accept: 'application/json' }, signal });
+    const body = await response.json().catch(() => { throw new MarketEdgeApiError('Worker returned invalid chart data', { code: 'RESPONSE_INVALID', httpStatus: response.status }); });
+    if (!response.ok) throw new MarketEdgeApiError(body?.error?.message || `Chart request failed (${response.status})`, { code: body?.error?.code || 'HTTP_ERROR', httpStatus: response.status });
+    if (!isRecord(body) || body.asset !== String(asset || '').toUpperCase() || body.timeframe !== timeframe || !Array.isArray(body.candles)) invalid('chart response has invalid identity fields');
+    const candles = body.candles.map((candle, index) => {
+      if (!isRecord(candle) || ![candle.time, candle.open, candle.high, candle.low, candle.close].every(isFiniteNumber)) invalid(`candles[${index}] is invalid`);
+      return { time: candle.time, open: candle.open, high: candle.high, low: candle.low, close: candle.close, volume: nullableNumber(candle.volume, `candles[${index}].volume`) };
+    });
+    if (!candles.length) invalid('chart response has no candles');
+    return { asset: body.asset, timeframe: body.timeframe, source: nullableText(body.source, 'chart.source'), capturedAt: nullableNumber(body.capturedAt, 'chart.capturedAt'), candles, raw: body };
+  } catch (error) {
+    if (error instanceof MarketEdgeApiError) throw error;
+    if (error?.name === 'AbortError') throw new MarketEdgeApiError('Chart request was cancelled', { code: 'TIMEOUT' });
+    throw new MarketEdgeApiError('Chart data is unavailable', { code: 'NETWORK_ERROR', cause: error });
+  }
 }
 
 export function hasCompleteTrade(trade) {
@@ -114,4 +141,4 @@ export async function scanMarkets({ settings = {}, signal, timeoutMs = 45000, fe
   }
 }
 
-export { API_URL, STATUSES };
+export { API_URL, CHART_URL, STATUSES };

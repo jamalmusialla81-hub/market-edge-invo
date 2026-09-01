@@ -22,6 +22,22 @@ test('accepts every supported Worker status and rejects invalid actionability', 
   assert.throws(() => parseScanResponse(actionabilityMismatch), /Only TRADE_READY/);
 });
 
+test('preserves Worker-ranked results, coverage, and ML applicability metadata', () => {
+  const response = structuredClone(fixtures.NO_VALID_SETUP);
+  response.universe.evaluated = 2;
+  response.dataQuality.coverage = { requested: 40, evaluated: 2, skipped: 38, multiSourceEvaluated: 1, singleSourceEvaluated: 1 };
+  response.scanSummary = { rankedOpportunities: 2, actionableNow: 0 };
+  response.rankedOpportunities = [
+    { ...fixtures.NO_VALID_SETUP.bestOpportunity, rank: 1, ml: { model_id: null, status: 'NOT_APPLICABLE', weight: 0, reason: 'No eligible TAKE TRADE candidate reached ML ranking' } },
+    { ...fixtures.WAIT_FOR_ENTRY.bestOpportunity, rank: 2 }
+  ];
+  const parsed = parseScanResponse(response);
+  assert.equal(parsed.rankedOpportunities.length, 2);
+  assert.equal(parsed.rankedOpportunities[1].asset, fixtures.WAIT_FOR_ENTRY.bestOpportunity.asset);
+  assert.deepEqual(parsed.dataQuality.coverage, response.dataQuality.coverage);
+  assert.equal(parsed.rankedOpportunities[0].ml.reason, 'No eligible TAKE TRADE candidate reached ML ranking');
+});
+
 test('fails closed for HTTP, invalid JSON, network, and malformed response failures', async () => {
   const request = () => scanMarkets({ requestId: 'test', fetchImpl: async () => new Response(JSON.stringify({ error: { code: 'RATE_LIMITED', message: 'Try later' } }), { status: 429 }) });
   await assert.rejects(request, error => error instanceof MarketEdgeApiError && error.code === 'RATE_LIMITED' && error.httpStatus === 429);
