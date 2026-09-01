@@ -28,6 +28,10 @@ export default function MarketChart({ trade }) {
   }, [trade?.asset, timeframe]);
 
   const candles = chart?.candles || [];
+  // A new scan clears its selected setup before this effect clears the previous
+  // chart. Keep that short transition deliberately blank: a cached chart must
+  // never render against an absent or different trade snapshot.
+  const hasRenderableChart = Boolean(trade?.asset && chart && candles.length);
   const levels = [['TP2', trade?.tp2, 'target'], ['TP1', trade?.tp1, 'target'], ['Entry', trade?.entry, 'entry'], ['Stop', trade?.stop, 'stop']];
   const bounds = candles.length ? priceScale(candles, levels) : null;
   const height = 250, width = 720, top = 18, bottom = 28, plotHeight = height - top - bottom;
@@ -40,7 +44,7 @@ export default function MarketChart({ trade }) {
     {loading && <div className="chart-empty" role="status">Loading legitimate {timeframe} candles…</div>}
     {error && <div className="chart-empty chart-error">Chart unavailable. No price data is shown.</div>}
     {!loading && !error && !trade && <div className="chart-empty">Run a scan, then select a market to inspect its chart.</div>}
-    {!loading && !error && candles.length > 0 && <><svg className="candles" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${trade.asset} ${timeframe} candlestick chart from ${chart.source}`}>
+    {!loading && !error && hasRenderableChart && <><svg className="candles" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${trade.asset} ${timeframe} candlestick chart from ${chart.source}`}>
       {[.2, .4, .6, .8].map(line => <line key={line} x1="20" x2={width - 20} y1={top + plotHeight * line} y2={top + plotHeight * line} className="chart-grid" />)}
       {candles.map((candle, index) => { const rising = candle.close >= candle.open, cx = x(index), open = y(candle.open), close = y(candle.close); return <g key={candle.time} className={rising ? 'up' : 'down'}><line x1={cx} x2={cx} y1={y(candle.high)} y2={y(candle.low)} /><rect x={cx - candleWidth / 2} y={Math.min(open, close)} width={candleWidth} height={Math.max(1, Math.abs(close - open))} /></g>; })}
       {levels.filter(([, value]) => Number.isFinite(value)).map(([label, value, tone]) => <g key={label} className={`chart-level ${tone}`}><line x1="20" x2={width - 20} y1={y(value)} y2={y(value)} /><text x={28} y={y(value) - 4}>{label} {money(value)}</text></g>)}
