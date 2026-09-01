@@ -32,4 +32,4 @@
     };
   }
   root.MarketEdgeInvoUniverse=Object.freeze({CORE_INVO_INSTRUMENTS,DATA_SYMBOL_OVERRIDES,build});
-})(window);
+})(typeof window!=='undefined'?window:globalThis);
