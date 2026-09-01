@@ -1,0 +1,8 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "market-edge-evaluator",
+  "main": "evaluator-worker.mjs",
+  "compatibility_date": "2026-08-29",
+  "workers_dev": false,
+  "d1_databases": [{"binding":"MARKET_EDGE_DB","database_name":"market-edge-research","database_id":"39a4082e-41a4-45e9-9b76-99cf10eaca01","migrations_dir":"migrations"}]
+}

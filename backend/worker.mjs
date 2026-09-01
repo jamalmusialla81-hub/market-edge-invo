@@ -372,8 +372,19 @@ async function chat(request,env,payload,fetchImpl) {
 }
 async function customerScan(env,payload,fetchImpl,now=Date.now()) {
   const settings=payload?.settings&&typeof payload.settings==='object'?payload.settings:{};
+  if(env.MARKET_EVALUATOR){
+    const startedAt=now;
+    const marketRunner=async(market,context)=>{
+      const response=await env.MARKET_EVALUATOR.fetch('https://market-edge-evaluator/internal/evaluate',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({scanId:payload?.requestId||null,market:market.invoInstrument,settings:context.settings,now:context.now})});
+      const body=await response.json();
+      if(!response.ok||!body?.result)throw new Error(`${market.invoInstrument}: ${body?.error?.message||'Internal market evaluation failed'}`);
+      return body.result;
+    };
+    const scan=await runLiveScan({fetchImpl,now,settings,marketRunner});
+    return {...scan,scanStartedAt:startedAt,scanCompletedAt:Date.now(),orchestration:'SERVICE_BINDING_FANOUT'};
+  }
   const model=env.MARKET_EDGE_DB?await activeMlModel(env.MARKET_EDGE_DB).catch(()=>({available:false,status:'UNAVAILABLE'})):{available:false,status:'UNAVAILABLE'};
-  return runLiveScan({fetchImpl,now,settings,activeModel:model});
+  return runLiveScan({fetchImpl,now,settings,activeModel:model,scanStartedAt:now});
 }
 
 export async function handleRequest(request,env={},ctx={},deps={}) {

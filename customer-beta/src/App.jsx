@@ -57,12 +57,13 @@ function TradeCard({ scan, onTake, taken, onSettings }) {
   if (!focus) return <section className="trade-card neutral-card"><div className="card-row"><div><div className="card-kicker">Market Edge result</div><h1>No valid setup</h1></div><Badge status={scan.status}/></div><p>The Worker completed the scan but no trade met the current quality and risk requirements.</p><ScanFootnote scan={scan}/></section>;
   const hasPlan = [focus.entry, focus.stop, focus.tp1, focus.tp2, focus.rr1].every(value => typeof value === 'number');
   const noSetup = focus.entryStatus === 'NO_VALID_SETUP';
+  const rankedCandidate = !trade && hasPlan && Boolean(focus.direction && focus.strategy);
   return <section className={`trade-card ${trade ? `direction-${trade.direction}` : 'opportunity-card'}`}>
     <div className="card-row">
-      <div><div className="card-kicker">{trade ? 'Best trade now' : noSetup ? 'Best available market' : 'Best opportunity'}</div><h1>{focus.asset || 'Market'} {focus.direction && <span>{focus.direction.toUpperCase()}</span>}</h1><p className="strategy">{focus.strategy || 'No qualifying strategy setup'} {focus.instrument ? `· ${focus.instrument} on Invo` : ''}</p></div>
+      <div><div className="card-kicker">{trade || rankedCandidate ? 'Best trade now' : noSetup ? 'Best available market' : 'Best opportunity'}</div><h1>{focus.asset || 'Market'} {focus.direction && <span>{focus.direction.toUpperCase()}</span>}</h1><p className="strategy">{focus.strategy || 'No qualifying strategy setup'} {focus.instrument ? `· ${focus.instrument} on Invo` : ''}</p></div>
       <Badge status={scan.status}/>
     </div>
-    {trade ? <p className="card-intro">This is the highest-ranked actionable setup from the current Worker response. Market Edge does not place the order.</p> : noSetup ? <p className="card-intro">This market was the highest-ranked evaluated result, but no qualifying entry setup exists right now. No trade plan was generated.</p> : <p className="card-intro">This is the best available setup, but it is not currently enterable. Do not chase it.</p>}
+    {trade ? <p className="card-intro">This is the highest-ranked actionable setup from the current Worker response. Market Edge does not place the order.</p> : rankedCandidate ? <p className="card-intro">Highest-ranked legitimate candidate from the full Worker scan. Its strict entry status is shown above; it is not a TRADE READY recommendation.</p> : noSetup ? <p className="card-intro">This market was the highest-ranked evaluated result, but no qualifying entry setup exists right now. No trade plan was generated.</p> : <p className="card-intro">This is the best available setup, but it is not currently enterable. Do not chase it.</p>}
     {typeof focus.currentPrice === 'number' && <div className="scan-price">Scan price <b>{money(focus.currentPrice)}</b> · frozen at scan time</div>}
     {hasPlan && <><div className="price-grid">
       <Field label="Entry" value={money(focus.entry)} />
