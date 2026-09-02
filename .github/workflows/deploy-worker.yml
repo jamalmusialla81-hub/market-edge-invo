@@ -16,6 +16,9 @@ jobs:
     timeout-minutes: 8
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      # This is an account identifier, not a secret. Supplying it avoids the
+      # optional memberships lookup, which is not granted to this deploy token.
+      CLOUDFLARE_ACCOUNT_ID: 8ea7796a8fb13ffb612245e8a08a55d6
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
