@@ -33,5 +33,7 @@ jobs:
           else
             npx --yes wrangler@4.33.1 d1 migrations apply market-edge-research --remote --config backend/wrangler.jsonc
           fi
-      - name: Deploy Worker
+      - name: Deploy private market evaluator
+        run: npx --yes wrangler@4.33.1 deploy --config backend/evaluator.wrangler.jsonc
+      - name: Deploy public Worker
         run: npx --yes wrangler@4.33.1 deploy --config backend/wrangler.jsonc
