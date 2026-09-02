@@ -19,7 +19,7 @@ test('accepts every supported Worker status and rejects invalid actionability', 
   assert.throws(() => parseScanResponse(malformed), /response rejected/);
   const actionabilityMismatch = structuredClone(fixtures.WAIT_FOR_ENTRY);
   actionabilityMismatch.bestTradeNow = fixtures.TRADE_READY.bestTradeNow;
-  assert.throws(() => parseScanResponse(actionabilityMismatch), /Only TRADE_READY/);
+  assert.throws(() => parseScanResponse(actionabilityMismatch), /Only a ranked best-trade response/);
 });
 
 test('preserves Worker-ranked results, coverage, and ML applicability metadata', () => {

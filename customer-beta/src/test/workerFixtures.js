@@ -34,6 +34,11 @@ function envelope({ status, scanId, bestOpportunity, bestTradeNow, failures = []
 }
 
 export const fixtures = Object.freeze({
+  BEST_TRADE_NOW: envelope({
+    status: 'BEST_TRADE_NOW', scanId: 'contract-ranked-1',
+    bestOpportunity: trade(SOURCE_SIGNAL, { entryStatus: 'EXTENDED', strictVerdict: 'WAIT', reasoning: 'A legitimate ranked opportunity with a current structural plan.', caution: 'Extended entry: do not chase.' }),
+    bestTradeNow: { ...trade(SOURCE_SIGNAL, { entryStatus: 'EXTENDED', strictVerdict: 'WAIT', reasoning: 'A legitimate ranked opportunity with a current structural plan.', caution: 'Extended entry: do not chase.', position: SERVER_POSITION }), entry_quality: 'EXTENDED', weaker_evidence: ['Preferred confirmation is incomplete'], structural_invalidation: 'A confirmed close above the structural high.' }
+  }),
   TRADE_READY: envelope({
     status: 'TRADE_READY', scanId: 'contract-ready-1',
     bestOpportunity: trade(SECOND_REAL_SIGNAL, { entryStatus: 'WAIT_FOR_ENTRY', strictVerdict: 'WAIT', reasoning: 'Frozen historical setup shown only for deterministic UI testing.', caution: 'Do not chase this historical setup.' }),

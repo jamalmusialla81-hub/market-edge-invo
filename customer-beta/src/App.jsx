@@ -58,13 +58,13 @@ function TradeCard({ scan, onTake, taken, onSettings }) {
   if (!focus) return <section className="trade-card neutral-card"><div className="card-row"><div><div className="card-kicker">Market Edge result</div><h1>No valid setup</h1></div><Badge status={scan.status}/></div><p>The Worker completed the scan but no trade met the current quality and risk requirements.</p><ScanFootnote scan={scan}/></section>;
   const hasPlan = [focus.entry, focus.stop, focus.tp1, focus.tp2, focus.rr1].every(value => typeof value === 'number');
   const noSetup = focus.entryStatus === 'NO_VALID_SETUP';
-  const rankedCandidate = !trade && hasPlan && Boolean(focus.direction && focus.strategy);
+  const rankedCandidate = hasPlan && Boolean(focus.direction && focus.strategy);
   return <section className={`trade-card ${trade ? `direction-${trade.direction}` : 'opportunity-card'}`}>
     <div className="card-row">
       <div><div className="card-kicker">{trade || rankedCandidate ? 'Best trade now' : noSetup ? 'Best available market' : 'Best opportunity'}</div><h1>{focus.asset || 'Market'} {focus.direction && <span>{focus.direction.toUpperCase()}</span>}</h1><p className="strategy">{focus.strategy || 'No qualifying strategy setup'} {focus.instrument ? `· ${focus.instrument} on Invo` : ''}</p></div>
       <Badge status={scan.status}/>
     </div>
-    {trade ? <p className="card-intro">This is the highest-ranked actionable setup from the current Worker response. Market Edge does not place the order.</p> : rankedCandidate ? <p className="card-intro">Highest-ranked legitimate candidate from the full Worker scan. Its strict entry status is shown above; it is not a TRADE READY recommendation.</p> : noSetup ? <p className="card-intro">This market was the highest-ranked evaluated result, but no qualifying entry setup exists right now. No trade plan was generated.</p> : <p className="card-intro">This is the best available setup, but it is not currently enterable. Do not chase it.</p>}
+    {trade && scan.status === 'TRADE_READY' ? <p className="card-intro">This is the highest-ranked trade-ready setup from the current Worker response. Market Edge does not place the order.</p> : rankedCandidate ? <p className="card-intro">This is the strongest legitimate current setup found across the Worker scan. Entry quality and the strict legacy verdict are shown separately; this is not automatically a TRADE READY recommendation.</p> : noSetup ? <p className="card-intro">This market was the highest-ranked evaluated result, but no qualifying entry setup exists right now. No trade plan was generated.</p> : <p className="card-intro">This is the best available setup, but it is not currently enterable. Do not chase it.</p>}
     {typeof focus.currentPrice === 'number' && <div className="scan-price">Scan price <b>{money(focus.currentPrice)}</b> · frozen at scan time</div>}
     {hasPlan && <><div className="price-grid">
       <Field label="Entry" value={money(focus.entry)} />
@@ -72,7 +72,7 @@ function TradeCard({ scan, onTake, taken, onSettings }) {
       <Field label="TP1" value={money(focus.tp1)} className="tp1" />
       <Field label="TP2" value={money(focus.tp2)} className="tp2" />
       <Field label="R : R" value={focus.rr1 ? `${tradeNumber(focus.rr1)}R` : '—'} />
-    </div>{focus.entryZone && <div className="entry-zone"><span>Worker entry zone</span><b>{money(focus.entryZone.low)} — {money(focus.entryZone.high)}</b></div>}</>}
+    </div>{focus.entryZone && <div className="entry-zone"><span>Worker entry zone</span><b>{money(focus.entryZone.low)} — {money(focus.entryZone.high)}</b></div>}{focus.entryQuality && <div className="entry-zone"><span>Entry quality</span><b>{focus.entryQuality}</b></div>}</>}
     <div className="trade-actions">
       {showTakeTrade && <button className="take-button" type="button" onClick={onTake} disabled={!takeTradeEnabled}>{taken ? 'Trade taken ✓' : takeTradeEnabled ? 'Take trade' : 'Scan expired — rescan'}</button>}
       <button className="secondary-button" type="button" onClick={onSettings}>Risk settings</button>
@@ -100,8 +100,8 @@ function SupportingDetails({ scan, selected }) {
   return <section className="details-card">
     <div className="section-heading"><span>Setup intelligence{trade.asset ? ` · ${trade.asset}` : ''}</span><small>{trade.dataQuality || 'Worker data'}</small></div>
     <div className="detail-columns">
-      <div className="score-grid"><Field label="Setup quality" value={trade.setupQuality == null ? 'Not applicable' : `${tradeNumber(trade.setupQuality)} / 100`} /><Field label="Quant" value={trade.quantScore == null ? 'Not applicable' : tradeNumber(trade.quantScore)} /><Field label="ML" value={trade.mlScore == null ? trade.ml?.status === 'NOT_APPLICABLE' ? 'Not applicable' : 'Not available' : tradeNumber(trade.mlScore)} /><Field label="Combined" value={trade.combinedScore == null ? 'Not applicable' : tradeNumber(trade.combinedScore)} /></div>
-      <div className="reasoning"><span>Market Edge reasoning</span><p>{trade.reasoning || 'No additional reasoning was supplied by the Worker.'}</p>{trade.caution && <div className="caution"><b>Caution</b>{trade.caution}</div>}{trade.ml?.reason && <small>{trade.ml.reason}</small>}{trade.ml?.modelId && <small>Model {trade.ml.modelId} · {trade.ml.status || 'status unavailable'} · {percent(trade.ml.weight)} influence</small>}</div>
+      <div className="score-grid"><Field label="Setup quality" value={trade.setupQuality == null ? 'Not applicable' : `${tradeNumber(trade.setupQuality)} / 100`} /><Field label="Entry quality" value={trade.entryQuality || trade.entryStatus || 'Not applicable'} /><Field label="Quant" value={trade.quantScore == null ? 'Not applicable' : tradeNumber(trade.quantScore)} /><Field label="ML" value={trade.mlScore == null ? trade.ml?.status === 'NOT_APPLICABLE' ? 'Not applicable' : 'Not available' : tradeNumber(trade.mlScore)} /><Field label="Combined" value={trade.combinedScore == null ? 'Not applicable' : tradeNumber(trade.combinedScore)} /></div>
+      <div className="reasoning"><span>Why #1</span><p>{trade.reasoning || 'No additional reasoning was supplied by the Worker.'}</p>{trade.weakerEvidence?.length > 0 && <div className="caution"><b>Weaker evidence</b>{trade.weakerEvidence.join(' · ')}</div>}{trade.structuralInvalidation && <div className="caution"><b>Invalidation</b>{trade.structuralInvalidation}</div>}{trade.caution && <div className="caution"><b>Caution</b>{trade.caution}</div>}{trade.ml?.reason && <small>{trade.ml.reason}</small>}{trade.ml?.modelId && <small>Model {trade.ml.modelId} · {trade.ml.status || 'status unavailable'} · {percent(trade.ml.weight)} influence</small>}</div>
     </div>
   </section>;
 }

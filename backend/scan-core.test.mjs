@@ -29,13 +29,29 @@ assert.equal(result.dataQuality.status,'MULTI_SOURCE');
 assert.deepEqual(result.dataQuality.coverage,{requested:1,evaluated:1,skipped:0,multiSourceEvaluated:1,singleSourceEvaluated:0});
 assert.equal(result.rankedOpportunities.length,1);
 assert.equal(result.rankedOpportunities[0].rank,1);
-assert.ok(['TRADE_READY','WAIT_FOR_ENTRY','NO_VALID_SETUP'].includes(result.status));
+assert.equal(result.status,'BEST_TRADE_NOW');
 assert.equal(result.bestOpportunity.asset,'BTC');
 assert.equal(result.bestOpportunity.instrument,'BTC');
-assert.ok(['TRADE_READY','WAIT_FOR_ENTRY','NO_VALID_SETUP','DATA_UNAVAILABLE'].includes(result.bestOpportunity.entry_status));
+assert.ok(['IDEAL','ACCEPTABLE','EXTENDED'].includes(result.bestOpportunity.entry_status));
+assert.ok(['IDEAL','ACCEPTABLE','EXTENDED'].includes(result.bestOpportunity.entry_quality));
+assert.ok(result.bestTradeNow);
 assert.equal(result.bestOpportunity.ml.weight,0);
 assert.equal(result.bestOpportunity.ml.status,'NOT_APPLICABLE');
-assert.equal(result.bestOpportunity.position,null);
+assert.ok(result.bestOpportunity.position);
+assert.equal(result.bestOpportunity.position.risk_amount,10);
+
+// Service-binding fan-out results are already Worker-normalized. A higher
+// scored row with invalid geometry must be skipped in favour of the strongest
+// later row with a complete structural plan.
+const ranked=await runLiveScan({fetchImpl:fixtureFetch,now:NOW,markets:[{invoInstrument:'AAA',dataSymbol:'AAA'},{invoInstrument:'BBB',dataSymbol:'BBB'}],marketRunner:async market=>market.invoInstrument==='AAA'?{asset:'AAA',instrument:'AAA',direction:'long',strategy:'TREND CONTINUATION',entry:null,stop:null,tp1:null,tp2:null,rr1:null,setup_quality:99,combined_score:99,entry_status:'INVALID',strict_verdict:'NO TRADE',source_count:2}:{asset:'BBB',instrument:'BBB',direction:'short',strategy:'MEAN REVERSION',entry:100,stop:102,tp1:96,tp2:93,rr1:2,setup_quality:39,combined_score:39,entry_status:'EXTENDED',entry_quality:'EXTENDED',strict_verdict:'WAIT',position:null,source_count:2}});
+assert.equal(ranked.status,'BEST_TRADE_NOW');
+assert.equal(ranked.bestTradeNow.asset,'BBB');
+assert.equal(ranked.bestTradeNow.rank,1);
+assert.equal(ranked.rankedOpportunities.at(-1).asset,'AAA');
+
+const unavailable=await runLiveScan({fetchImpl:fixtureFetch,now:NOW,marketMetadata:{invoInstrument:'BTC',dataSymbol:'BTC'},marketRunner:async()=>({error:'All feeds unavailable'})});
+assert.equal(unavailable.status,'DATA_UNAVAILABLE');
+assert.equal(unavailable.bestTradeNow,null);
 const chart=await fetchLiveMarketChart({asset:'BTC',timeframe:'15m',fetchImpl:fixtureFetch,now:NOW});
 assert.equal(chart.asset,'BTC');
 assert.equal(chart.timeframe,'15m');

@@ -1,6 +1,7 @@
 const API_URL = import.meta.env?.VITE_MARKET_EDGE_API_URL || 'https://market-edge-ai.jakob-market-edge.workers.dev/api/scan';
 const CHART_URL = API_URL.replace(/\/api\/scan$/, '/api/chart');
-const STATUSES = new Set(['TRADE_READY', 'WAIT_FOR_ENTRY', 'ENTRY_EXPIRED', 'NO_VALID_SETUP', 'DATA_UNAVAILABLE']);
+const STATUSES = new Set(['BEST_TRADE_NOW', 'TRADE_READY', 'WAIT_FOR_ENTRY', 'ENTRY_EXPIRED', 'NO_VALID_SETUP', 'DATA_UNAVAILABLE']);
+const ENTRY_STATUSES = new Set(['IDEAL', 'ACCEPTABLE', 'EXTENDED', 'INVALID', 'TRADE_READY', 'WAIT_FOR_ENTRY', 'ENTRY_EXPIRED', 'NO_VALID_SETUP', 'DATA_UNAVAILABLE']);
 
 export class MarketEdgeApiError extends Error {
   constructor(message, { code = 'DATA_UNAVAILABLE', httpStatus = null, cause = null, entitlement = null } = {}) {
@@ -40,7 +41,7 @@ function parseTrade(value, path) {
   const direction = nullableText(value.direction, `${path}.direction`);
   if (direction && !['long', 'short'].includes(direction)) invalid(`${path}.direction is unsupported`);
   const entryStatus = nullableText(value.entry_status, `${path}.entry_status`);
-  if (entryStatus && !STATUSES.has(entryStatus)) invalid(`${path}.entry_status is unsupported`);
+  if (entryStatus && !ENTRY_STATUSES.has(entryStatus)) invalid(`${path}.entry_status is unsupported`);
   const ml = value.ml == null ? null : isRecord(value.ml) ? {
     modelId: nullableText(value.ml.model_id, `${path}.ml.model_id`),
     status: nullableText(value.ml.status, `${path}.ml.status`),
@@ -54,11 +55,11 @@ function parseTrade(value, path) {
     entry: nullableNumber(value.entry, `${path}.entry`), entryZone: entryZone ? { low: entryZone.low, high: entryZone.high } : null,
     stop: nullableNumber(value.stop, `${path}.stop`), tp1: nullableNumber(value.tp1, `${path}.tp1`), tp2: nullableNumber(value.tp2, `${path}.tp2`),
     rr1: nullableNumber(value.rr1, `${path}.rr1`), rr2: nullableNumber(value.rr2, `${path}.rr2`),
-    setupQuality: nullableNumber(value.setup_quality, `${path}.setup_quality`), entryStatus,
+    setupQuality: nullableNumber(value.setup_quality, `${path}.setup_quality`), entryStatus, entryQuality: nullableText(value.entry_quality, `${path}.entry_quality`), entryQualityScore: nullableNumber(value.entry_quality_score, `${path}.entry_quality_score`),
     strictVerdict: nullableText(value.strict_verdict, `${path}.strict_verdict`), quantScore: nullableNumber(value.quant_score, `${path}.quant_score`),
     mlScore: nullableNumber(value.ml_score, `${path}.ml_score`), combinedScore: nullableNumber(value.combined_score, `${path}.combined_score`),
     ml, position: parsePosition(value.position), regime: nullableText(value.regime, `${path}.regime`),
-    reasoning: nullableText(value.reasoning, `${path}.reasoning`), caution: nullableText(value.caution, `${path}.caution`),
+    reasoning: nullableText(value.reasoning, `${path}.reasoning`), caution: nullableText(value.caution, `${path}.caution`), weakerEvidence: Array.isArray(value.weaker_evidence) ? value.weaker_evidence.filter(item => typeof item === 'string') : [], structuralInvalidation: nullableText(value.structural_invalidation, `${path}.structural_invalidation`),
     sourceCount: nullableNumber(value.source_count, `${path}.source_count`), dataQuality: nullableText(value.data_quality, `${path}.data_quality`),
     scanSnapshotId: nullableText(value.scan_snapshot_id, `${path}.scan_snapshot_id`), raw: value
   };
@@ -92,7 +93,8 @@ export function parseScanResponse(value) {
     raw: value
   };
   if (result.status === 'TRADE_READY' && !hasCompleteTrade(result.bestTradeNow)) invalid('TRADE_READY requires a complete bestTradeNow');
-  if (result.status !== 'TRADE_READY' && result.bestTradeNow) invalid('Only TRADE_READY may include bestTradeNow');
+  if (result.status === 'BEST_TRADE_NOW' && !hasValidGeometry(result.bestTradeNow)) invalid('BEST_TRADE_NOW requires valid current geometry');
+  if (!['TRADE_READY', 'BEST_TRADE_NOW'].includes(result.status) && result.bestTradeNow) invalid('Only a ranked best-trade response may include bestTradeNow');
   return result;
 }
 
@@ -120,6 +122,9 @@ export async function fetchMarketChart({ asset, timeframe = '15m', signal, fetch
 
 export function hasCompleteTrade(trade) {
   return Boolean(trade && ['long', 'short'].includes(trade.direction) && [trade.entry, trade.stop, trade.tp1, trade.tp2, trade.rr1, trade.position?.notional, trade.position?.margin, trade.position?.leverage, trade.position?.riskAmount].every(isFiniteNumber));
+}
+export function hasValidGeometry(trade) {
+  return Boolean(trade && ['long', 'short'].includes(trade.direction) && [trade.entry, trade.stop, trade.tp1, trade.tp2, trade.rr1].every(isFiniteNumber));
 }
 
 function authHeaders(accessToken) { return accessToken ? { authorization: `Bearer ${accessToken}` } : {}; }

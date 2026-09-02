@@ -49,6 +49,16 @@ assert(longSetup.target1>longSetup.entry&&longSetup.target2>longSetup.target1&&l
 assert(shortSetup.target1<shortSetup.entry&&shortSetup.target2<shortSetup.target1&&shortSetup.stop>shortSetup.entry);
 const conflict=Quant.evaluateSetup({timeframes:{m5:readyShortSeries(320),m15:readyShortSeries(320),h1:readyShortSeries(320),h4:series(320,1),d1:series(320,1)},settings:{balance:1000,riskPct:.01,maxLeverage:10,minNotional:10,maxExposurePct:2,minQuality:60,requireMTF:true}});
 assert(['NO TRADE','WAIT'].includes(conflict.decision));
+const rankedConflict=Quant.evaluateRankedSetup({timeframes:{m5:readyShortSeries(320),m15:readyShortSeries(320),h1:readyShortSeries(320),h4:series(320,1),d1:series(320,1)},settings:{balance:1000,riskPct:.01,maxLeverage:10,minNotional:10,maxExposurePct:2,minQuality:60,requireMTF:true}});
+assert(['TAKE TRADE','RANKED'].includes(rankedConflict.decision));
+assert(['IDEAL','ACCEPTABLE','EXTENDED'].includes(rankedConflict.entryQuality));
+assert(['IDEAL','ACCEPTABLE','EXTENDED'].includes(rankedConflict.entryStatus));
+assert(Number.isFinite(rankedConflict.entryQualityScore));
+assert(rankedConflict.risk.valid);
+const rankTooSmall=Quant.evaluateRankedSetup({timeframes:{h4:series(320,1)},settings:{balance:7,riskPct:.01,maxLeverage:10,minNotional:10,maxExposurePct:10,requireMTF:false}});
+assert.equal(rankTooSmall.decision,'RANKED');
+assert.equal(rankTooSmall.risk.valid,false);
+assert.equal(rankTooSmall.risk.reason,'ACCOUNT/MINIMUM SIZE CONSTRAINT');
 
 const tiny = Quant.riskPlan({ balance: 7, riskPct: 0.01, maxLeverage: 10, entry: 100, stop: 95, direction: 'long', minNotional: 10, maxExposurePct: 10 });
 assert.strictEqual(tiny.valid, false);

@@ -214,6 +214,30 @@
     const points = clamp((aligned - 0.5) * 30, -10, 10) * clamp(social.reliability / 70, 0, 1);
     return { points, text: `${Math.round(aligned * 100)}% reliability-weighted ${direction.toUpperCase()} across ${social.sample} imported records` };
   }
+  function rankedEntryAssessment(entry, idealEntry, currentAtr) {
+    const distance = Number.isFinite(currentAtr) && currentAtr > 0 ? Math.abs(entry - idealEntry) / currentAtr : Infinity;
+    // This is a display-only current-entry measure. It never adds points to
+    // setup quality or changes risk sizing; research will determine whether it
+    // has predictive value before it can influence ranking.
+    const status = distance <= .25 ? 'IDEAL' : distance <= 1 ? 'ACCEPTABLE' : 'EXTENDED';
+    return { status, distance, quality: Math.round(clamp(100 - distance * 25, 10, 100)) };
+  }
+  function rankedFallbackCandidate(setup, opportunity) {
+    const direction = timeframeBias(setup) !== 'neutral' ? timeframeBias(setup) : setup.structure?.trend;
+    if (!['long','short'].includes(direction) || !Number.isFinite(setup.price) || !Number.isFinite(setup.atr) || setup.atr <= 0) return null;
+    const structuralLevel = direction === 'long' ? Math.min(setup.structure?.support ?? Infinity, setup.recentLow ?? Infinity) : Math.max(setup.structure?.resistance ?? -Infinity, setup.recentHigh ?? -Infinity);
+    if (!Number.isFinite(structuralLevel) || (direction === 'long' ? structuralLevel >= setup.price : structuralLevel <= setup.price)) return null;
+    const regime = classifyRegime(setup);
+    const strategy = setup.structure?.liquiditySweep === direction ? 'LIQUIDITY-SWEEP REVERSAL' : setup.structure?.retest === direction ? 'BREAKOUT + RETEST' : ['RANGE','HIGH-VOLATILITY RANGE'].includes(regime) ? 'MEAN REVERSION' : 'TREND CONTINUATION';
+    return {
+      strategy, direction, score: clamp(Number(opportunity?.score) || 0, 0, 100),
+      reasons: ['A current directional structure exists, but the preferred confluence set is incomplete', `Structural ${direction === 'long' ? 'support' : 'resistance'} remains available for invalidation`],
+      invalidation: structuralLevel,
+      entryReason: 'Current executable price reconstructed from completed candles',
+      invalidationReason: direction === 'long' ? 'A confirmed close below the latest structural support' : 'A confirmed close above the latest structural resistance',
+      fallback: true
+    };
+  }
   function riskPlan(params) {
     const {
       balance, riskPct, maxLeverage, entry, stop, direction, minNotional = 10,
@@ -256,21 +280,28 @@
     if (settings.requireMTF&&missing.length) return {decision:'ANALYSIS UNAVAILABLE',quality:0,reason:`${missing.length} required timeframe${missing.length===1?' is':'s are'} unavailable`,frame:primary,timeframes:tf};
     const setup=tf.h1.available?tf.h1:primary, confirmation=tf.m15.available?tf.m15:setup, execution=tf.m5.available?tf.m5:confirmation;
     const regime=classifyRegime(primary), macroRegime=tf.d1.available?classifyRegime(tf.d1):'UNAVAILABLE';
-    const candidates=strategyCandidates(setup);
+    let candidates=strategyCandidates(setup);
     const opportunity=opportunityScore(tf);
-    if (!candidates.length) return {decision:'NO TRADE',quality:null,setupQuality:null,opportunity,reason:'No independent strategy satisfies its entry rules',regime,macroRegime,frame:primary,timeframes:tf};
+    if (!candidates.length && settings.rankingMode) {
+      const fallback=rankedFallbackCandidate(setup,opportunity);
+      if (fallback) candidates=[fallback];
+    }
+    if (!candidates.length) return {decision:'NO TRADE',quality:null,setupQuality:null,opportunity,reason:'No defensible current structure can supply a direction and invalidation',regime,macroRegime,frame:primary,timeframes:tf};
     const requested=input.selectedCandidate;
     const best=requested?candidates.find(candidate=>candidate.strategy===requested.strategy&&candidate.direction===requested.direction):candidates[0];
     if (!best) return {decision:'NO TRADE',quality:null,setupQuality:null,opportunity,reason:'Requested strategy candidate is no longer legitimate',regime,macroRegime,frame:primary,timeframes:tf};
-    const opposite=candidates.find(candidate=>candidate.direction!==best.direction);
-    if (!requested&&opposite&&Math.abs(best.score-opposite.score)<10) return {decision:'NO TRADE',quality:Math.round(best.score),reason:`Contradictory ${best.strategy} and ${opposite.strategy} signals`,regime,macroRegime,frame:primary,timeframes:tf};
+    const opposite=candidates.find(candidate=>candidate.direction!==best.direction), rankingNotes=[];
+    if (!requested&&opposite&&Math.abs(best.score-opposite.score)<10) {
+      if (!settings.rankingMode) return {decision:'NO TRADE',quality:Math.round(best.score),reason:`Contradictory ${best.strategy} and ${opposite.strategy} signals`,regime,macroRegime,frame:primary,timeframes:tf};
+      rankingNotes.push(`Opposing ${opposite.strategy} evidence is close in strength`);
+    }
     const direction=best.direction, macroBias=timeframeBias(tf.d1), primaryBias=timeframeBias(primary), setupBias=timeframeBias(setup), confirmationBias=timeframeBias(confirmation), executionBias=timeframeBias(execution);
     const meanReversion=best.strategy==='MEAN REVERSION', reversal=best.strategy==='LIQUIDITY-SWEEP REVERSAL';
     const strongMacroOpposition=(direction==='long'&&macroRegime==='STRONG DOWNTREND')||(direction==='short'&&macroRegime==='STRONG UPTREND');
-    if (strongMacroOpposition) return {decision:'NO TRADE',quality:Math.round(best.score-15),reason:`${direction.toUpperCase()} conflicts with the ${macroRegime} daily regime`,direction,strategy:best.strategy,regime,macroRegime,frame:primary,timeframes:tf};
-    if (!meanReversion&&!reversal&&primaryBias!==direction) return {decision:'NO TRADE',quality:Math.round(best.score-12),reason:`${direction.toUpperCase()} setup conflicts with the 4h primary direction`,direction,strategy:best.strategy,regime,macroRegime,frame:primary,timeframes:tf};
-    if (!meanReversion&&[confirmationBias,executionBias].filter(bias=>bias&&bias!==direction&&bias!=='neutral').length>=2) return {decision:'WAIT',quality:Math.round(best.score-8),reason:'15m confirmation and 5m execution timing both oppose the setup',direction,strategy:best.strategy,regime,macroRegime,frame:primary,timeframes:tf};
-    if (['HIGH-VOLATILITY RANGE','COMPRESSION'].includes(regime)&&['TREND CONTINUATION','MOMENTUM CONTINUATION'].includes(best.strategy)) return {decision:'NO TRADE',quality:Math.round(best.score-10),reason:`${best.strategy} is disabled in the ${regime} regime`,direction,strategy:best.strategy,regime,macroRegime,frame:primary,timeframes:tf};
+    if (strongMacroOpposition) { if (!settings.rankingMode) return {decision:'NO TRADE',quality:Math.round(best.score-15),reason:`${direction.toUpperCase()} conflicts with the ${macroRegime} daily regime`,direction,strategy:best.strategy,regime,macroRegime,frame:primary,timeframes:tf}; rankingNotes.push(`Daily ${macroRegime} conflicts with this direction`); }
+    if (!meanReversion&&!reversal&&primaryBias!==direction) { if (!settings.rankingMode) return {decision:'NO TRADE',quality:Math.round(best.score-12),reason:`${direction.toUpperCase()} setup conflicts with the 4h primary direction`,direction,strategy:best.strategy,regime,macroRegime,frame:primary,timeframes:tf}; rankingNotes.push('4h primary direction is not aligned'); }
+    if (!meanReversion&&[confirmationBias,executionBias].filter(bias=>bias&&bias!==direction&&bias!=='neutral').length>=2) { if (!settings.rankingMode) return {decision:'WAIT',quality:Math.round(best.score-8),reason:'15m confirmation and 5m execution timing both oppose the setup',direction,strategy:best.strategy,regime,macroRegime,frame:primary,timeframes:tf}; rankingNotes.push('15m and 5m timing oppose the setup'); }
+    if (['HIGH-VOLATILITY RANGE','COMPRESSION'].includes(regime)&&['TREND CONTINUATION','MOMENTUM CONTINUATION'].includes(best.strategy)) { if (!settings.rankingMode) return {decision:'NO TRADE',quality:Math.round(best.score-10),reason:`${best.strategy} is disabled in the ${regime} regime`,direction,strategy:best.strategy,regime,macroRegime,frame:primary,timeframes:tf}; rankingNotes.push(`${regime} weakens this continuation setup`); }
     const social=socialAdjustment(input.social,direction), aligned=[macroBias,primaryBias,setupBias,confirmationBias,executionBias].filter(bias=>bias===direction).length;
     const opposed=[macroBias,primaryBias,setupBias,confirmationBias,executionBias].filter(bias=>bias&&bias!==direction&&bias!=='neutral').length;
     let quality=best.score+aligned*3-opposed*8+social.points;
@@ -293,12 +324,18 @@
     const risk=riskPlan({balance:settings.balance,riskPct:settings.riskPct,maxLeverage:settings.maxLeverage,entry,stop,direction,minNotional:settings.minNotional,maxExposurePct:settings.maxExposurePct});
     const alignment={m5:executionBias,m15:confirmationBias,h1:setupBias,h4:primaryBias,d1:macroBias,aligned,opposed};
     const reasons=[...best.reasons,`Timeframes aligned ${aligned}/5; opposed ${opposed}/5`,social.text];
-    const base={quality,setupQuality:quality,opportunity,direction,strategy:best.strategy,regime,macroRegime,entry,idealEntry,entryZone,stop,target:target1,target1,target2,rr:rr1,rr1,rr2,risk,reasons,frame:primary,timeframes:tf,alignment,entryReason:best.entryReason,invalidationCondition:best.invalidationReason,trailingRule:'After TP1, move the stop only after a new confirmed 15m swing; trail beyond that swing with a 0.25 ATR buffer',chaseDistance};
+    const entryAssessment=rankedEntryAssessment(entry,idealEntry,setup.atr);
+    const base={quality,setupQuality:quality,entryQuality:entryAssessment.status,entryQualityScore:entryAssessment.quality,entryStatus:entryAssessment.status,opportunity,direction,strategy:best.strategy,regime,macroRegime,entry,idealEntry,entryZone,stop,target:target1,target1,target2,rr:rr1,rr1,rr2,risk,reasons,weakEvidence:rankingNotes,frame:primary,timeframes:tf,alignment,entryReason:best.entryReason,invalidationCondition:best.invalidationReason,trailingRule:'After TP1, move the stop only after a new confirmed 15m swing; trail beyond that swing with a 0.25 ATR buffer',chaseDistance};
+    if (settings.rankingMode) {
+      if (!Number.isFinite(stop)||!Number.isFinite(target1)||!Number.isFinite(rr1)||riskDistance<=0||rr1<=0) return {...base,decision:'NO TRADE',reason:'Current entry cannot produce valid structural geometry'};
+      return {...base,decision:risk.valid&&entryAssessment.status!=='EXTENDED'?'TAKE TRADE':'RANKED',strictDecision:risk.valid&&entryAssessment.status!=='EXTENDED'?'TAKE TRADE':'WAIT',reason:best.fallback?'Weak but structurally valid ranked opportunity':'Legitimate opportunity ranked without requiring every preferred confluence'};
+    }
     if (chased) return {...base,decision:'WAIT',reason:'Current price has moved beyond the intended entry zone; do not chase'};
     if (quality<settings.minQuality) return {...base,decision:quality>=settings.minQuality-10?'WAIT':'NO TRADE',reason:`Setup quality is below the configured ${settings.minQuality}/100 research threshold`};
     if (!risk.valid) return {...base,decision:'NO TRADE',reason:risk.reason};
     return {...base,decision:'TAKE TRADE',reason:`${best.strategy} passes regime, timeframe, entry, cost and risk checks`};
   }
+  function evaluateRankedSetup(input) { return evaluateSetup({...input,settings:Object.assign({},input.settings||{},{rankingMode:true})}); }
   function evaluateSetupCandidates(input) {
     const baseline=evaluateSetup(input), setup=baseline.timeframes?.h1?.available?baseline.timeframes.h1:baseline.frame;
     if (!setup?.available) return [];
@@ -433,5 +470,5 @@
     const total = longWeight + shortWeight;
     return { sample: relevant.length, reliability: relevant.length ? mean(relevant.map(traderReliability)) : 0, weightedLong: total ? longWeight / total : 0.5, weightedShort: total ? shortWeight / total : 0.5 };
   }
-  return { VERSION, LEVERAGE_CHOICES, clamp, mean, median, std, ema, sma, rsi, atr, rollingVwap, validateCandles, validateFreshness, swingPoints, features, recentStructure, classifyRegime, strategyCandidates, riskPlan, opportunityScore, evaluateSetup, evaluateSetupCandidates, performanceStats, simulateBacktest, walkForwardTest, backtest, traderReliability, aggregateSocial };
+  return { VERSION, LEVERAGE_CHOICES, clamp, mean, median, std, ema, sma, rsi, atr, rollingVwap, validateCandles, validateFreshness, swingPoints, features, recentStructure, classifyRegime, strategyCandidates, riskPlan, opportunityScore, evaluateSetup, evaluateRankedSetup, evaluateSetupCandidates, performanceStats, simulateBacktest, walkForwardTest, backtest, traderReliability, aggregateSocial };
 });

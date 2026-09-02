@@ -1,6 +1,7 @@
 import { hasCompleteTrade } from './marketEdgeApi.js';
 
 export const STATUS_LABELS = Object.freeze({
+  BEST_TRADE_NOW: 'BEST AVAILABLE NOW',
   TRADE_READY: 'TRADE READY',
   WAIT_FOR_ENTRY: 'GOOD SETUP — WAIT FOR ENTRY',
   ENTRY_EXPIRED: 'ENTRY EXPIRED',
