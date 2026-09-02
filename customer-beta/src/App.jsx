@@ -4,6 +4,7 @@ import { authConfigured, resetPassword, restoreSession, signIn, signOut, signUp,
 import { hasJournalAcceptance, loadJournal, removeLocalTrade, saveAcceptedTrade } from './lib/journal.js';
 import { getTradePresentation, isScanFresh, STATUS_LABELS } from './lib/presentation.js';
 import { createScanCoordinator } from './lib/scanCoordinator.js';
+import { formatInvoSetup } from './lib/invoSetup.js';
 import MarketChart from './components/MarketChart.jsx';
 
 const NAV = [
@@ -33,6 +34,14 @@ function ScanButton({ scanning, onClick }) {
   return <button className="scan-button" type="button" disabled={scanning} onClick={onClick}>
     {scanning ? <><span className="scan-spinner"/>Analysing live markets</> : <>Scan markets <span>→</span></>}
   </button>;
+}
+function CopyInvoSetup({ trade }) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try { await navigator.clipboard?.writeText(formatInvoSetup(trade)); setCopied(true); window.setTimeout(() => setCopied(false), 1800); }
+    catch { setCopied(false); }
+  };
+  return <button className="secondary-button" type="button" onClick={copy}>{copied ? 'Copied ✓' : 'Copy Invo setup'}</button>;
 }
 
 function LevelMap({ trade }) {
@@ -64,7 +73,7 @@ function TradeCard({ scan, onTake, taken, onSettings }) {
       <div><div className="card-kicker">{trade || rankedCandidate ? 'Best trade now' : noSetup ? 'Best available market' : 'Best opportunity'}</div><h1>{focus.asset || 'Market'} {focus.direction && <span>{focus.direction.toUpperCase()}</span>}</h1><p className="strategy">{focus.strategy || 'No qualifying strategy setup'} {focus.instrument ? `· ${focus.instrument} on Invo` : ''}</p></div>
       <Badge status={scan.status}/>
     </div>
-    {trade && scan.status === 'TRADE_READY' ? <p className="card-intro">This is the highest-ranked trade-ready setup from the current Worker response. Market Edge does not place the order.</p> : rankedCandidate ? <p className="card-intro">This is the strongest legitimate current setup found across the Worker scan. Entry quality and the strict legacy verdict are shown separately; this is not automatically a TRADE READY recommendation.</p> : noSetup ? <p className="card-intro">This market was the highest-ranked evaluated result, but no qualifying entry setup exists right now. No trade plan was generated.</p> : <p className="card-intro">This is the best available setup, but it is not currently enterable. Do not chase it.</p>}
+    {trade && scan.status === 'TRADE_READY' ? <p className="card-intro">This is the highest-ranked trade-ready setup from the current Worker response. Market Edge does not place the order.</p> : rankedCandidate ? <p className="card-intro">This is the strongest legitimate current setup found across the Worker scan. Entry quality and the strict legacy verdict are separate context; you may record a manual trade from this frozen plan.</p> : noSetup ? <p className="card-intro">This market was the highest-ranked evaluated result, but no qualifying entry setup exists right now. No trade plan was generated.</p> : <p className="card-intro">This is the best available setup, but it is not currently enterable. Do not chase it.</p>}
     {typeof focus.currentPrice === 'number' && <div className="scan-price">Scan price <b>{money(focus.currentPrice)}</b> · frozen at scan time</div>}
     {hasPlan && <><div className="price-grid">
       <Field label="Entry" value={money(focus.entry)} />
@@ -75,8 +84,9 @@ function TradeCard({ scan, onTake, taken, onSettings }) {
     </div>{focus.entryZone && <div className="entry-zone"><span>Worker entry zone</span><b>{money(focus.entryZone.low)} — {money(focus.entryZone.high)}</b></div>}{focus.entryQuality && <div className="entry-zone"><span>Entry quality</span><b>{focus.entryQuality}</b></div>}</>}
     <div className="trade-actions">
       {showTakeTrade && <button className="take-button" type="button" onClick={onTake} disabled={!takeTradeEnabled}>{taken ? 'Trade taken ✓' : takeTradeEnabled ? 'Take trade' : 'Scan expired — rescan'}</button>}
+      {showTakeTrade && <CopyInvoSetup trade={trade}/>}
       <button className="secondary-button" type="button" onClick={onSettings}>Risk settings</button>
-      <small>{trade ? 'Records your manual confirmation only. No Invo order is sent.' : 'Await a TRADE READY result before accepting a trade.'}</small>
+      <small>{trade ? 'Records your manual confirmation only. No Invo order is sent.' : 'A complete current Worker plan is required before accepting a trade.'}</small>
     </div>
     <ScanFootnote scan={scan}/>
     {showSeparateOpportunity && <div className="opportunity-note"><span>Highest-quality opportunity</span><b>{opportunity.asset} {opportunity.direction?.toUpperCase()} · {STATUS_LABELS[opportunity.entryStatus] || 'WAIT'}</b><small>Best Trade Now remains the actionable Worker result above.</small></div>}
@@ -208,7 +218,8 @@ export default function App() {
     }
   };
   const takeTrade = async () => {
-    if (!scan || !isScanFresh(scan) || hasJournalAcceptance(records, scan)) return;
+    const presentation = getTradePresentation(scan, { alreadyAccepted: scan ? hasJournalAcceptance(records, scan) : false });
+    if (!scan || !presentation.takeTradeEnabled) return;
     if (user && accessToken && scan.account?.recommendationId) {
       try { const result = await takeCloudTrade(scan.account.recommendationId, { accessToken }); const row = result.trade; setRecords(current => [{ id: row.id, recommendationId: row.recommendation_id, status: row.status, source: row.source, storage: 'CLOUD', acceptedAt: Date.parse(row.created_at), snapshot: row.snapshot?.trade || {}, raw: row }, ...current.filter(item => item.id !== row.id)]); return; } catch (cause) { setError(cause); return; }
     }

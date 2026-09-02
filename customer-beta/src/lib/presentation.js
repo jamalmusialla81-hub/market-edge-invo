@@ -19,7 +19,10 @@ export function getTradePresentation(scan, { now = Date.now(), alreadyAccepted =
   const trade = scan.bestTradeNow || null;
   const opportunity = scan.bestOpportunity || null;
   const focus = trade || opportunity;
-  const actionable = scan.status === 'TRADE_READY' && hasCompleteTrade(trade);
+  // BEST_TRADE_NOW is the server-authoritative Phase 3 selection. The legacy
+  // strict verdict remains context only; complete frozen geometry is what
+  // makes a manual journal acceptance available.
+  const actionable = ['BEST_TRADE_NOW', 'TRADE_READY'].includes(scan.status) && hasCompleteTrade(trade) && trade.entryStatus !== 'INVALID' && trade.entryQuality !== 'INVALID';
   return {
     kind: actionable ? 'TRADE' : focus ? 'OPPORTUNITY' : 'EMPTY_RESULT',
     label: STATUS_LABELS[scan.status],
@@ -28,8 +31,7 @@ export function getTradePresentation(scan, { now = Date.now(), alreadyAccepted =
     opportunity,
     showTakeTrade: actionable,
     takeTradeEnabled: actionable && isScanFresh(scan, now) && !alreadyAccepted,
-    // A Worker may provide a non-actionable top opportunity alongside a lower
-    // actionable trade. The Worker ranking is preserved; this is display only.
+    // The Worker rank is preserved; browser code never substitutes a trade.
     showSeparateOpportunity: Boolean(actionable && opportunity && opportunity.scanSnapshotId !== trade?.scanSnapshotId)
   };
 }

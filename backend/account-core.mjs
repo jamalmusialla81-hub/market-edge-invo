@@ -106,7 +106,7 @@ export function successfulScan(scan) {
   const coverage = scan?.dataQuality?.coverage;
   return Boolean(scan && scan.status !== 'DATA_UNAVAILABLE' && Number(coverage?.evaluated ?? scan?.universe?.evaluated) > 0);
 }
-function hasGeometry(item) { return Boolean(item && ['long', 'short'].includes(item.direction) && [item.entry, item.stop, item.tp1, item.tp2, item.rr1].every(value => Number.isFinite(Number(value)))); }
+function hasGeometry(item) { return Boolean(item && ['long', 'short'].includes(item.direction) && [item.entry, item.stop, item.tp1, item.tp2, item.rr1].every(Number.isFinite)); }
 export async function storeRecommendation(principal, scan, env, fetchImpl, now = Date.now()) {
   const trade = scan?.bestTradeNow;
   if (!hasGeometry(trade)) return null;

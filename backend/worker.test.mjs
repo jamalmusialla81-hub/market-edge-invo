@@ -68,6 +68,8 @@ const resolvedCommunity=communityPaperEvent({event_type:'OUTCOME',signal:communi
 assert.throws(()=>communityPaperEvent({event_type:'SIGNAL',signal:{...communitySignal,direction:'long',stop:105}}),/price ordering/);
 const forwardLive=liveForwardSelectionRecord({status:'BEST_TRADE_NOW',scannedAt:tvNow,bestTradeNow:{scan_snapshot_id:'snapshot-1',asset:'BTC',direction:'long',strategy:'TREND CONTINUATION',quant_score:72,combined_score:73}});
 assert.equal(forwardLive.id,`live-snapshot-1-${Math.floor(tvNow/300000)}`);assert.equal(forwardLive.quantOnly.score,72);assert.equal(forwardLive.mlAssisted.score,73);
+const sameMarketObservation=liveForwardSelectionRecord({status:'BEST_TRADE_NOW',scanId:'different-user-scan',scannedAt:tvNow+20_000,bestTradeNow:{scan_snapshot_id:'snapshot-1',asset:'BTC',direction:'long',strategy:'TREND CONTINUATION',quant_score:72,combined_score:73}});
+assert.equal(sameMarketObservation.id,forwardLive.id);
 assert.equal(liveForwardSelectionRecord({status:'DATA_UNAVAILABLE',scannedAt:tvNow,bestTradeNow:null}),null);
 function tvRequest(payload,token='test-tv-secret') { return new Request(`https://market-edge-ai.test/v1/tradingview-alert?token=${encodeURIComponent(token)}`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload)}); }
 const tvAlert={event_id:'fixture-1',symbol:'ETHUSDT',exchange:'BINANCE',timeframe:'15m',timestamp:tvNow-60_000,close:2500,volume:1200,condition:'EMA alignment candidate',state:'CANDIDATE'};

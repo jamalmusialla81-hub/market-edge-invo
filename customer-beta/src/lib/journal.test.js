@@ -11,6 +11,7 @@ globalThis.localStorage = {
 };
 
 const scan = parseScanResponse(fixtures.TRADE_READY);
+const rankedWaitScan = parseScanResponse(fixtures.BEST_TRADE_NOW);
 
 test('freezes one exact Worker recommendation and blocks duplicate confirmation', () => {
   globalThis.localStorage.store.clear();
@@ -38,4 +39,13 @@ test('survives refresh and blocks the same recommendation under a new scan id', 
   const second = saveAcceptedTrade(reloaded, repeat);
   assert.equal(second.added, false);
   assert.equal(second.records.length, 1);
+});
+
+test('freezes an always-ranked strict-WAIT recommendation with no browser recalculation', () => {
+  globalThis.localStorage.store.clear();
+  const saved = saveAcceptedTrade([], rankedWaitScan);
+  assert.equal(saved.added, true);
+  assert.equal(saved.record.snapshot.strictVerdict, 'WAIT');
+  assert.equal(saved.record.snapshot.entryQuality, 'EXTENDED');
+  assert.deepEqual(saved.record.snapshot, rankedWaitScan.bestTradeNow);
 });
