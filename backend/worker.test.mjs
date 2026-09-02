@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {handleRequest,handleScheduled,communityPaperEvent} from './worker.mjs';
+import {handleRequest,handleScheduled,communityPaperEvent,liveForwardSelectionRecord} from './worker.mjs';
 
 const env={OPENAI_API_KEY:'test-only',ALLOWED_ORIGINS:'https://jamalmusialla81-hub.github.io',RATE_LIMIT_PER_MINUTE:'1000'};
 const quant={asset:'ETH',price:100,decision:'WAIT',direction:'long',strategy:'BREAKOUT + RETEST',regime:'BREAKOUT RETEST',reason:'Await 15m confirmation'};
@@ -66,6 +66,9 @@ const communitySignal={id:'paper-signal-1',symbol:'BTC',direction:'long',strateg
 const cleanCommunity=communityPaperEvent({event_type:'SIGNAL',signal:communitySignal});assert.equal(cleanCommunity.eventId,'SIGNAL:paper-signal-1');assert.equal(cleanCommunity.signal.balance,undefined);assert.equal(cleanCommunity.signal.notes,undefined);
 const resolvedCommunity=communityPaperEvent({event_type:'OUTCOME',signal:communitySignal,outcome:{status:'win',resultR:2.1,closedAt:tvNow,barsHeld:4,tp1Hit:true,costR:.02,notes:'must never persist'}});assert.equal(resolvedCommunity.outcome.notes,undefined);assert.equal(resolvedCommunity.outcome.status,'win');
 assert.throws(()=>communityPaperEvent({event_type:'SIGNAL',signal:{...communitySignal,direction:'long',stop:105}}),/price ordering/);
+const forwardLive=liveForwardSelectionRecord({status:'BEST_TRADE_NOW',scannedAt:tvNow,bestTradeNow:{scan_snapshot_id:'snapshot-1',asset:'BTC',direction:'long',strategy:'TREND CONTINUATION',quant_score:72,combined_score:73}});
+assert.equal(forwardLive.id,`live-snapshot-1-${Math.floor(tvNow/300000)}`);assert.equal(forwardLive.quantOnly.score,72);assert.equal(forwardLive.mlAssisted.score,73);
+assert.equal(liveForwardSelectionRecord({status:'DATA_UNAVAILABLE',scannedAt:tvNow,bestTradeNow:null}),null);
 function tvRequest(payload,token='test-tv-secret') { return new Request(`https://market-edge-ai.test/v1/tradingview-alert?token=${encodeURIComponent(token)}`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload)}); }
 const tvAlert={event_id:'fixture-1',symbol:'ETHUSDT',exchange:'BINANCE',timeframe:'15m',timestamp:tvNow-60_000,close:2500,volume:1200,condition:'EMA alignment candidate',state:'CANDIDATE'};
 response=await handleRequest(tvRequest(tvAlert),tvEnv,{}, {now:tvNow});

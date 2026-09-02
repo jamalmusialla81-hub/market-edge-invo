@@ -261,6 +261,25 @@ async function forwardSelectionIngest(payload,env,now=Date.now()){
   await env.MARKET_EDGE_DB.prepare(`INSERT OR IGNORE INTO ml_forward_selection_snapshots (selection_id,timestamp,quant_only_json,ml_assisted_json,outcome_json,created_at,resolved_at,immutable) VALUES (?,?,?,?,NULL,?,NULL,1)`).bind(record.id,record.timestamp,JSON.stringify(record.quantOnly),JSON.stringify(record.mlAssisted),now).run();
   return {accepted:true,selectionId:record.id,status:'FORWARD / PENDING',immutable:true};
 }
+function liveForwardSelectionRecord(scan){
+  const trade=scan?.bestTradeNow;
+  const timestamp=Number(scan?.scannedAt);
+  const snapshotId=safeText(trade?.scan_snapshot_id,120);
+  if(scan?.status!=='BEST_TRADE_NOW'||!snapshotId||!Number.isFinite(timestamp))return null;
+  // A completed 5m bucket makes repeat customer scans of the same market
+  // state one market observation, while a later market state remains new.
+  const id=`live-${snapshotId}-${Math.floor(timestamp/300000)}`;
+  const quantOnly={asset:trade.asset,direction:trade.direction,strategy:trade.strategy,score:trade.quant_score};
+  const mlAssisted={asset:trade.asset,direction:trade.direction,strategy:trade.strategy,score:trade.combined_score};
+  return forwardSelectionRecord({selection:{id,timestamp,status:'FORWARD / PENDING',quantOnly,mlAssisted}});
+}
+async function captureLiveForwardSelection(scan,env,now=Date.now()){
+  if(!env.MARKET_EDGE_DB)return null;
+  const record=liveForwardSelectionRecord(scan);
+  if(!record)return null;
+  await env.MARKET_EDGE_DB.prepare(`INSERT OR IGNORE INTO ml_forward_selection_snapshots (selection_id,timestamp,quant_only_json,ml_assisted_json,outcome_json,created_at,resolved_at,immutable) VALUES (?,?,?,?,NULL,?,NULL,1)`).bind(record.id,record.timestamp,JSON.stringify(record.quantOnly),JSON.stringify(record.mlAssisted),now).run();
+  return {selectionId:record.id,status:'FORWARD / PENDING'};
+}
 function communityPaperEvent(payload){
   const kind=safeText(payload?.event_type,16).toUpperCase(),input=payload?.signal&&typeof payload.signal==='object'?payload.signal:{},id=safeText(input.id,96),asset=safeAsset(input.symbol),direction=safeText(input.direction,12),strategy=safeText(input.strategy,120),timestamp=Number(input.timestamp),entry=Number(input.entry),stop=Number(input.stop),target1=Number(input.target1),target2=Number(input.target2),rr1=Number(input.rr1),rr2=Number(input.rr2);
   if(!['SIGNAL','OUTCOME'].includes(kind)||!id||!['long','short'].includes(direction)||!strategy||!Number.isFinite(timestamp)||timestamp<=0||![entry,stop,target1,target2,rr1,rr2].every(Number.isFinite))throw Object.assign(new Error('Invalid anonymous paper event'),{status:400,code:'COMMUNITY_EVENT_INVALID'});
@@ -414,6 +433,9 @@ async function entitledCustomerScan(request,env,payload,fetchImpl,now) {
       return {...scan,account:{entitlement:entitlementAfterRelease(reservation),principalType:principal.type,recommendationId:null},_setCookie:principal.setCookie};
     }
     await finalizeScan(reservation.reservation_id,scan.scanId,env,fetchImpl);
+    // Research capture deliberately happens at recommendation time, not when a
+    // user accepts it. A storage issue must not fabricate or block a scan.
+    await captureLiveForwardSelection(scan,env,now).catch(()=>null);
     const recommendationId=await storeRecommendation(principal,scan,env,fetchImpl,now);
     return {...scan,account:{entitlement:entitlementAfterFinalization(reservation),principalType:principal.type,recommendationId},_setCookie:principal.setCookie};
   } catch(error) {
@@ -479,4 +501,4 @@ export async function handleScheduled(controller,env={},ctx={},deps={}) {
 }
 
 export default {fetch:handleRequest,scheduled:handleScheduled};
-export {analysisSchema,chatSchema,sanitizeImages,sanitizeQuant,sanitizeTradingViewAlert,acceptTradingViewAlert,persistTradingViewEvidence,extractOutputText,communityPaperEvent,forwardSelectionRecord,forwardSelectionIngest,validShadowSelection,shadowScanIngest,shadowChallengers,mlEvolution,activeMlModel,resolvedMlRows,stableHash,MAX_BODY_BYTES};
+export {analysisSchema,chatSchema,sanitizeImages,sanitizeQuant,sanitizeTradingViewAlert,acceptTradingViewAlert,persistTradingViewEvidence,extractOutputText,communityPaperEvent,forwardSelectionRecord,forwardSelectionIngest,liveForwardSelectionRecord,captureLiveForwardSelection,validShadowSelection,shadowScanIngest,shadowChallengers,mlEvolution,activeMlModel,resolvedMlRows,stableHash,MAX_BODY_BYTES};
