@@ -52,6 +52,17 @@ test('an invalid entry reconstruction is the one current-state condition that bl
   assert.equal(view.takeTradeEnabled, false);
 });
 
+test('market geometry remains visible while user-specific sizing blocks a journal action', () => {
+  const constrained = structuredClone(fixtures.BEST_TRADE_NOW);
+  constrained.bestTradeNow.position = null;
+  constrained.bestTradeNow.user_executability = {status: 'CONSTRAINT', reason: 'Minimum order size exceeds your risk allowance.'};
+  const view = getTradePresentation(parseScanResponse(constrained), { now: constrained.scannedAt + 1 });
+  assert.equal(view.kind, 'TRADE');
+  assert.equal(view.showTakeTrade, true);
+  assert.equal(view.takeTradeEnabled, false);
+  assert.equal(view.executabilityReason, 'Minimum order size exceeds your risk allowance.');
+});
+
 test('expires acceptance without changing the Worker trade data', () => {
   const parsed = parseScanResponse(fixtures.TRADE_READY);
   const view = getTradePresentation(parsed, { now: parsed.scannedAt + 15 * 60 * 1000 });

@@ -46,8 +46,18 @@ assert.equal(result.bestOpportunity.position.risk_amount,10);
 const ranked=await runLiveScan({fetchImpl:fixtureFetch,now:NOW,markets:[{invoInstrument:'AAA',dataSymbol:'AAA'},{invoInstrument:'BBB',dataSymbol:'BBB'}],marketRunner:async market=>market.invoInstrument==='AAA'?{asset:'AAA',instrument:'AAA',direction:'long',strategy:'TREND CONTINUATION',entry:null,stop:null,tp1:null,tp2:null,rr1:null,setup_quality:99,combined_score:99,entry_status:'INVALID',strict_verdict:'NO TRADE',source_count:2}:{asset:'BBB',instrument:'BBB',direction:'short',strategy:'MEAN REVERSION',entry:100,stop:102,tp1:96,tp2:93,rr1:2,setup_quality:39,combined_score:39,entry_status:'EXTENDED',entry_quality:'EXTENDED',strict_verdict:'WAIT',position:null,source_count:2}});
 assert.equal(ranked.status,'BEST_TRADE_NOW');
 assert.equal(ranked.bestTradeNow.asset,'BBB');
-assert.equal(ranked.bestTradeNow.rank,1);
-assert.equal(ranked.rankedOpportunities.at(-1).asset,'AAA');
+assert.equal(ranked.bestTradeNow.rank,2);
+assert.equal(ranked.bestOpportunity.asset,'AAA');
+assert.equal(ranked.rankedOpportunities[0].asset,'AAA');
+
+// The first five underlying scores can be unenterable; the first later valid
+// structural plan remains the customer trade while retaining its true rank.
+const sixDeep=await runLiveScan({fetchImpl:fixtureFetch,now:NOW,markets:Array.from({length:6},(_,index)=>({invoInstrument:`A${index}A`,dataSymbol:`A${index}A`})),marketRunner:async market=>{
+  const index=Number(market.invoInstrument[1]);
+  return index<5?{asset:market.invoInstrument,instrument:market.invoInstrument,direction:'long',strategy:'TREND CONTINUATION',entry:null,stop:null,tp1:null,tp2:null,rr1:null,setup_quality:100-index,combined_score:100-index,entry_status:'INVALID',strict_verdict:'NO TRADE',source_count:2}:{asset:market.invoInstrument,instrument:market.invoInstrument,direction:'short',strategy:'MEAN REVERSION',entry:100,stop:102,tp1:96,tp2:93,rr1:2,setup_quality:20,combined_score:20,entry_status:'EXTENDED',entry_quality:'EXTENDED',strict_verdict:'WAIT',position:null,source_count:2};
+}});
+assert.equal(sixDeep.bestTradeNow.rank,6);
+assert.equal(sixDeep.bestTradeNow.asset,'A5A');
 
 const unavailable=await runLiveScan({fetchImpl:fixtureFetch,now:NOW,marketMetadata:{invoInstrument:'BTC',dataSymbol:'BTC'},marketRunner:async()=>({error:'All feeds unavailable'})});
 assert.equal(unavailable.status,'DATA_UNAVAILABLE');

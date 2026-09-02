@@ -68,9 +68,13 @@ const resolvedCommunity=communityPaperEvent({event_type:'OUTCOME',signal:communi
 assert.throws(()=>communityPaperEvent({event_type:'SIGNAL',signal:{...communitySignal,direction:'long',stop:105}}),/price ordering/);
 const forwardLive=liveForwardSelectionRecord({status:'BEST_TRADE_NOW',scannedAt:tvNow,bestTradeNow:{scan_snapshot_id:'snapshot-1',asset:'BTC',direction:'long',strategy:'TREND CONTINUATION',quant_score:72,combined_score:73}});
 assert.equal(forwardLive.id,`live-snapshot-1-${Math.floor(tvNow/300000)}`);assert.equal(forwardLive.quantOnly.score,72);assert.equal(forwardLive.mlAssisted.score,73);
+assert.equal(forwardLive.mlAssisted.snapshot,null);
 const sameMarketObservation=liveForwardSelectionRecord({status:'BEST_TRADE_NOW',scanId:'different-user-scan',scannedAt:tvNow+20_000,bestTradeNow:{scan_snapshot_id:'snapshot-1',asset:'BTC',direction:'long',strategy:'TREND CONTINUATION',quant_score:72,combined_score:73}});
 assert.equal(sameMarketObservation.id,forwardLive.id);
 assert.equal(liveForwardSelectionRecord({status:'DATA_UNAVAILABLE',scannedAt:tvNow,bestTradeNow:null}),null);
+const resolvableForward=liveForwardSelectionRecord({status:'BEST_TRADE_NOW',scannedAt:tvNow,bestTradeNow:{scan_snapshot_id:'snapshot-complete',asset:'ETH',instrument:'ETH',direction:'long',strategy:'TREND CONTINUATION',rank:1,entry:100,stop:95,tp1:109,tp2:115,rr1:1.8,quant_score:72,combined_score:73}});
+assert.equal(resolvableForward.mlAssisted.snapshot.entry,100);
+assert.equal(resolvableForward.mlAssisted.snapshot.stop,95);
 function tvRequest(payload,token='test-tv-secret') { return new Request(`https://market-edge-ai.test/v1/tradingview-alert?token=${encodeURIComponent(token)}`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload)}); }
 const tvAlert={event_id:'fixture-1',symbol:'ETHUSDT',exchange:'BINANCE',timeframe:'15m',timestamp:tvNow-60_000,close:2500,volume:1200,condition:'EMA alignment candidate',state:'CANDIDATE'};
 response=await handleRequest(tvRequest(tvAlert),tvEnv,{}, {now:tvNow});
@@ -103,6 +107,10 @@ response=await handleRequest(request('/v1/research/ml/ingest',{operation:'ml_res
 assert.equal(response.status,401);assert.equal((await response.json()).error.code,'RESEARCH_AUTH_FAILED');
 response=await handleRequest(request('/v1/research/forward-selections',{selection:{id:'selection-fixture-1',timestamp:tvNow-60_000,status:'FORWARD / PENDING',quantOnly:{asset:'BTC',direction:'long',strategy:'TREND CONTINUATION',score:72},mlAssisted:{asset:'BTC',direction:'long',strategy:'TREND CONTINUATION',score:73}}}),researchEnv,{},{});
 assert.equal(response.status,200);body=await response.json();assert.equal(body.status,'FORWARD / PENDING');assert.equal(researchEnv.MARKET_EDGE_DB.calls.some(call=>call.sql.includes('ml_forward_selection_snapshots')),true);
+response=await handleRequest(request('/v1/research/ingest',{operation:'experiment_commit',experiment:{experiment_id:'baseline-fixture',hypothesis:'Freeze baseline',dataset_hash:'dataset-hash',engine_hash:'engine-hash',record_hash:'record-hash',feature_set:[],decision:'REJECTED',rejection_reason:'Insufficient evidence'}}),researchEnv,{},{});
+assert.equal(response.status,401);
+response=await handleRequest(request('/v1/research/ingest',{operation:'experiment_commit',experiment:{experiment_id:'baseline-fixture',hypothesis:'Freeze baseline',dataset_hash:'dataset-hash',engine_hash:'engine-hash',record_hash:'record-hash',feature_set:[],decision:'REJECTED',rejection_reason:'Insufficient evidence'}},{authorization:'Bearer test-research-secret'}),researchEnv,{},{});
+assert.equal(response.status,200);body=await response.json();assert.equal(body.immutable,true);assert.equal(researchEnv.MARKET_EDGE_DB.calls.some(call=>call.sql.includes('research_experiments')),true);
 const monitorNow=1_800_000_000_000,monitorRows=Array.from({length:100},(_,index)=>{const time=monitorNow-(100-index)*300000,price=100+index*.1;return[time,String(price),String(price+1),String(price-1),String(price+.2),'20',time+299999];});
 const monitorDb=new FakeD1(),scheduled=await handleScheduled({scheduledTime:monitorNow},{MARKET_EDGE_DB:monitorDb},{},{watchlist:[{asset:'BTC',symbol:'BTCUSDT',exchange:'BINANCE'}],historicalAssets:[],delay:async()=>{},fetch:async()=>new Response(JSON.stringify(monitorRows),{status:200})});
 assert.equal(scheduled.status,'COMPLETE');assert.equal(scheduled.executionDisabled,true);assert.equal(scheduled.researchRunner,'github-actions-node');assert.equal(scheduled.heavyReplay,'disabled');assert.equal(monitorDb.calls.length,0);

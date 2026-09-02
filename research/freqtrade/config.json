@@ -1,0 +1,22 @@
+{
+  "dry_run": true,
+  "dry_run_wallet": 1000,
+  "stake_currency": "USDT",
+  "stake_amount": 10,
+  "max_open_trades": 1,
+  "trading_mode": "futures",
+  "margin_mode": "isolated",
+  "exchange": {
+    "name": "binance",
+    "key": "",
+    "secret": "",
+    "pair_whitelist": []
+  },
+  "internals": {"process_throttle_secs": 5},
+  "market_edge_research": {
+    "exchange_execution": false,
+    "source": "immutable Market Edge decision records only",
+    "same_candle_ordering": "STOP_FIRST",
+    "cost_scenarios": [0.0008, 0.0016, 0.0025, 0.004]
+  }
+}

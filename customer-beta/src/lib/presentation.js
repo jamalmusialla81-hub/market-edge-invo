@@ -1,4 +1,4 @@
-import { hasCompleteTrade } from './marketEdgeApi.js';
+import { hasCompleteTrade, hasValidGeometry } from './marketEdgeApi.js';
 
 export const STATUS_LABELS = Object.freeze({
   BEST_TRADE_NOW: 'BEST AVAILABLE NOW',
@@ -20,18 +20,21 @@ export function getTradePresentation(scan, { now = Date.now(), alreadyAccepted =
   const opportunity = scan.bestOpportunity || null;
   const focus = trade || opportunity;
   // BEST_TRADE_NOW is the server-authoritative Phase 3 selection. The legacy
-  // strict verdict remains context only; complete frozen geometry is what
-  // makes a manual journal acceptance available.
-  const actionable = ['BEST_TRADE_NOW', 'TRADE_READY'].includes(scan.status) && hasCompleteTrade(trade) && trade.entryStatus !== 'INVALID' && trade.entryQuality !== 'INVALID';
+  // strict verdict remains context only. A market can be legitimate while a
+  // specific account cannot meet its minimum position/risk constraints.
+  const marketReady = ['BEST_TRADE_NOW', 'TRADE_READY'].includes(scan.status) && hasValidGeometry(trade) && trade.entryStatus !== 'INVALID' && trade.entryQuality !== 'INVALID';
+  const actionable = marketReady && hasCompleteTrade(trade);
+  const executabilityReason = !marketReady ? 'The Worker no longer considers this market plan current.' : !actionable ? trade?.userExecutability?.reason || 'Position sizing is unavailable under your saved risk settings.' : null;
   return {
-    kind: actionable ? 'TRADE' : focus ? 'OPPORTUNITY' : 'EMPTY_RESULT',
+    kind: marketReady ? 'TRADE' : focus ? 'OPPORTUNITY' : 'EMPTY_RESULT',
     label: STATUS_LABELS[scan.status],
     focus,
     trade,
     opportunity,
-    showTakeTrade: actionable,
+    showTakeTrade: marketReady,
     takeTradeEnabled: actionable && isScanFresh(scan, now) && !alreadyAccepted,
+    executabilityReason,
     // The Worker rank is preserved; browser code never substitutes a trade.
-    showSeparateOpportunity: Boolean(actionable && opportunity && opportunity.scanSnapshotId !== trade?.scanSnapshotId)
+    showSeparateOpportunity: Boolean(marketReady && opportunity && opportunity.scanSnapshotId !== trade?.scanSnapshotId)
   };
 }

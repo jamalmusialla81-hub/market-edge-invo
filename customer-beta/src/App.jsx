@@ -35,13 +35,13 @@ function ScanButton({ scanning, onClick }) {
     {scanning ? <><span className="scan-spinner"/>Analysing live markets</> : <>Scan markets <span>→</span></>}
   </button>;
 }
-function CopyInvoSetup({ trade }) {
+function CopyInvoSetup({ trade, disabled = false }) {
   const [copied, setCopied] = useState(false);
   const copy = async () => {
     try { await navigator.clipboard?.writeText(formatInvoSetup(trade)); setCopied(true); window.setTimeout(() => setCopied(false), 1800); }
     catch { setCopied(false); }
   };
-  return <button className="secondary-button" type="button" onClick={copy}>{copied ? 'Copied ✓' : 'Copy Invo setup'}</button>;
+  return <button className="secondary-button" type="button" onClick={copy} disabled={disabled}>{copied ? 'Copied ✓' : 'Copy Invo setup'}</button>;
 }
 
 function LevelMap({ trade }) {
@@ -61,7 +61,7 @@ function LevelMap({ trade }) {
 
 function TradeCard({ scan, onTake, taken, onSettings }) {
   const presentation = getTradePresentation(scan, { alreadyAccepted: taken });
-  const { trade, opportunity, focus, showTakeTrade, takeTradeEnabled, showSeparateOpportunity } = presentation;
+  const { trade, opportunity, focus, showTakeTrade, takeTradeEnabled, executabilityReason, showSeparateOpportunity } = presentation;
   if (!scan) return <section className="trade-card neutral-card"><div className="card-kicker">Best trade now</div><h1>Run a real market scan</h1><p>Market Edge will only show levels, scores and sizing returned by the Worker. It never creates browser-side trading data.</p><div className="empty-pills"><span>Live Worker data</span><span>Manual execution</span><span>No exchange connection</span></div></section>;
   if (scan.status === 'DATA_UNAVAILABLE') return <section className="trade-card neutral-card"><div className="card-row"><div><div className="card-kicker">Market Edge result</div><h1>Data unavailable</h1></div><Badge status={scan.status}/></div><p>Live data did not pass the Worker checks, so no recommendation was generated. Try another scan later.</p><Diagnostic scan={scan}/></section>;
   if (!focus) return <section className="trade-card neutral-card"><div className="card-row"><div><div className="card-kicker">Market Edge result</div><h1>No valid setup</h1></div><Badge status={scan.status}/></div><p>The Worker completed the scan but no trade met the current quality and risk requirements.</p><ScanFootnote scan={scan}/></section>;
@@ -83,10 +83,10 @@ function TradeCard({ scan, onTake, taken, onSettings }) {
       <Field label="R : R" value={focus.rr1 ? `${tradeNumber(focus.rr1)}R` : '—'} />
     </div>{focus.entryZone && <div className="entry-zone"><span>Worker entry zone</span><b>{money(focus.entryZone.low)} — {money(focus.entryZone.high)}</b></div>}{focus.entryQuality && <div className="entry-zone"><span>Entry quality</span><b>{focus.entryQuality}</b></div>}</>}
     <div className="trade-actions">
-      {showTakeTrade && <button className="take-button" type="button" onClick={onTake} disabled={!takeTradeEnabled}>{taken ? 'Trade taken ✓' : takeTradeEnabled ? 'Take trade' : 'Scan expired — rescan'}</button>}
-      {showTakeTrade && <CopyInvoSetup trade={trade}/>}
+      {showTakeTrade && <button className="take-button" type="button" onClick={onTake} disabled={!takeTradeEnabled}>{taken ? 'Trade taken ✓' : takeTradeEnabled ? 'Take trade' : executabilityReason ? 'Take trade unavailable' : 'Scan expired — rescan'}</button>}
+      {showTakeTrade && <CopyInvoSetup trade={trade} disabled={!takeTradeEnabled}/>}
       <button className="secondary-button" type="button" onClick={onSettings}>Risk settings</button>
-      <small>{trade ? 'Records your manual confirmation only. No Invo order is sent.' : 'A complete current Worker plan is required before accepting a trade.'}</small>
+      <small>{takeTradeEnabled ? 'Records your manual confirmation only. No Invo order is sent.' : executabilityReason || (trade ? 'This frozen scan is no longer current. Rescan before recording a trade.' : 'A complete current Worker plan is required before accepting a trade.')}</small>
     </div>
     <ScanFootnote scan={scan}/>
     {showSeparateOpportunity && <div className="opportunity-note"><span>Highest-quality opportunity</span><b>{opportunity.asset} {opportunity.direction?.toUpperCase()} · {STATUS_LABELS[opportunity.entryStatus] || 'WAIT'}</b><small>Best Trade Now remains the actionable Worker result above.</small></div>}

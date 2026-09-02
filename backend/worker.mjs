@@ -158,6 +158,7 @@ function researchDecision(input){
 }
 async function researchIngest(request,env,payload,now=Date.now()){
   researchToken(request,env);
+  if(payload?.operation==='experiment_commit')return researchExperimentIngest(payload,env,now);
   if(payload?.operation!=='replay_commit')throw Object.assign(new Error('Unsupported research operation'),{status:400,code:'RESEARCH_INVALID_OPERATION'});
   const asset=safeAsset(payload.asset),version=safeText(payload.dataset_version,80),sourceHash=safeText(payload.source_dataset_hash,120),runId=safeText(payload.run_id,180),cursor=Number(payload.cursor_timestamp),last=Number(payload.last_processed_timestamp),processed=Number(payload.candles_processed),inputCursor=Number(payload.input_cursor);
   if(!['BTC','ETH','SOL','XRP','DOGE','LTC'].includes(asset)||version!=='EARLY-WINDOW-RESEARCH-V1'||!runId||!sourceHash||![cursor,last,processed,inputCursor].every(Number.isFinite)||processed<1||processed>288||last>=cursor)throw Object.assign(new Error('Invalid replay commit'),{status:400,code:'RESEARCH_INVALID_COMMIT'});
@@ -172,6 +173,18 @@ async function researchIngest(request,env,payload,now=Date.now()){
   const dataset=await materializeDataset(env.MARKET_EDGE_DB,now),detail={provider:safeText(payload?.detail?.provider,40),symbol:safeText(payload?.detail?.symbol,24),received_candles:Number(payload?.detail?.received_candles)||0,known_btc_checked:payload?.detail?.known_btc_checked===true,metrics:detailMetrics};
   await env.MARKET_EDGE_DB.prepare(`INSERT OR REPLACE INTO research_runs (id,runner,stage,asset,status,input_cursor,output_cursor,candles_processed,decision_points_written,outcomes_resolved,detail_json,started_at,completed_at,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(runId,'github-actions-node','replay',asset,'COMPLETE',inputCursor,cursor,processed,written,resolved,JSON.stringify(detail),Number(payload.started_at)||now,now,now).run();
   return {accepted:true,run_id:runId,asset,cursor_timestamp:cursor,candles_processed:processed,decision_points_written:written,outcomes_resolved:resolved,dataset};
+}
+function researchExperiment(payload){
+  const value=payload?.experiment&&typeof payload.experiment==='object'?payload.experiment:{}, text=(key,max=240)=>safeText(value[key],max), id=text('experiment_id',180), hypothesis=text('hypothesis',1000), datasetHash=text('dataset_hash',120), engineHash=text('engine_hash',120), recordHash=text('record_hash',120);
+  if(!id||!hypothesis||!datasetHash||!engineHash||!recordHash)throw Object.assign(new Error('Experiment provenance is incomplete'),{status:400,code:'RESEARCH_EXPERIMENT_INVALID'});
+  const featureSet=Array.isArray(value.feature_set)?value.feature_set.map(item=>safeText(item,80)).filter(Boolean):[];
+  const decision=text('decision',40)||'PENDING', lookahead=text('lookahead_status',40)||'NOT_RUN', recursive=text('recursive_status',40)||'NOT_RUN';
+  return {id,hypothesis,datasetHash,engineHash,recordHash,source:text('source',80)||'RESEARCH_FACTORY',strategy:text('strategy',120)||null,direction:['long','short'].includes(value.direction)?value.direction:null,featureSet,parameters:value.parameters&&typeof value.parameters==='object'?value.parameters:{},train:value.train_range&&typeof value.train_range==='object'?value.train_range:null,validation:value.validation_range&&typeof value.validation_range==='object'?value.validation_range:null,test:value.test_range&&typeof value.test_range==='object'?value.test_range:null,fees:value.fees&&typeof value.fees==='object'?value.fees:{total:.0016},results:value.results&&typeof value.results==='object'?value.results:null,lookahead,recursive,decision,rejection:text('rejection_reason',1000)||null};
+}
+async function researchExperimentIngest(payload,env,now){
+  const record=researchExperiment(payload);
+  await env.MARKET_EDGE_DB.prepare(`INSERT OR IGNORE INTO research_experiments (experiment_id,created_at,hypothesis,source,strategy,direction,feature_set_json,parameters_json,dataset_hash,engine_hash,train_range_json,validation_range_json,test_range_json,fee_model_json,result_json,lookahead_status,recursive_status,decision,rejection_reason,record_hash,immutable) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1)`).bind(record.id,now,record.hypothesis,record.source,record.strategy,record.direction,JSON.stringify(record.featureSet),JSON.stringify(record.parameters),record.datasetHash,record.engineHash,JSON.stringify(record.train),JSON.stringify(record.validation),JSON.stringify(record.test),JSON.stringify(record.fees),JSON.stringify(record.results),record.lookahead,record.recursive,record.decision,record.rejection,record.recordHash).run();
+  return {accepted:true,experiment_id:record.id,decision:record.decision,immutable:true};
 }
 async function mlDataset(request,env,url){
   researchToken(request,env);const id=safeText(url.searchParams.get('id'),80)||'EARLY-WINDOW-RESEARCH-V1';
@@ -249,7 +262,11 @@ function forwardSelectionPick(value){
   if(!value||typeof value!=='object')return null;
   const asset=safeAsset(value.asset),direction=safeText(value.direction,12),strategy=safeText(value.strategy,120),score=Number(value.score);
   if(!asset||asset==='UNKNOWN'||!['long','short'].includes(direction)||!strategy)return null;
-  return {asset,direction,strategy,score:Number.isFinite(score)?score:null};
+  // Existing external research callers may submit only a rank score. The live
+  // scanner additionally freezes complete geometry so that a unique market
+  // observation has enough information for a later, independent resolver.
+  const snapshot=value.snapshot&&typeof value.snapshot==='object'?value.snapshot:null;
+  return {asset,direction,strategy,score:Number.isFinite(score)?score:null,snapshot};
 }
 function forwardSelectionRecord(payload){
   const selection=payload?.selection&&typeof payload.selection==='object'?payload.selection:{},timestamp=Number(selection.timestamp),id=safeText(selection.id,180),quantOnly=forwardSelectionPick(selection.quantOnly),mlAssisted=forwardSelectionPick(selection.mlAssisted);
@@ -269,8 +286,10 @@ function liveForwardSelectionRecord(scan){
   // A completed 5m bucket makes repeat customer scans of the same market
   // state one market observation, while a later market state remains new.
   const id=`live-${snapshotId}-${Math.floor(timestamp/300000)}`;
-  const quantOnly={asset:trade.asset,direction:trade.direction,strategy:trade.strategy,score:trade.quant_score};
-  const mlAssisted={asset:trade.asset,direction:trade.direction,strategy:trade.strategy,score:trade.combined_score};
+  const geometry=[trade.entry,trade.stop,trade.tp1,trade.tp2,trade.rr1].map(Number);
+  const snapshot=geometry.every(Number.isFinite)?{recommendationId:id,scanSnapshotId:snapshotId,signalTimestamp:timestamp,asset:trade.asset,instrument:trade.instrument||null,direction:trade.direction,strategy:trade.strategy,rank:Number(trade.rank)||null,currentPrice:Number(trade.current_price)||null,entry:geometry[0],stop:geometry[1],tp1:geometry[2],tp2:geometry[3],rr:geometry[4],setupQuality:Number(trade.setup_quality),entryStatus:trade.entry_status||null,quantScore:Number(trade.quant_score),mlScore:Number.isFinite(Number(trade.ml_score))?Number(trade.ml_score):null,combinedScore:Number(trade.combined_score),strictVerdict:trade.strict_verdict||null,modelId:trade.ml?.model_id||null,modelStatus:trade.ml?.status||null}:null;
+  const quantOnly={asset:trade.asset,direction:trade.direction,strategy:trade.strategy,score:trade.quant_score,snapshot};
+  const mlAssisted={asset:trade.asset,direction:trade.direction,strategy:trade.strategy,score:trade.combined_score,snapshot};
   return forwardSelectionRecord({selection:{id,timestamp,status:'FORWARD / PENDING',quantOnly,mlAssisted}});
 }
 async function captureLiveForwardSelection(scan,env,now=Date.now()){
@@ -278,6 +297,11 @@ async function captureLiveForwardSelection(scan,env,now=Date.now()){
   const record=liveForwardSelectionRecord(scan);
   if(!record)return null;
   await env.MARKET_EDGE_DB.prepare(`INSERT OR IGNORE INTO ml_forward_selection_snapshots (selection_id,timestamp,quant_only_json,ml_assisted_json,outcome_json,created_at,resolved_at,immutable) VALUES (?,?,?,?,NULL,?,NULL,1)`).bind(record.id,record.timestamp,JSON.stringify(record.quantOnly),JSON.stringify(record.mlAssisted),now).run();
+  const snapshot=record.mlAssisted.snapshot;
+  if(snapshot){
+    const featureHash=stableHash({version:'live-scan-snapshot-v1',snapshot});
+    await env.MARKET_EDGE_DB.prepare(`INSERT OR IGNORE INTO research_feature_observations (observation_id,recommendation_id,scan_id,signal_timestamp,asset,direction,strategy,rank,feature_definition_version,feature_hash,snapshot_json,outcome_json,created_at,resolved_at,immutable) VALUES (?,?,?,?,?,?,?,?,?,?,?,NULL,?,NULL,1)`).bind(record.id,snapshot.recommendationId,null,record.timestamp,snapshot.asset,snapshot.direction,snapshot.strategy,snapshot.rank,'live-scan-snapshot-v1',featureHash,JSON.stringify(snapshot),now).run();
+  }
   return {selectionId:record.id,status:'FORWARD / PENDING'};
 }
 function communityPaperEvent(payload){
