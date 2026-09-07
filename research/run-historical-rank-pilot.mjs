@@ -29,6 +29,15 @@ async function candles(asset,start,end) {
   while(cursor<end) { const rows=await d1(`SELECT open_time,open,high,low,close,volume FROM canonical_candles WHERE asset=? AND exchange='COINBASE' AND interval='5m' AND open_time>? AND open_time<? ORDER BY open_time LIMIT 10000`,[asset,cursor,end]); if(!rows.length)break; all.push(...rows.map(normalise)); cursor=Number(rows.at(-1).open_time); if(rows.length<10000)break; }
   return all;
 }
+async function completedScans(scanIds) {
+  if(!scanIds.length)return new Set();
+  // A scan may be skipped only when its immutable snapshot exists and every
+  // rankable candidate has already reached a terminal label.  A pending
+  // outcome is deliberately replayed, but frozen candidate inputs are never
+  // replaced because the Worker accepts only the identical provenance hash.
+  const placeholders=scanIds.map(()=>'?').join(','),rows=await d1(`SELECT snapshot.scan_id AS scan_id,SUM(CASE WHEN candidate.valid_current_geometry=1 AND candidate.targets_json LIKE '%PENDING_OUTCOME%' THEN 1 ELSE 0 END) AS pending_rankable FROM historical_scan_snapshots snapshot LEFT JOIN historical_scan_candidates candidate ON candidate.scan_id=snapshot.scan_id WHERE snapshot.scan_id IN (${placeholders}) GROUP BY snapshot.scan_id`,scanIds);
+  return new Set(rows.filter(row=>Number(row.pending_rankable||0)===0).map(row=>String(row.scan_id)));
+}
 async function main() {
   const bounds=await d1(`SELECT asset,MIN(open_time) AS first_time,MAX(open_time) AS last_time,COUNT(*) AS candle_count FROM canonical_candles WHERE exchange='COINBASE' AND interval='5m' AND asset IN ('BTC','ETH','SOL','XRP','DOGE','LTC') GROUP BY asset ORDER BY asset`);
   if(bounds.length!==Rank.ASSETS.length)throw new Error('Cached pilot asset set is incomplete');
@@ -36,17 +45,17 @@ async function main() {
   const commonStart=Math.max(...Rank.ASSETS.map(asset=>Number(byAsset.get(asset).first_time))),commonEnd=Math.min(...Rank.ASSETS.map(asset=>Number(byAsset.get(asset).last_time)+Rank.BASE_MS));
   const first=align(commonStart+17568*Rank.BASE_MS,CADENCE),lastAllowed=commonEnd-(Rank.OUTCOME_BARS+1)*Rank.BASE_MS;
   const selected=Array.from({length:SCAN_LIMIT},(_,index)=>first+(START_INDEX+index)*CADENCE).filter(timestamp=>timestamp<=lastAllowed);
-  if(!selected.length)throw new Error('Cached common history does not contain a complete warmup plus outcome window');
+  if(!selected.length){console.log(JSON.stringify({dataset:Rank.VERSION,status:'NO_COMPLETE_COMMON_HISTORY_REMAINING',start_index:START_INDEX,scan_limit:SCAN_LIMIT}));return;}
   const sourceHashes=await d1(`SELECT asset,dataset_hash FROM historical_dataset_manifests WHERE exchange='COINBASE' AND base_timeframe='5m' AND asset IN ('BTC','ETH','SOL','XRP','DOGE','LTC') ORDER BY asset`);
   const sourceHash=Rank.hash(sourceHashes.map(row=>[row.asset,row.dataset_hash]));
-  const start=commonStart,end=selected.at(-1)+(Rank.OUTCOME_BARS+2)*Rank.BASE_MS,frames=new Map();
+  const planned=selected.map(timestamp=>({timestamp,scanId:`hrp2-${timestamp}-${sourceHash}`})),complete=await completedScans(planned.map(item=>item.scanId)),remaining=planned.filter(item=>!complete.has(item.scanId)),report={dataset:Rank.VERSION,universe_mode:'HISTORICAL_DATA_UNIVERSE_PROXY',cadence_ms:CADENCE,start_index:START_INDEX,selection:'Earliest complete common-history timestamp, then every seven days; no performance-based selection',scan_timestamps:selected,skipped_complete:planned.filter(item=>complete.has(item.scanId)).map(item=>item.scanId),scans:[]};
+  if(!remaining.length){console.log(JSON.stringify(report,null,2));return;}
+  const start=commonStart,end=remaining.at(-1).timestamp+(Rank.OUTCOME_BARS+2)*Rank.BASE_MS,frames=new Map();
   // These D1 reads are independent and immutable. Parallelising this load does
   // not alter snapshot order, inputs, scoring, or persistence order.
   const loaded=await Promise.all(Rank.ASSETS.map(async asset=>({asset,rows:await candles(asset,start,end)})));
   for(const {asset,rows} of loaded) { if(rows.length<17568+Rank.OUTCOME_BARS)throw new Error(`${asset} cached candles are insufficient for rank pilot`); frames.set(asset,{rows,derived:Replay.derived(rows)}); }
-  const report={dataset:Rank.VERSION,universe_mode:'HISTORICAL_DATA_UNIVERSE_PROXY',cadence_ms:CADENCE,start_index:START_INDEX,selection:'Earliest complete common-history timestamp, then every seven days; no performance-based selection',scan_timestamps:selected,scans:[]};
-  for(const timestamp of selected) {
-    const scanId=`hrp2-${timestamp}-${sourceHash}`,combined=[];
+  for(const {timestamp,scanId} of remaining) {
     for(const asset of Rank.ASSETS) { const source=frames.get(asset),snapshot=Replay.cachedSnapshot(source.derived,timestamp); if(!Replay.readiness(snapshot).ready)throw new Error(`${asset} failed completed-candle MTF readiness at ${timestamp}`); combined.push(...Rank.candidateRows({scanId,timestamp,asset,timeframes:snapshot.timeframes,sourceHash,instrument:asset})); }
     combined.filter(row=>row.valid_current_geometry).sort((a,b)=>(b.combined_score??-Infinity)-(a.combined_score??-Infinity)||a.asset.localeCompare(b.asset)||a.strategy.localeCompare(b.strategy)||a.direction.localeCompare(b.direction)).forEach((row,index)=>{row.candidate_rank=index+1;});
     combined.forEach(row=>{row.candidate_count=combined.length; row.candidate_hash=Rank.hash({...row,targets:undefined,candidate_hash:undefined});});

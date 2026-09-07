@@ -1,0 +1,84 @@
+name: Historical Rank V2 — 100 Scan Checkpoint
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# The runner uses deterministic scan and candidate IDs plus immutable INSERT OR
+# IGNORE writes, so batches could be independent.  We deliberately run one at
+# a time: it makes snapshot→outcome ordering auditable and avoids avoidable D1
+# API contention.  Rerunning this workflow resumes by skipping terminal scans.
+concurrency:
+  group: historical-rank-v2-write
+  cancel-in-progress: false
+
+jobs:
+  replay:
+    name: Historical chunk ${{ matrix.batch }} (offset ${{ matrix.start_index }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        include:
+          - { batch: 1, start_index: 0 }
+          - { batch: 2, start_index: 4 }
+          - { batch: 3, start_index: 8 }
+          - { batch: 4, start_index: 12 }
+          - { batch: 5, start_index: 16 }
+          - { batch: 6, start_index: 20 }
+          - { batch: 7, start_index: 24 }
+          - { batch: 8, start_index: 28 }
+          - { batch: 9, start_index: 32 }
+          - { batch: 10, start_index: 36 }
+          - { batch: 11, start_index: 40 }
+          - { batch: 12, start_index: 44 }
+          - { batch: 13, start_index: 48 }
+          - { batch: 14, start_index: 52 }
+          - { batch: 15, start_index: 56 }
+          - { batch: 16, start_index: 60 }
+          - { batch: 17, start_index: 64 }
+          - { batch: 18, start_index: 68 }
+          - { batch: 19, start_index: 72 }
+          - { batch: 20, start_index: 76 }
+          - { batch: 21, start_index: 80 }
+          - { batch: 22, start_index: 84 }
+          - { batch: 23, start_index: 88 }
+          - { batch: 24, start_index: 92 }
+          - { batch: 25, start_index: 96 }
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: 8ea7796a8fb13ffb612245e8a08a55d6
+      MARKET_EDGE_D1_DATABASE_ID: 39a4082e-41a4-45e9-9b76-99cf10eaca01
+      MARKET_EDGE_RESEARCH_TOKEN: ${{ secrets.MARKET_EDGE_RESEARCH_TOKEN }}
+      HISTORICAL_RANK_PILOT_SCANS: '4'
+      HISTORICAL_RANK_START_INDEX: ${{ matrix.start_index }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Freeze one deterministic historical chunk, then resolve only its later outcomes
+        run: node research/run-historical-rank-pilot.mjs
+
+  audit:
+    name: Final 100-scan immutable audit
+    needs: replay
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: 8ea7796a8fb13ffb612245e8a08a55d6
+      MARKET_EDGE_D1_DATABASE_ID: 39a4082e-41a4-45e9-9b76-99cf10eaca01
+      HISTORICAL_RANK_EXPECTED_SCANS: '100'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Report the immutable 100-scan checkpoint (no model training)
+        run: node research/historical-rank-report.mjs

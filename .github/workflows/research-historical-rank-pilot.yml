@@ -15,6 +15,13 @@ on:
 permissions:
   contents: read
 
+# Shared with the unattended checkpoint workflow.  Different scan IDs are
+# independently idempotent, but serial writes give every outcome its own
+# completed snapshot-before-outcome ordering without relying on D1 contention.
+concurrency:
+  group: historical-rank-v2-write
+  cancel-in-progress: false
+
 jobs:
   replay:
     runs-on: ubuntu-latest
