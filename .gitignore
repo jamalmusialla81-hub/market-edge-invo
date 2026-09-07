@@ -3,3 +3,7 @@ node_modules/
 .dev.vars
 .env
 *.log
+.freqtrade-venv/
+research/freqtrade/smoke/data/
+research/freqtrade/smoke/results/
+research/freqtrade/smoke/user_data/

@@ -1,0 +1,13 @@
+{
+  "dry_run": true,
+  "dry_run_wallet": 1000,
+  "stake_currency": "USDT",
+  "stake_amount": 10,
+  "max_open_trades": 1,
+  "trading_mode": "spot",
+  "exchange": {"name": "binance", "key": "", "secret": "", "pair_whitelist": ["BTC/USDT"]},
+  "pairlists": [{"method": "StaticPairList"}],
+  "entry_pricing": {"price_side": "same", "use_order_book": false},
+  "exit_pricing": {"price_side": "same", "use_order_book": false},
+  "market_edge_research": {"exchange_execution": false, "purpose": "offline installation smoke test only"}
+}
