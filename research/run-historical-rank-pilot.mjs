@@ -51,10 +51,10 @@ async function main() {
     if(!dryRun) await worker({operation:'historical_rank_snapshot_commit',snapshot,candidates:combined});
     // The snapshot is now immutable.  Only then do we inspect the subsequent
     // completed candles to form outcome labels.
-    const outcomes=[];
-    for(const candidate of combined) { const assetRows=frames.get(candidate.asset).rows, position=assetRows.findIndex(row=>row.time>=timestamp); if(position<0)throw new Error(`${candidate.asset} has no next valid execution candle after ${timestamp}`); const target=Rank.resolveCandidate(candidate,assetRows.slice(position)); if(target)outcomes.push({candidate_id:candidate.candidate_id,targets:target,outcome_hash:Rank.hash({candidate_id:candidate.candidate_id,targets:target})}); }
+    const outcomes=[]; let unavailableFuture=0;
+    for(const candidate of combined) { const assetRows=frames.get(candidate.asset).rows, position=assetRows.findIndex(row=>row.time>=timestamp); if(position<0){unavailableFuture++;continue;} const target=Rank.resolveCandidate(candidate,assetRows.slice(position)); if(target)outcomes.push({candidate_id:candidate.candidate_id,targets:target,outcome_hash:Rank.hash({candidate_id:candidate.candidate_id,targets:target})}); else unavailableFuture++; }
     if(!dryRun&&outcomes.length)await worker({operation:'historical_rank_outcome_commit',scan_id:scanId,outcomes});
-    report.scans.push({scan_id:scanId,timestamp,candidates:combined.length,ranked:combined.filter(row=>row.candidate_rank!==null).length,resolved:outcomes.length});
+    report.scans.push({scan_id:scanId,timestamp,candidates:combined.length,ranked:combined.filter(row=>row.candidate_rank!==null).length,resolved:outcomes.length,unresolved_missing_future_cache:unavailableFuture});
     await sleep(100);
   }
   console.log(JSON.stringify(report,null,2));
