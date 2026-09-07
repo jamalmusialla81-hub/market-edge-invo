@@ -106,11 +106,23 @@ export function successfulScan(scan) {
   const coverage = scan?.dataQuality?.coverage;
   return Boolean(scan && scan.status !== 'DATA_UNAVAILABLE' && Number(coverage?.evaluated ?? scan?.universe?.evaluated) > 0);
 }
-function hasGeometry(item) { return Boolean(item && ['long', 'short'].includes(item.direction) && [item.entry, item.stop, item.tp1, item.tp2, item.rr1].every(Number.isFinite)); }
+function hasGeometry(item) {
+  if (!item || !['long', 'short'].includes(item.direction) || ![item.entry, item.stop, item.tp1, item.tp2, item.rr1].every(Number.isFinite) || item.rr1 <= 0) return false;
+  return item.direction === 'long'
+    ? item.stop < item.entry && item.tp1 > item.entry && item.tp2 >= item.tp1
+    : item.stop > item.entry && item.tp1 < item.entry && item.tp2 <= item.tp1;
+}
+function frozenRecommendationSnapshot(scan, trade) {
+  const executable=['EXECUTABLE','VALID'].includes(trade?.user_executability?.status);
+  // The recommendation is an immutable market observation. Position fields
+  // remain exactly null when the user's account cannot execute the geometry.
+  const frozenTrade={...trade,market_edge_recommendation:true,user_executable_at_snapshot:executable};
+  return {scanId:scan.scanId,scannedAt:scan.scannedAt,trade:frozenTrade,dataQuality:scan.dataQuality,universe:scan.universe,market_edge_recommendation:true,user_executable_at_snapshot:executable};
+}
 export async function storeRecommendation(principal, scan, env, fetchImpl, now = Date.now()) {
   const trade = scan?.bestTradeNow;
   if (!hasGeometry(trade)) return null;
-  const body = { principal_id: principal.id, scan_id: clean(scan.scanId, 180), snapshot: { scanId: scan.scanId, scannedAt: scan.scannedAt, trade, dataQuality: scan.dataQuality, universe: scan.universe }, expires_at: new Date(now + 15 * 60_000).toISOString() };
+  const body = { principal_id: principal.id, scan_id: clean(scan.scanId, 180), snapshot: frozenRecommendationSnapshot(scan,trade), expires_at: new Date(now + 15 * 60_000).toISOString() };
   const rows = await supabase(env, fetchImpl, `/rest/v1/scan_recommendations?on_conflict=principal_id,scan_id`, { method: 'POST', headers: { prefer: 'resolution=merge-duplicates,return=representation' }, body: JSON.stringify(body) });
   return Array.isArray(rows) ? rows[0]?.id || null : null;
 }
@@ -124,7 +136,9 @@ export async function acceptTrade(principal, recommendationId, env, fetchImpl) {
   if (!validUuid(recommendationId)) throw accountError('That recommendation is invalid.', 'RECOMMENDATION_INVALID', 400);
   const recommendations = await supabase(env, fetchImpl, `/rest/v1/scan_recommendations?id=eq.${recommendationId}&principal_id=eq.${principal.id}&expires_at=gt.${encodeURIComponent(new Date().toISOString())}&select=*`, { method: 'GET' });
   const recommendation = Array.isArray(recommendations) ? recommendations[0] : null;
-  if (!recommendation?.snapshot?.trade) throw accountError('This setup is no longer current. Rescan before taking it.', 'RECOMMENDATION_EXPIRED', 409);
+  // Account executability is deliberately not an acceptance condition. A
+  // valid market recommendation may still be journalled with null sizing.
+  if (!hasGeometry(recommendation?.snapshot?.trade)) throw accountError('This setup is no longer current. Rescan before taking it.', 'RECOMMENDATION_EXPIRED', 409);
   const existing = await supabase(env, fetchImpl, `/rest/v1/user_trades?user_id=eq.${principal.id}&recommendation_id=eq.${recommendationId}&select=*`, { method: 'GET' });
   if (Array.isArray(existing) && existing[0]) return { trade: existing[0], duplicate: true };
   const row = { user_id: principal.id, source: 'MARKET_EDGE', scan_id: recommendation.scan_id, recommendation_id: recommendation.id, snapshot: recommendation.snapshot, status: 'OPEN' };

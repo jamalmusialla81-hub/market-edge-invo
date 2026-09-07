@@ -52,15 +52,40 @@ test('an invalid entry reconstruction is the one current-state condition that bl
   assert.equal(view.takeTradeEnabled, false);
 });
 
-test('market geometry remains visible while user-specific sizing blocks a journal action', () => {
+test('materially invalid price ordering is rejected before it can become a journal recommendation', () => {
+  const invalid = structuredClone(fixtures.BEST_TRADE_NOW);
+  invalid.bestTradeNow.stop = invalid.bestTradeNow.entry - 1;
+  assert.throws(() => parseScanResponse(invalid), /BEST_TRADE_NOW requires valid current geometry/);
+});
+
+test('market geometry remains journal-eligible while user-specific sizing is blocked', () => {
   const constrained = structuredClone(fixtures.BEST_TRADE_NOW);
   constrained.bestTradeNow.position = null;
-  constrained.bestTradeNow.user_executability = {status: 'CONSTRAINT', reason: 'Minimum order size exceeds your risk allowance.'};
+  constrained.bestTradeNow.user_executability = {status: 'BELOW_MINIMUM_ORDER', reason: 'ACCOUNT/MINIMUM SIZE CONSTRAINT'};
+  constrained.bestTradeNow.market_geometry = 'COMPLETE';
+  constrained.bestTradeNow.market_edge_recommendation = true;
+  constrained.bestTradeNow.journal_eligible = true;
+  constrained.bestTradeNow.user_executable_at_snapshot = false;
   const view = getTradePresentation(parseScanResponse(constrained), { now: constrained.scannedAt + 1 });
   assert.equal(view.kind, 'TRADE');
   assert.equal(view.showTakeTrade, true);
-  assert.equal(view.takeTradeEnabled, false);
-  assert.equal(view.executabilityReason, 'Minimum order size exceeds your risk allowance.');
+  assert.equal(view.takeTradeEnabled, true);
+  assert.equal(view.userExecutable, false);
+  assert.equal(view.marketValidity, 'COMPLETE');
+  assert.equal(view.journalEligible, true);
+  assert.equal(view.executabilityReason, 'ACCOUNT/MINIMUM SIZE CONSTRAINT');
+});
+
+test('a strict WAIT remains journal-eligible when account sizing is blocked', () => {
+  const constrained = structuredClone(fixtures.BEST_TRADE_NOW);
+  constrained.bestTradeNow.position = null;
+  constrained.bestTradeNow.entry_status = 'EXTENDED';
+  constrained.bestTradeNow.strict_verdict = 'WAIT';
+  constrained.bestTradeNow.user_executability = {status: 'BLOCKED', reason: 'Insufficient margin at selected maximum leverage'};
+  const view = getTradePresentation(parseScanResponse(constrained), { now: constrained.scannedAt + 1 });
+  assert.equal(view.showTakeTrade, true);
+  assert.equal(view.takeTradeEnabled, true);
+  assert.equal(view.userExecutable, false);
 });
 
 test('expires acceptance without changing the Worker trade data', () => {

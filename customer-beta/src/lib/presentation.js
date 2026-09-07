@@ -23,8 +23,8 @@ export function getTradePresentation(scan, { now = Date.now(), alreadyAccepted =
   // strict verdict remains context only. A market can be legitimate while a
   // specific account cannot meet its minimum position/risk constraints.
   const marketReady = ['BEST_TRADE_NOW', 'TRADE_READY'].includes(scan.status) && hasValidGeometry(trade) && trade.entryStatus !== 'INVALID' && trade.entryQuality !== 'INVALID';
-  const actionable = marketReady && hasCompleteTrade(trade);
-  const executabilityReason = !marketReady ? 'The Worker no longer considers this market plan current.' : !actionable ? trade?.userExecutability?.reason || 'Position sizing is unavailable under your saved risk settings.' : null;
+  const userExecutable = marketReady && hasCompleteTrade(trade) && (!trade?.userExecutability || ['EXECUTABLE', 'VALID'].includes(trade.userExecutability.status || ''));
+  const executabilityReason = !marketReady ? 'The Worker no longer considers this market plan current.' : !userExecutable ? trade?.userExecutability?.reason || 'Position sizing is unavailable under your saved risk settings.' : null;
   return {
     kind: marketReady ? 'TRADE' : focus ? 'OPPORTUNITY' : 'EMPTY_RESULT',
     label: STATUS_LABELS[scan.status],
@@ -32,8 +32,13 @@ export function getTradePresentation(scan, { now = Date.now(), alreadyAccepted =
     trade,
     opportunity,
     showTakeTrade: marketReady,
-    takeTradeEnabled: actionable && isScanFresh(scan, now) && !alreadyAccepted,
+    // Journalling requires a fresh, market-valid Worker recommendation—not a
+    // user-specific minimum order or account-size result.
+    takeTradeEnabled: marketReady && isScanFresh(scan, now) && !alreadyAccepted,
     executabilityReason,
+    marketValidity: marketReady ? 'COMPLETE' : 'INCOMPLETE',
+    journalEligible: marketReady,
+    userExecutable,
     // The Worker rank is preserved; browser code never substitutes a trade.
     showSeparateOpportunity: Boolean(marketReady && opportunity && opportunity.scanSnapshotId !== trade?.scanSnapshotId)
   };

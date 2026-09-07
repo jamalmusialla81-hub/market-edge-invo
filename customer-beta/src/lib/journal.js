@@ -37,8 +37,12 @@ export function saveAcceptedTrade(records, scan) {
   const record = {
     id, recommendationId: recommendation, status: 'OPEN', source: 'MARKET EDGE', storage: STORAGE_MODE,
     acceptedAt: Date.now(), scanId: scan.scanId, scannedAt: scan.scannedAt,
+    // Preserve the exact normalized Worker recommendation. New Worker
+    // responses already include immutable market/executability metadata;
+    // metadata below only provides the equivalent record-level audit trail
+    // for older response versions.
     snapshot: clone(trade), rawWorkerResponse: clone(scan.raw),
-    metadata: clone({ scanId: scan.scanId, scannedAt: scan.scannedAt, scanSnapshotId: trade.scanSnapshotId || null, universe: scan.universe, dataQuality: scan.dataQuality })
+    metadata: clone({ scanId: scan.scanId, scannedAt: scan.scannedAt, scanSnapshotId: trade.scanSnapshotId || null, universe: scan.universe, dataQuality: scan.dataQuality, marketEdgeRecommendation: true, userExecutableAtSnapshot: ['EXECUTABLE', 'VALID'].includes(trade.userExecutability?.status || '') })
   };
   const next = [record, ...records];
   write(next);

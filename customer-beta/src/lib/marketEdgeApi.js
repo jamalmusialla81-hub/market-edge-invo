@@ -37,7 +37,7 @@ function parseExecutability(value, path) {
   if (value == null) return null;
   if (!isRecord(value)) invalid(`${path} must be an object`);
   const status = nullableText(value.status, `${path}.status`);
-  if (status && !['VALID', 'CONSTRAINT'].includes(status)) invalid(`${path}.status is unsupported`);
+  if (status && !['VALID', 'CONSTRAINT', 'EXECUTABLE', 'BELOW_MINIMUM_ORDER', 'BLOCKED'].includes(status)) invalid(`${path}.status is unsupported`);
   return { status, reason: nullableText(value.reason, `${path}.reason`) };
 }
 
@@ -66,7 +66,7 @@ function parseTrade(value, path) {
     setupQuality: nullableNumber(value.setup_quality, `${path}.setup_quality`), entryStatus, entryQuality: nullableText(value.entry_quality, `${path}.entry_quality`), entryQualityScore: nullableNumber(value.entry_quality_score, `${path}.entry_quality_score`),
     strictVerdict: nullableText(value.strict_verdict, `${path}.strict_verdict`), quantScore: nullableNumber(value.quant_score, `${path}.quant_score`),
     mlScore: nullableNumber(value.ml_score, `${path}.ml_score`), combinedScore: nullableNumber(value.combined_score, `${path}.combined_score`),
-    ml, position: parsePosition(value.position), userExecutability: parseExecutability(value.user_executability, `${path}.user_executability`), regime: nullableText(value.regime, `${path}.regime`),
+    ml, position: parsePosition(value.position), marketGeometry: nullableText(value.market_geometry, `${path}.market_geometry`), marketEdgeRecommendation: value.market_edge_recommendation === true, journalEligible: value.journal_eligible === true, userExecutability: parseExecutability(value.user_executability, `${path}.user_executability`), userExecutableAtSnapshot: value.user_executable_at_snapshot === true, regime: nullableText(value.regime, `${path}.regime`),
     reasoning: nullableText(value.reasoning, `${path}.reasoning`), caution: nullableText(value.caution, `${path}.caution`), weakerEvidence: Array.isArray(value.weaker_evidence) ? value.weaker_evidence.filter(item => typeof item === 'string') : [], structuralInvalidation: nullableText(value.structural_invalidation, `${path}.structural_invalidation`),
     sourceCount: nullableNumber(value.source_count, `${path}.source_count`), dataQuality: nullableText(value.data_quality, `${path}.data_quality`),
     scanSnapshotId: nullableText(value.scan_snapshot_id, `${path}.scan_snapshot_id`), raw: value
@@ -132,7 +132,10 @@ export function hasCompleteTrade(trade) {
   return Boolean(trade && ['long', 'short'].includes(trade.direction) && [trade.entry, trade.stop, trade.tp1, trade.tp2, trade.rr1, trade.position?.notional, trade.position?.margin, trade.position?.leverage, trade.position?.riskAmount].every(isFiniteNumber));
 }
 export function hasValidGeometry(trade) {
-  return Boolean(trade && ['long', 'short'].includes(trade.direction) && [trade.entry, trade.stop, trade.tp1, trade.tp2, trade.rr1].every(isFiniteNumber));
+  if (!trade || !['long', 'short'].includes(trade.direction) || ![trade.entry, trade.stop, trade.tp1, trade.tp2, trade.rr1].every(isFiniteNumber) || trade.rr1 <= 0) return false;
+  return trade.direction === 'long'
+    ? trade.stop < trade.entry && trade.tp1 > trade.entry && trade.tp2 >= trade.tp1
+    : trade.stop > trade.entry && trade.tp1 < trade.entry && trade.tp2 <= trade.tp1;
 }
 
 function authHeaders(accessToken) { return accessToken ? { authorization: `Bearer ${accessToken}` } : {}; }

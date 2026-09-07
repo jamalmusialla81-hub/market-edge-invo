@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { API_URL, MarketEdgeApiError, closeCloudTrade, getAccount, getCloudTrades, scanMarkets, takeCloudTrade } from './lib/marketEdgeApi.js';
+import { API_URL, MarketEdgeApiError, closeCloudTrade, getAccount, getCloudTrades, hasValidGeometry, scanMarkets, takeCloudTrade } from './lib/marketEdgeApi.js';
 import { authConfigured, resetPassword, restoreSession, signIn, signOut, signUp, subscribeAuth } from './lib/auth.js';
 import { hasJournalAcceptance, loadJournal, removeLocalTrade, saveAcceptedTrade } from './lib/journal.js';
 import { getTradePresentation, isScanFresh, STATUS_LABELS } from './lib/presentation.js';
@@ -61,7 +61,7 @@ function LevelMap({ trade }) {
 
 function TradeCard({ scan, onTake, taken, onSettings }) {
   const presentation = getTradePresentation(scan, { alreadyAccepted: taken });
-  const { trade, opportunity, focus, showTakeTrade, takeTradeEnabled, executabilityReason, showSeparateOpportunity } = presentation;
+  const { trade, opportunity, focus, showTakeTrade, takeTradeEnabled, executabilityReason, userExecutable, showSeparateOpportunity } = presentation;
   if (!scan) return <section className="trade-card neutral-card"><div className="card-kicker">Best trade now</div><h1>Run a real market scan</h1><p>Market Edge will only show levels, scores and sizing returned by the Worker. It never creates browser-side trading data.</p><div className="empty-pills"><span>Live Worker data</span><span>Manual execution</span><span>No exchange connection</span></div></section>;
   if (scan.status === 'DATA_UNAVAILABLE') return <section className="trade-card neutral-card"><div className="card-row"><div><div className="card-kicker">Market Edge result</div><h1>Data unavailable</h1></div><Badge status={scan.status}/></div><p>Live data did not pass the Worker checks, so no recommendation was generated. Try another scan later.</p><Diagnostic scan={scan}/></section>;
   if (!focus) return <section className="trade-card neutral-card"><div className="card-row"><div><div className="card-kicker">Market Edge result</div><h1>No valid setup</h1></div><Badge status={scan.status}/></div><p>The Worker completed the scan but no trade met the current quality and risk requirements.</p><ScanFootnote scan={scan}/></section>;
@@ -83,11 +83,12 @@ function TradeCard({ scan, onTake, taken, onSettings }) {
       <Field label="R : R" value={focus.rr1 ? `${tradeNumber(focus.rr1)}R` : '—'} />
     </div>{focus.entryZone && <div className="entry-zone"><span>Worker entry zone</span><b>{money(focus.entryZone.low)} — {money(focus.entryZone.high)}</b></div>}{focus.entryQuality && <div className="entry-zone"><span>Entry quality</span><b>{focus.entryQuality}</b></div>}</>}
     <div className="trade-actions">
-      {showTakeTrade && <button className="take-button" type="button" onClick={onTake} disabled={!takeTradeEnabled}>{taken ? 'Trade taken ✓' : takeTradeEnabled ? 'Take trade' : executabilityReason ? 'Take trade unavailable' : 'Scan expired — rescan'}</button>}
+      {showTakeTrade && <button className="take-button" type="button" onClick={onTake} disabled={!takeTradeEnabled}>{taken ? 'Trade taken ✓' : takeTradeEnabled ? 'Take trade' : 'Scan expired — rescan'}</button>}
       {showTakeTrade && <CopyInvoSetup trade={trade} disabled={!takeTradeEnabled}/>}
       <button className="secondary-button" type="button" onClick={onSettings}>Risk settings</button>
-      <small>{takeTradeEnabled ? 'Records your manual confirmation only. No Invo order is sent.' : executabilityReason || (trade ? 'This frozen scan is no longer current. Rescan before recording a trade.' : 'A complete current Worker plan is required before accepting a trade.')}</small>
+      <small>{takeTradeEnabled ? 'Records this exact market-valid recommendation only. No Invo order is sent.' : executabilityReason || (trade ? 'This frozen scan is no longer current. Rescan before recording a trade.' : 'A complete current Worker plan is required before accepting a trade.')}</small>
     </div>
+    {showTakeTrade && !userExecutable && <div className="execution-warning" role="status"><b>User execution blocked</b><span>{executabilityReason || 'Account or minimum size constraint.'}</span><small>You can still save this market-valid recommendation to My Trades. Position size and margin remain unavailable; no order is sent.</small></div>}
     <ScanFootnote scan={scan}/>
     {showSeparateOpportunity && <div className="opportunity-note"><span>Highest-quality opportunity</span><b>{opportunity.asset} {opportunity.direction?.toUpperCase()} · {STATUS_LABELS[opportunity.entryStatus] || 'WAIT'}</b><small>Best Trade Now remains the actionable Worker result above.</small></div>}
   </section>;
@@ -119,7 +120,10 @@ function SupportingDetails({ scan, selected }) {
 function RiskCard({ scan, selected }) {
   const trade = selected || scan?.bestTradeNow || scan?.bestOpportunity;
   const position = trade?.position;
-  return <section className="risk-card"><div className="section-heading"><span>Server-calculated execution{trade?.asset ? ` · ${trade.asset}` : ''}</span><small>Manual execution only</small></div>{position ? <div className="risk-grid"><Field label="Position size" value={money(position.notional)} /><Field label="Margin" value={money(position.margin)} /><Field label="Leverage" value={position.leverage == null ? '—' : `${tradeNumber(position.leverage)}×`} /><Field label="Risk" value={money(position.riskAmount)} /><Field label="Allocation" value={position.allocation == null ? '—' : percent(position.allocation)} /><Field label="Est. costs" value={money(position.estimatedCosts)} /></div> : <div className="details-empty">Position sizing will appear only when the Worker returns complete trade geometry.</div>}</section>;
+  const geometryComplete = hasValidGeometry(trade);
+  const userExecutable = (!trade?.userExecutability || ['EXECUTABLE', 'VALID'].includes(trade.userExecutability.status || '')) && Boolean(position);
+  const blockedReason = trade?.userExecutability?.reason || 'Position sizing is unavailable under your saved risk settings.';
+  return <section className="risk-card"><div className="section-heading"><span>Server-calculated execution{trade?.asset ? ` · ${trade.asset}` : ''}</span><small>Manual execution only</small></div>{geometryComplete && <div className={`execution-state ${userExecutable ? 'executable' : 'blocked'}`}><b>Market geometry: complete</b><span>{userExecutable ? 'User execution: executable' : `User execution: blocked — ${blockedReason}`}</span></div>}{position ? <div className="risk-grid"><Field label="Position size" value={money(position.notional)} /><Field label="Margin" value={money(position.margin)} /><Field label="Leverage" value={position.leverage == null ? '—' : `${tradeNumber(position.leverage)}×`} /><Field label="Risk" value={money(position.riskAmount)} /><Field label="Allocation" value={position.allocation == null ? '—' : percent(position.allocation)} /><Field label="Est. costs" value={money(position.estimatedCosts)} /></div> : <div className="details-empty">{geometryComplete ? <>Market geometry: complete.<br/>User execution: blocked — {blockedReason}<br/>No position size, margin, or leverage has been invented.</> : 'Position sizing can only be considered after the Worker returns complete market geometry.'}</div>}</section>;
 }
 
 function ScanCoverage({ scan }) {

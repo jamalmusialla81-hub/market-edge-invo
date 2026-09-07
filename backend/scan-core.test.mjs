@@ -40,6 +40,18 @@ assert.equal(result.bestOpportunity.ml.status,'NOT_APPLICABLE');
 assert.ok(result.bestOpportunity.position);
 assert.equal(result.bestOpportunity.position.risk_amount,10);
 
+// Account sizing is a presentation/execution constraint only. A small
+// balance keeps the legitimate market geometry ranked, with no fabricated
+// position fields and an explicit Worker-owned blocked status.
+const constrainedResult=await runLiveScan({fetchImpl:fixtureFetch,now:NOW,settings:{balance:7,riskPct:.01,maxLeverage:10,maxExposurePct:1}});
+assert.equal(constrainedResult.status,'BEST_TRADE_NOW');
+assert.equal(constrainedResult.bestTradeNow.market_geometry,'COMPLETE');
+assert.equal(constrainedResult.bestTradeNow.market_edge_recommendation,true);
+assert.equal(constrainedResult.bestTradeNow.journal_eligible,true);
+assert.equal(constrainedResult.bestTradeNow.position,null);
+assert.equal(constrainedResult.bestTradeNow.user_executability.status,'BELOW_MINIMUM_ORDER');
+assert.equal(constrainedResult.bestTradeNow.user_executable_at_snapshot,false);
+
 // Service-binding fan-out results are already Worker-normalized. A higher
 // scored row with invalid geometry must be skipped in favour of the strongest
 // later row with a complete structural plan.
