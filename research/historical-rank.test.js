@@ -40,3 +40,17 @@ test('snapshot hash is deterministic and candidate rank only applies to valid ge
   const left=Rank.hash({b:2,a:1}),right=Rank.hash({a:1,b:2});
   assert.equal(left,right);
 });
+
+test('runner finalizes real historical candidate rows using combined_score',()=>{
+  const rows=[
+    {candidate_id:'low',asset:'BTC',strategy:'TREND CONTINUATION',direction:'long',valid_current_geometry:true,combined_score:72,targets:{status:'PENDING_OUTCOME'},candidate_hash:null},
+    {candidate_id:'high',asset:'ETH',strategy:'BREAKOUT + RETEST',direction:'short',valid_current_geometry:true,combined_score:81,targets:{status:'PENDING_OUTCOME'},candidate_hash:null},
+    {candidate_id:'rejected',asset:'XRP',strategy:'RANGE REVERSION',direction:'long',valid_current_geometry:false,combined_score:null,targets:{status:'PENDING_OUTCOME'},candidate_hash:null}
+  ];
+  const finalized=Rank.finalizeCandidates(rows);
+  assert.equal(finalized.length,3);
+  assert.equal(finalized.find(row=>row.candidate_id==='high').candidate_rank,1);
+  assert.equal(finalized.find(row=>row.candidate_id==='low').candidate_rank,2);
+  assert.equal(finalized.find(row=>row.candidate_id==='rejected').candidate_rank,undefined);
+  assert.ok(finalized.every(row=>row.candidate_count===3&&typeof row.candidate_hash==='string'));
+});

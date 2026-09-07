@@ -52,6 +52,16 @@ function snapshot({scanId,timestamp,universe,sourceHash,cadenceMs,candidates}) {
   const value={scan_id:scanId,scan_timestamp:timestamp,data_timestamp:timestamp,universe_mode:'HISTORICAL_DATA_UNIVERSE_PROXY',eligible_universe:universe,engine_version:VERSION,strategy_version:'quant-engine-shared',quant_version:'quant-engine-shared',ml_version:'ML_NOT_AVAILABLE_FOR_HISTORICAL_TIMESTAMP',feature_version:Features.VERSION,source_dataset_hash:sourceHash,scan_cadence_ms:cadenceMs,candidate_count:candidates.length};
   return {...value,snapshot_hash:hash(value)};
 }
+// Runner-side ordering is intentionally based on the frozen historical row's
+// combined_score.  In this historical dataset ML is unavailable by design, so
+// candidateRows sets that field to the authoritative quant score rather than
+// manufacturing a separate combined value.
+function finalizeCandidates(rows) {
+  const combined=Array.isArray(rows)?rows.slice():[];
+  combined.filter(row=>row.valid_current_geometry).sort((a,b)=>(b.combined_score??-Infinity)-(a.combined_score??-Infinity)||String(a.asset).localeCompare(String(b.asset))||String(a.strategy).localeCompare(String(b.strategy))||String(a.direction).localeCompare(String(b.direction))).forEach((row,index)=>{row.candidate_rank=index+1;});
+  combined.forEach(row=>{row.candidate_count=combined.length;row.candidate_hash=hash({...row,targets:undefined,candidate_hash:undefined});});
+  return combined;
+}
 function resolveCandidate(candidate,future) {
   if (!candidate?.valid_current_geometry) return null;
   const unresolved=(reason,gap=null)=>({status:'UNRESOLVED_DATA_GAP',reason,next_valid_candle_gap_ms:gap,available_bars:Array.isArray(future)?future.length:0,execution:'No execution or outcome was inferred across a missing/incomplete cached 5m window'});
@@ -75,4 +85,4 @@ function resolveCandidate(candidate,future) {
   const costR=.0016/(distance/entry);
   return {status:'RESOLVED',TP1_BEFORE_SL:tp1Hit,FINAL_R:finalR-costR,MFE:mfe,MAE:mae,STOP_HIT:stopHit,TP2_HIT:tp2Hit,duration_bars:bars,BREAKOUT_FAILURE:candidate.strategy==='BREAKOUT + RETEST'&&!tp1Hit,execution:'next-valid 5m open with directional slippage; conservative stop-first same-candle ordering; 0.16% round-trip cost'};
 }
-module.exports={VERSION,ASSETS,BASE_MS,OUTCOME_BARS,SETTINGS,hash,geometry,preEntryFeatures,candidateRows,snapshot,resolveCandidate};
+module.exports={VERSION,ASSETS,BASE_MS,OUTCOME_BARS,SETTINGS,hash,geometry,preEntryFeatures,candidateRows,snapshot,finalizeCandidates,resolveCandidate};

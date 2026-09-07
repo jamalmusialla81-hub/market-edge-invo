@@ -56,9 +56,9 @@ async function main() {
   const loaded=await Promise.all(Rank.ASSETS.map(async asset=>({asset,rows:await candles(asset,start,end)})));
   for(const {asset,rows} of loaded) { if(rows.length<17568+Rank.OUTCOME_BARS)throw new Error(`${asset} cached candles are insufficient for rank pilot`); frames.set(asset,{rows,derived:Replay.derived(rows)}); }
   for(const {timestamp,scanId} of remaining) {
-    for(const asset of Rank.ASSETS) { const source=frames.get(asset),snapshot=Replay.cachedSnapshot(source.derived,timestamp); if(!Replay.readiness(snapshot).ready)throw new Error(`${asset} failed completed-candle MTF readiness at ${timestamp}`); combined.push(...Rank.candidateRows({scanId,timestamp,asset,timeframes:snapshot.timeframes,sourceHash,instrument:asset})); }
-    combined.filter(row=>row.valid_current_geometry).sort((a,b)=>(b.combined_score??-Infinity)-(a.combined_score??-Infinity)||a.asset.localeCompare(b.asset)||a.strategy.localeCompare(b.strategy)||a.direction.localeCompare(b.direction)).forEach((row,index)=>{row.candidate_rank=index+1;});
-    combined.forEach(row=>{row.candidate_count=combined.length; row.candidate_hash=Rank.hash({...row,targets:undefined,candidate_hash:undefined});});
+    const assetCandidates=[];
+    for(const asset of Rank.ASSETS) { const source=frames.get(asset),snapshot=Replay.cachedSnapshot(source.derived,timestamp); if(!Replay.readiness(snapshot).ready)throw new Error(`${asset} failed completed-candle MTF readiness at ${timestamp}`); assetCandidates.push(...Rank.candidateRows({scanId,timestamp,asset,timeframes:snapshot.timeframes,sourceHash,instrument:asset})); }
+    const combined=Rank.finalizeCandidates(assetCandidates);
     const snapshot=Rank.snapshot({scanId,timestamp,universe:Rank.ASSETS,sourceHash,cadenceMs:CADENCE,candidates:combined});
     if(!dryRun) await worker({operation:'historical_rank_snapshot_commit',snapshot,candidates:combined});
     // The snapshot is now immutable.  Only then do we inspect the subsequent
