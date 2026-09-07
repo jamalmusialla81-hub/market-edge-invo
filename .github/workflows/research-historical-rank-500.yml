@@ -1,0 +1,97 @@
+name: Historical Rank V2 — 500 Scan Continuation
+
+on:
+  workflow_run:
+    workflows: ['Historical Rank V2 — 100 Scan Checkpoint']
+    types: [completed]
+
+permissions:
+  contents: read
+
+# This workflow is intentionally chained, not scheduled.  It can start only
+# after the 100-scan workflow is green, whose final audit fails closed on an
+# incomplete checkpoint or integrity failure.
+concurrency:
+  group: historical-rank-v2-write
+  cancel-in-progress: false
+
+jobs:
+  gate:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main'
+    name: Re-audit completed 100-scan checkpoint before continuation
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: 8ea7796a8fb13ffb612245e8a08a55d6
+      MARKET_EDGE_D1_DATABASE_ID: 39a4082e-41a4-45e9-9b76-99cf10eaca01
+      HISTORICAL_RANK_EXPECTED_SCANS: '100'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Fail closed unless the 100-scan integrity audit passes
+        run: node research/historical-rank-report.mjs
+
+  replay:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main'
+    needs: gate
+    name: Historical chunk ${{ matrix.batch }} (offset ${{ matrix.batch }} × 4)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      # Scan/candidate IDs are independent and immutable, but one writer is
+      # deliberately safer for D1 rate limits and snapshot→outcome auditing.
+      max-parallel: 1
+      matrix:
+        batch: [25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124]
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: 8ea7796a8fb13ffb612245e8a08a55d6
+      MARKET_EDGE_D1_DATABASE_ID: 39a4082e-41a4-45e9-9b76-99cf10eaca01
+      MARKET_EDGE_RESEARCH_TOKEN: ${{ secrets.MARKET_EDGE_RESEARCH_TOKEN }}
+      HISTORICAL_RANK_PILOT_SCANS: '4'
+      HISTORICAL_RANK_BATCH: ${{ matrix.batch }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Freeze one deterministic continuation chunk, then resolve only its later outcomes
+        run: |
+          export HISTORICAL_RANK_START_INDEX=$((HISTORICAL_RANK_BATCH * 4))
+          node research/run-historical-rank-pilot.mjs
+
+  audit:
+    if: ${{ always() && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main' }}
+    needs: replay
+    name: Final 500-scan immutable audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: 8ea7796a8fb13ffb612245e8a08a55d6
+      MARKET_EDGE_D1_DATABASE_ID: 39a4082e-41a4-45e9-9b76-99cf10eaca01
+      HISTORICAL_RANK_EXPECTED_SCANS: '500'
+      HISTORICAL_RANK_REPORT_FILE: historical-rank-v2-500-audit.json
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Produce the final checkpoint audit only — never train a model
+        run: node research/historical-rank-report.mjs
+      - name: Persist final research audit artifact
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: historical-rank-v2-500-audit
+          path: historical-rank-v2-500-audit.json
+          if-no-files-found: error
+          retention-days: 90
