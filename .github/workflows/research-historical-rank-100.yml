@@ -2,6 +2,16 @@ name: Historical Rank V2 — 100 Scan Checkpoint
 
 on:
   workflow_dispatch:
+    inputs:
+      wait_for_d1_reset:
+        description: 'Wait for the next UTC D1 daily-limit reset before replaying'
+        required: false
+        type: boolean
+        default: false
+  # A failed/incomplete checkpoint caused by D1's daily free-tier read budget
+  # resumes unattended after the next reset. Completed scan IDs are skipped.
+  schedule:
+    - cron: '10 0 * * *'
 
 permissions:
   contents: read
@@ -15,7 +25,24 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  wait_for_d1_reset:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.wait_for_d1_reset }}
+    name: Wait for the D1 daily-limit reset
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - name: Wait until shortly after midnight UTC
+        shell: bash
+        run: |
+          now=$(date -u +%s)
+          next=$(date -u -d 'tomorrow 00:01 UTC' +%s)
+          delay=$((next - now))
+          echo "D1 free-tier row-read quota reset wait: ${delay}s"
+          sleep "$delay"
+
   replay:
+    needs: [wait_for_d1_reset]
+    if: ${{ always() }}
     name: Historical chunk ${{ matrix.batch }} (offset ${{ matrix.start_index }})
     runs-on: ubuntu-latest
     timeout-minutes: 15
