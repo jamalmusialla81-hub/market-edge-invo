@@ -32,8 +32,13 @@ function candidateRows({scanId,timestamp,asset,timeframes,sourceHash,instrument=
   Replay.assertNoLookahead(timeframes,timestamp);
   const candidates=Quant.evaluateSetupCandidates({timeframes,settings:SETTINGS});
   const evaluated=candidates.map((candidate,index) => {
-    const plan=geometry(candidate), features=preEntryFeatures(timeframes,timestamp,candidate), quant=finite(candidate.setupQuality ?? candidate.quality), valid=plan.valid;
-    return {candidate_id:`hrp1-${hash([scanId,asset,index,candidate.strategy,candidate.direction,plan.entry,plan.stop])}`,asset,invo_instrument:instrument,direction:candidate.direction||null,strategy:candidate.strategy||null,reference_price:finite(candidate.entry),entry:plan.entry,stop:plan.stop,tp1:plan.tp1,tp2:plan.tp2,rr:plan.rr,setup_quality:quant,entry_quality:candidate.entryQuality||null,quant_score:quant,ml_applicability:'ML_NOT_AVAILABLE_FOR_HISTORICAL_TIMESTAMP',ml_raw_score:null,combined_score:quant,regime:candidate.regime||'UNCLASSIFIED',feature_json:features,feature_hash:hash(features),valid_current_geometry:valid,invalidation_reason:valid?null:(candidate.reason||'Candidate did not supply valid current geometry'),candidate_rank:null,candidate_count:0,targets:{status:'PENDING_OUTCOME'},candidate_hash:null};
+    // evaluateSetupCandidates keeps candidateKey when an early rejection does
+    // not retain strategy/direction. Recover only that original identity; no
+    // score, geometry, or decision is reconstructed locally.
+    const divider=String(candidate.candidateKey||'').lastIndexOf(':'), fallbackStrategy=divider>0?candidate.candidateKey.slice(0,divider):null, fallbackDirection=divider>0?candidate.candidateKey.slice(divider+1):null;
+    const strategy=candidate.strategy||fallbackStrategy, direction=candidate.direction||fallbackDirection, identified={...candidate,strategy,direction};
+    const plan=geometry(identified), features=preEntryFeatures(timeframes,timestamp,identified), quant=finite(candidate.setupQuality ?? candidate.quality), valid=plan.valid;
+    return {candidate_id:`hrp1-${hash([scanId,asset,index,strategy,direction,plan.entry,plan.stop])}`,asset,invo_instrument:instrument,direction:direction||null,strategy:strategy||null,reference_price:finite(candidate.entry),entry:plan.entry,stop:plan.stop,tp1:plan.tp1,tp2:plan.tp2,rr:plan.rr,setup_quality:quant,entry_quality:candidate.entryQuality||null,quant_score:quant,ml_applicability:'ML_NOT_AVAILABLE_FOR_HISTORICAL_TIMESTAMP',ml_raw_score:null,combined_score:quant,regime:candidate.regime||'UNCLASSIFIED',feature_json:features,feature_hash:hash(features),valid_current_geometry:valid,invalidation_reason:valid?null:(candidate.reason||'Candidate did not supply valid current geometry'),candidate_rank:null,candidate_count:0,targets:{status:'PENDING_OUTCOME'},candidate_hash:null};
   });
   const ranked=evaluated.filter(row=>row.valid_current_geometry).sort((a,b)=>(b.quant_score??-Infinity)-(a.quant_score??-Infinity)||a.strategy.localeCompare(b.strategy)||a.direction.localeCompare(b.direction));
   ranked.forEach((row,index)=>{row.candidate_rank=index+1;});
