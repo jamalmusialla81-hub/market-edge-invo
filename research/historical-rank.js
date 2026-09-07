@@ -6,8 +6,9 @@
 const Quant = require('../quant-engine.js');
 const Replay = require('../replay-engine.js');
 const Features = require('./feature-engine.js');
+const Sequences = require('./candle-sequence.js');
 
-const VERSION = 'HISTORICAL-RANK-PILOT-V1';
+const VERSION = 'HISTORICAL-RANK-PILOT-V2';
 const ASSETS = ['BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'LTC'];
 const BASE_MS = 300000;
 const OUTCOME_BARS = 288;
@@ -30,6 +31,8 @@ function preEntryFeatures(timeframes,timestamp,candidate) {
 function candidateRows({scanId,timestamp,asset,timeframes,sourceHash,instrument=null}) {
   if (!ASSETS.includes(asset)) throw new Error('Unsupported historical rank asset');
   Replay.assertNoLookahead(timeframes,timestamp);
+  const sequence=Sequences.build(timeframes,timestamp);
+  Sequences.assertNoFuture(sequence,timestamp);
   const candidates=Quant.evaluateSetupCandidates({timeframes,settings:SETTINGS});
   const evaluated=candidates.map((candidate,index) => {
     // evaluateSetupCandidates keeps candidateKey when an early rejection does
@@ -38,7 +41,7 @@ function candidateRows({scanId,timestamp,asset,timeframes,sourceHash,instrument=
     const divider=String(candidate.candidateKey||'').lastIndexOf(':'), fallbackStrategy=divider>0?candidate.candidateKey.slice(0,divider):null, fallbackDirection=divider>0?candidate.candidateKey.slice(divider+1):null;
     const strategy=candidate.strategy||fallbackStrategy, direction=candidate.direction||fallbackDirection, identified={...candidate,strategy,direction};
     const plan=geometry(identified), features=preEntryFeatures(timeframes,timestamp,identified), quant=finite(candidate.setupQuality ?? candidate.quality), valid=plan.valid;
-    return {candidate_id:`hrp1-${hash([scanId,asset,index,strategy,direction,plan.entry,plan.stop])}`,asset,invo_instrument:instrument,direction:direction||null,strategy:strategy||null,reference_price:finite(candidate.entry),entry:plan.entry,stop:plan.stop,tp1:plan.tp1,tp2:plan.tp2,rr:plan.rr,setup_quality:quant,entry_quality:candidate.entryQuality||null,quant_score:quant,ml_applicability:'ML_NOT_AVAILABLE_FOR_HISTORICAL_TIMESTAMP',ml_raw_score:null,combined_score:quant,regime:candidate.regime||'UNCLASSIFIED',feature_json:features,feature_hash:hash(features),valid_current_geometry:valid,invalidation_reason:valid?null:(candidate.reason||'Candidate did not supply valid current geometry'),candidate_rank:null,candidate_count:0,targets:{status:'PENDING_OUTCOME'},candidate_hash:null};
+    return {candidate_id:`hrp2-${hash([scanId,asset,index,strategy,direction,plan.entry,plan.stop])}`,timestamp,asset,invo_instrument:instrument,direction:direction||null,strategy:strategy||null,reference_price:finite(candidate.entry),entry:plan.entry,stop:plan.stop,tp1:plan.tp1,tp2:plan.tp2,rr:plan.rr,setup_quality:quant,entry_quality:candidate.entryQuality||null,quant_score:quant,ml_applicability:'ML_NOT_AVAILABLE_FOR_HISTORICAL_TIMESTAMP',ml_raw_score:null,combined_score:quant,regime:candidate.regime||'UNCLASSIFIED',feature_json:features,feature_hash:hash(features),sequence_json:sequence,sequence_hash:hash(sequence),sequence_version:Sequences.VERSION,valid_current_geometry:valid,invalidation_reason:valid?null:(candidate.reason||'Candidate did not supply valid current geometry'),candidate_rank:null,candidate_count:0,targets:{status:'PENDING_OUTCOME'},candidate_hash:null};
   });
   const ranked=evaluated.filter(row=>row.valid_current_geometry).sort((a,b)=>(b.quant_score??-Infinity)-(a.quant_score??-Infinity)||a.strategy.localeCompare(b.strategy)||a.direction.localeCompare(b.direction));
   ranked.forEach((row,index)=>{row.candidate_rank=index+1;});
@@ -50,12 +53,19 @@ function snapshot({scanId,timestamp,universe,sourceHash,cadenceMs,candidates}) {
   return {...value,snapshot_hash:hash(value)};
 }
 function resolveCandidate(candidate,future) {
-  if (!candidate?.valid_current_geometry || !Array.isArray(future) || future.length < OUTCOME_BARS) return null;
+  if (!candidate?.valid_current_geometry) return null;
+  const unresolved=(reason,gap=null)=>({status:'UNRESOLVED_DATA_GAP',reason,next_valid_candle_gap_ms:gap,available_bars:Array.isArray(future)?future.length:0,execution:'No execution or outcome was inferred across a missing/incomplete cached 5m window'});
+  if (!Array.isArray(future)||future.length<OUTCOME_BARS) return unresolved('INCOMPLETE_OUTCOME_WINDOW');
+  const expected=Number(candidate.timestamp);
+  const firstTime=finite(future[0]?.time);
+  if(!Number.isFinite(firstTime))return unresolved('INVALID_NEXT_VALID_CANDLE');
+  if(firstTime-expected>BASE_MS*2)return unresolved('NEXT_VALID_CANDLE_GAP_EXCEEDED',firstTime-expected);
+  for(let index=1;index<OUTCOME_BARS;index++){const previous=finite(future[index-1]?.time),current=finite(future[index]?.time);if(!Number.isFinite(previous)||!Number.isFinite(current))return unresolved('INVALID_OUTCOME_CANDLE');if(current-previous>BASE_MS*2)return unresolved('OUTCOME_CANDLE_GAP_EXCEEDED',current-previous);}
   const first=future[0], rawEntry=finite(first.open), plannedStop=finite(candidate.stop); if (!rawEntry || !plannedStop) return null;
   const direction=candidate.direction, distance=Math.abs(rawEntry-plannedStop); if (!distance) return null;
   const entry=rawEntry*(direction==='long'?1.0003:.9997), stop=direction==='long'?entry-distance:entry+distance, tp1=direction==='long'?entry+distance*candidate.rr:entry-distance*candidate.rr, tp2=direction==='long'?entry+distance*Math.max(candidate.rr+1,3):entry-distance*Math.max(candidate.rr+1,3);
   let tp1Hit=false,tp2Hit=false,stopHit=false,mfe=0,mae=0,finalR=0,bars=0;
-  for (const candle of future.slice(0,OUTCOME_BARS)) { bars++; const high=finite(candle.high),low=finite(candle.low),close=finite(candle.close); if (![high,low,close].every(Number.isFinite)) return null; const favourable=(direction==='long'?high-entry:entry-low)/distance, adverse=(direction==='long'?low-entry:entry-high)/distance; mfe=Math.max(mfe,favourable); mae=Math.min(mae,adverse); const activeStop=tp1Hit?entry:stop, hitStop=direction==='long'?low<=activeStop:high>=activeStop, hitOne=direction==='long'?high>=tp1:low<=tp1, hitTwo=direction==='long'?high>=tp2:low<=tp2;
+  for (const candle of future.slice(0,OUTCOME_BARS)) { bars++; const high=finite(candle.high),low=finite(candle.low),close=finite(candle.close); if (![high,low,close].every(Number.isFinite)) return unresolved('INVALID_OUTCOME_CANDLE'); const favourable=(direction==='long'?high-entry:entry-low)/distance, adverse=(direction==='long'?low-entry:entry-high)/distance; mfe=Math.max(mfe,favourable); mae=Math.min(mae,adverse); const activeStop=tp1Hit?entry:stop, hitStop=direction==='long'?low<=activeStop:high>=activeStop, hitOne=direction==='long'?high>=tp1:low<=tp1, hitTwo=direction==='long'?high>=tp2:low<=tp2;
     // Conservative ambiguity: stop is tested first on each completed candle.
     if (hitStop) { stopHit=true; finalR=tp1Hit?candidate.rr*.5:-1; break; }
     if (!tp1Hit && hitOne) tp1Hit=true;

@@ -4,13 +4,22 @@ const test=require('node:test');
 const Rank=require('./historical-rank.js');
 
 test('rank outcome uses next candle and stop-first ambiguity',()=>{
-  const candidate={valid_current_geometry:true,direction:'long',stop:95,rr:1.8,strategy:'TREND CONTINUATION'};
-  const rows=Array.from({length:Rank.OUTCOME_BARS},(_,index)=>({open:index?100:100,high:index?101:104,low:index?99:94,close:100}));
+  const timestamp=1_700_000_000_000,candidate={timestamp,valid_current_geometry:true,direction:'long',stop:95,rr:1.8,strategy:'TREND CONTINUATION'};
+  const rows=Array.from({length:Rank.OUTCOME_BARS},(_,index)=>({time:timestamp+index*Rank.BASE_MS,open:index?100:100,high:index?101:104,low:index?99:94,close:100}));
   const target=Rank.resolveCandidate(candidate,rows);
   assert.equal(target.status,'RESOLVED');
   assert.equal(target.STOP_HIT,true);
   assert.equal(target.TP1_BEFORE_SL,false);
   assert.ok(target.FINAL_R<0);
+});
+
+test('outcomes fail closed across a missing expected 5m candle',()=>{
+  const timestamp=1_700_000_000_000,candidate={timestamp,valid_current_geometry:true,direction:'long',stop:95,rr:1.8,strategy:'TREND CONTINUATION'};
+  const rows=Array.from({length:Rank.OUTCOME_BARS},(_,index)=>({time:timestamp+index*Rank.BASE_MS,open:100,high:101,low:99,close:100}));
+  rows[12].time+=Rank.BASE_MS*3;
+  const target=Rank.resolveCandidate(candidate,rows);
+  assert.equal(target.status,'UNRESOLVED_DATA_GAP');
+  assert.equal(target.reason,'OUTCOME_CANDLE_GAP_EXCEEDED');
 });
 
 test('snapshot hash is deterministic and candidate rank only applies to valid geometry',()=>{

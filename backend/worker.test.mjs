@@ -93,7 +93,7 @@ assert.equal(response.status,503);assert.equal((await response.json()).error.cod
 class FakeStatement {
   constructor(db,sql){this.db=db;this.sql=sql;}
   bind(...args){this.args=args;return this;}
-  async run(){this.db.calls.push({sql:this.sql,args:this.args});return {success:true};}
+  async run(){this.db.calls.push({sql:this.sql,args:this.args});return {success:true,meta:{changes:/UPDATE historical_scan_candidates/.test(this.sql)?1:0}};}
   async first(){return null;}
   async all(){return {results:[]};}
 }
@@ -120,6 +120,17 @@ assert.equal(response.status,200);body=await response.json();assert.equal(body.c
 const resolvedTarget={status:'RESOLVED',TP1_BEFORE_SL:false,FINAL_R:-1.1,MFE:.4,MAE:-1.05,STOP_HIT:true,TP2_HIT:false,duration_bars:2};
 response=await handleRequest(request('/v1/research/ingest',{operation:'historical_rank_outcome_commit',scan_id:'rank-fixture',outcomes:[{candidate_id:'rank-candidate-fixture',targets:resolvedTarget,outcome_hash:stableHash({candidate_id:'rank-candidate-fixture',targets:resolvedTarget})}]},{authorization:'Bearer test-research-secret'}),researchEnv,{},{ });
 assert.equal(response.status,200);assert.equal((await response.json()).operation,'historical_rank_outcome_commit');
+// Phase 4 inputs are accepted only when a candidate carries a frozen,
+// versioned sequence record.  This keeps the Worker from silently accepting
+// an unproven V2 candidate without its pre-entry candle provenance.
+const rankSnapshotV2={...rankSnapshot,scan_id:'rank-v2-fixture',engine_version:'HISTORICAL-RANK-PILOT-V2'};rankSnapshotV2.snapshot_hash=stableHash({...rankSnapshotV2,snapshot_hash:undefined});delete rankSnapshotV2.snapshot_hash;rankSnapshotV2.snapshot_hash=stableHash(rankSnapshotV2);
+const sequenceV2={version:'candle-sequence-v1',signal_timestamp:rankSnapshotV2.scan_timestamp,windows:[32,64,128,256],timeframes:{m5:{available:true,rows:[]},m15:{available:false,rows:null},h1:{available:false,rows:null}}};
+const rankCandidateV2={...rankCandidate,candidate_id:'rank-v2-candidate-fixture',sequence_json:sequenceV2,sequence_hash:stableHash(sequenceV2),sequence_version:'candle-sequence-v1'};rankCandidateV2.candidate_hash=stableHash({...rankCandidateV2,targets:undefined,candidate_hash:undefined});
+response=await handleRequest(request('/v1/research/ingest',{operation:'historical_rank_snapshot_commit',snapshot:rankSnapshotV2,candidates:[rankCandidateV2]},{authorization:'Bearer test-research-secret'}),researchEnv,{},{ });
+assert.equal(response.status,200);assert.equal(researchEnv.MARKET_EDGE_DB.calls.some(call=>call.sql.includes('historical_candidate_sequences')),true);
+const dataGapTarget={status:'UNRESOLVED_DATA_GAP',reason:'OUTCOME_CANDLE_GAP_EXCEEDED',next_valid_candle_gap_ms:900000,available_bars:12};
+response=await handleRequest(request('/v1/research/ingest',{operation:'historical_rank_outcome_commit',scan_id:'rank-v2-fixture',outcomes:[{candidate_id:'rank-v2-candidate-fixture',targets:dataGapTarget,outcome_hash:stableHash({candidate_id:'rank-v2-candidate-fixture',targets:dataGapTarget})}]},{authorization:'Bearer test-research-secret'}),researchEnv,{},{ });
+assert.equal(response.status,200);body=await response.json();assert.equal(body.data_gaps,1);assert.equal(body.resolved,0);
 const monitorNow=1_800_000_000_000,monitorRows=Array.from({length:100},(_,index)=>{const time=monitorNow-(100-index)*300000,price=100+index*.1;return[time,String(price),String(price+1),String(price-1),String(price+.2),'20',time+299999];});
 const monitorDb=new FakeD1(),scheduled=await handleScheduled({scheduledTime:monitorNow},{MARKET_EDGE_DB:monitorDb},{},{watchlist:[{asset:'BTC',symbol:'BTCUSDT',exchange:'BINANCE'}],historicalAssets:[],delay:async()=>{},fetch:async()=>new Response(JSON.stringify(monitorRows),{status:200})});
 assert.equal(scheduled.status,'COMPLETE');assert.equal(scheduled.executionDisabled,true);assert.equal(scheduled.researchRunner,'github-actions-node');assert.equal(scheduled.heavyReplay,'disabled');assert.equal(monitorDb.calls.length,0);

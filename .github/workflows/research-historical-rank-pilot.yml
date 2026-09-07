@@ -4,9 +4,13 @@ on:
   workflow_dispatch:
     inputs:
       scan_count:
-        description: Contiguous weekly common-history scan snapshots (1-24)
+        description: Contiguous weekly common-history scan snapshots (1-8)
         required: false
-        default: '12'
+        default: '4'
+      start_index:
+        description: Zero-based deterministic weekly cadence offset
+        required: false
+        default: '0'
 
 permissions:
   contents: read
@@ -21,6 +25,7 @@ jobs:
       MARKET_EDGE_D1_DATABASE_ID: 39a4082e-41a4-45e9-9b76-99cf10eaca01
       MARKET_EDGE_RESEARCH_TOKEN: ${{ secrets.MARKET_EDGE_RESEARCH_TOKEN }}
       HISTORICAL_RANK_PILOT_SCANS: ${{ inputs.scan_count }}
+      HISTORICAL_RANK_START_INDEX: ${{ inputs.start_index }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

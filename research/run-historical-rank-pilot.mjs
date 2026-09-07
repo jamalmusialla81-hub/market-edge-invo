@@ -6,7 +6,7 @@ import Rank from './historical-rank.js';
 import Replay from '../replay-engine.js';
 
 const API=(process.env.MARKET_EDGE_API||'https://market-edge-ai.jakob-market-edge.workers.dev').replace(/\/$/,''),RESEARCH_TOKEN=process.env.MARKET_EDGE_RESEARCH_TOKEN||'',CF_TOKEN=process.env.CLOUDFLARE_API_TOKEN||'',ACCOUNT=process.env.CLOUDFLARE_ACCOUNT_ID||'8ea7796a8fb13ffb612245e8a08a55d6',DB=process.env.MARKET_EDGE_D1_DATABASE_ID||'39a4082e-41a4-45e9-9b76-99cf10eaca01';
-const CADENCE=7*24*60*60*1000,SCAN_LIMIT=Math.max(1,Math.min(24,Number(process.env.HISTORICAL_RANK_PILOT_SCANS)||12));
+const CADENCE=7*24*60*60*1000,SCAN_LIMIT=Math.max(1,Math.min(8,Number(process.env.HISTORICAL_RANK_PILOT_SCANS)||4)),START_INDEX=Math.max(0,Number(process.env.HISTORICAL_RANK_START_INDEX)||0);
 const args=new Set(process.argv.slice(2)),dryRun=args.has('--dry-run');
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 const finite=value=>Number.isFinite(Number(value))?Number(value):null;
@@ -35,7 +35,7 @@ async function main() {
   const byAsset=new Map(bounds.map(row=>[row.asset,row]));
   const commonStart=Math.max(...Rank.ASSETS.map(asset=>Number(byAsset.get(asset).first_time))),commonEnd=Math.min(...Rank.ASSETS.map(asset=>Number(byAsset.get(asset).last_time)+Rank.BASE_MS));
   const first=align(commonStart+17568*Rank.BASE_MS,CADENCE),lastAllowed=commonEnd-(Rank.OUTCOME_BARS+1)*Rank.BASE_MS;
-  const selected=Array.from({length:SCAN_LIMIT},(_,index)=>first+index*CADENCE).filter(timestamp=>timestamp<=lastAllowed);
+  const selected=Array.from({length:SCAN_LIMIT},(_,index)=>first+(START_INDEX+index)*CADENCE).filter(timestamp=>timestamp<=lastAllowed);
   if(!selected.length)throw new Error('Cached common history does not contain a complete warmup plus outcome window');
   const sourceHashes=await d1(`SELECT asset,dataset_hash FROM historical_dataset_manifests WHERE exchange='COINBASE' AND base_timeframe='5m' AND asset IN ('BTC','ETH','SOL','XRP','DOGE','LTC') ORDER BY asset`);
   const sourceHash=Rank.hash(sourceHashes.map(row=>[row.asset,row.dataset_hash]));
@@ -44,9 +44,9 @@ async function main() {
   // not alter snapshot order, inputs, scoring, or persistence order.
   const loaded=await Promise.all(Rank.ASSETS.map(async asset=>({asset,rows:await candles(asset,start,end)})));
   for(const {asset,rows} of loaded) { if(rows.length<17568+Rank.OUTCOME_BARS)throw new Error(`${asset} cached candles are insufficient for rank pilot`); frames.set(asset,{rows,derived:Replay.derived(rows)}); }
-  const report={dataset:Rank.VERSION,universe_mode:'HISTORICAL_DATA_UNIVERSE_PROXY',cadence_ms:CADENCE,selection:'Earliest complete common-history timestamp, then every seven days; no performance-based selection',scan_timestamps:selected,scans:[]};
+  const report={dataset:Rank.VERSION,universe_mode:'HISTORICAL_DATA_UNIVERSE_PROXY',cadence_ms:CADENCE,start_index:START_INDEX,selection:'Earliest complete common-history timestamp, then every seven days; no performance-based selection',scan_timestamps:selected,scans:[]};
   for(const timestamp of selected) {
-    const scanId=`hrp1-${timestamp}-${sourceHash}`,combined=[];
+    const scanId=`hrp2-${timestamp}-${sourceHash}`,combined=[];
     for(const asset of Rank.ASSETS) { const source=frames.get(asset),snapshot=Replay.cachedSnapshot(source.derived,timestamp); if(!Replay.readiness(snapshot).ready)throw new Error(`${asset} failed completed-candle MTF readiness at ${timestamp}`); combined.push(...Rank.candidateRows({scanId,timestamp,asset,timeframes:snapshot.timeframes,sourceHash,instrument:asset})); }
     combined.filter(row=>row.valid_current_geometry).sort((a,b)=>(b.combined_score??-Infinity)-(a.combined_score??-Infinity)||a.asset.localeCompare(b.asset)||a.strategy.localeCompare(b.strategy)||a.direction.localeCompare(b.direction)).forEach((row,index)=>{row.candidate_rank=index+1;});
     combined.forEach(row=>{row.candidate_count=combined.length; row.candidate_hash=Rank.hash({...row,targets:undefined,candidate_hash:undefined});});
@@ -54,10 +54,11 @@ async function main() {
     if(!dryRun) await worker({operation:'historical_rank_snapshot_commit',snapshot,candidates:combined});
     // The snapshot is now immutable.  Only then do we inspect the subsequent
     // completed candles to form outcome labels.
-    const outcomes=[]; let unavailableFuture=0;
-    for(const candidate of combined) { const assetRows=frames.get(candidate.asset).rows, position=assetRows.findIndex(row=>row.time>=timestamp); if(position<0){unavailableFuture++;continue;} const target=Rank.resolveCandidate(candidate,assetRows.slice(position)); if(target)outcomes.push({candidate_id:candidate.candidate_id,targets:target,outcome_hash:Rank.hash({candidate_id:candidate.candidate_id,targets:target})}); else unavailableFuture++; }
+    const outcomes=[]; let unavailableFuture=0,dataGaps=0;
+    for(const candidate of combined) { const assetRows=frames.get(candidate.asset).rows, position=assetRows.findIndex(row=>row.time>=timestamp); if(position<0){unavailableFuture++;continue;} const target=Rank.resolveCandidate(candidate,assetRows.slice(position)); if(target){if(target.status==='UNRESOLVED_DATA_GAP')dataGaps++;outcomes.push({candidate_id:candidate.candidate_id,targets:target,outcome_hash:Rank.hash({candidate_id:candidate.candidate_id,targets:target})});} else unavailableFuture++; }
     if(!dryRun&&outcomes.length)await worker({operation:'historical_rank_outcome_commit',scan_id:scanId,outcomes});
-    report.scans.push({scan_id:scanId,timestamp,candidates:combined.length,ranked:combined.filter(row=>row.candidate_rank!==null).length,resolved:outcomes.length,unresolved_missing_future_cache:unavailableFuture});
+    report.scans.push({scan_id:scanId,timestamp,candidates:combined.length,ranked:combined.filter(row=>row.candidate_rank!==null).length,resolved:outcomes.filter(row=>row.targets.status==='RESOLVED').length,unresolved_data_gap:dataGaps,unresolved_missing_future_cache:unavailableFuture});
+    console.log(JSON.stringify({progress:'historical-rank-scan-complete',scan_id:scanId,timestamp,candidates:combined.length,ranked:combined.filter(row=>row.candidate_rank!==null).length,resolved:outcomes.filter(row=>row.targets.status==='RESOLVED').length,unresolved_data_gap:dataGaps}));
     await sleep(100);
   }
   console.log(JSON.stringify(report,null,2));
