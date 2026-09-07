@@ -7,3 +7,4 @@ node_modules/
 research/freqtrade/smoke/data/
 research/freqtrade/smoke/results/
 research/freqtrade/smoke/user_data/
+research/freqtrade/smoke/__pycache__/

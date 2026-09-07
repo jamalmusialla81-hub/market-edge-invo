@@ -15,6 +15,17 @@ the same frozen decision/candle window:
 3. `recursive-analysis` with multiple startup-candle counts;
 4. the four round-trip cost cases: 0.08%, 0.16%, 0.25%, 0.40%.
 
-The local environment currently has no Freqtrade binary/container runtime. This
-configuration is therefore a lab contract, not a claim that those commands ran.
-Never add API keys here; `config.json` remains `dry_run: true`.
+The local research environment uses an isolated Python 3.12 virtual environment
+with Freqtrade 2025.10. Docker is not required. The tracked smoke fixture is
+synthetic and proves only that the offline Freqtrade commands run; it is never
+used in Market Edge research, parity, model training, or production decisions.
+
+Run the installation smoke test from the repository root:
+
+```sh
+.freqtrade-venv/bin/python research/freqtrade/smoke/generate_smoke_data.py
+.freqtrade-venv/bin/python -m freqtrade backtesting --config research/freqtrade/smoke/config.json --userdir research/freqtrade/smoke/user_data --datadir research/freqtrade/smoke/data --strategy OfflineSmokeStrategy --strategy-path research/freqtrade/smoke --data-format-ohlcv json --timerange 20240101-20240121 --export none
+```
+
+Never add API keys here; every configuration remains `dry_run: true` and no
+tracked strategy has exchange execution capability.

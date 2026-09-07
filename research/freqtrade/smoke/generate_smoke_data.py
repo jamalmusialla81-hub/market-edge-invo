@@ -12,7 +12,9 @@ def main() -> None:
     rows = []
     start = 1_704_067_200_000  # 2024-01-01T00:00:00Z
     price = 42_000.0
-    for index in range(320):
+    # 6,000 five-minute bars permits Freqtrade's 199/499/999/1999 warm-up
+    # comparison without ever becoming Market Edge research data.
+    for index in range(6_000):
         drift = 18 if (index // 40) % 2 == 0 else -15
         open_price = price
         close = open_price + drift + ((index % 7) - 3) * 2
