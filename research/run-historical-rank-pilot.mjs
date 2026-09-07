@@ -40,7 +40,10 @@ async function main() {
   const sourceHashes=await d1(`SELECT asset,dataset_hash FROM historical_dataset_manifests WHERE exchange='COINBASE' AND base_timeframe='5m' AND asset IN ('BTC','ETH','SOL','XRP','DOGE','LTC') ORDER BY asset`);
   const sourceHash=Rank.hash(sourceHashes.map(row=>[row.asset,row.dataset_hash]));
   const start=commonStart,end=selected.at(-1)+(Rank.OUTCOME_BARS+2)*Rank.BASE_MS,frames=new Map();
-  for(const asset of Rank.ASSETS) { const rows=await candles(asset,start,end); if(rows.length<17568+Rank.OUTCOME_BARS)throw new Error(`${asset} cached candles are insufficient for rank pilot`); frames.set(asset,{rows,derived:Replay.derived(rows)}); }
+  // These D1 reads are independent and immutable. Parallelising this load does
+  // not alter snapshot order, inputs, scoring, or persistence order.
+  const loaded=await Promise.all(Rank.ASSETS.map(async asset=>({asset,rows:await candles(asset,start,end)})));
+  for(const {asset,rows} of loaded) { if(rows.length<17568+Rank.OUTCOME_BARS)throw new Error(`${asset} cached candles are insufficient for rank pilot`); frames.set(asset,{rows,derived:Replay.derived(rows)}); }
   const report={dataset:Rank.VERSION,universe_mode:'HISTORICAL_DATA_UNIVERSE_PROXY',cadence_ms:CADENCE,selection:'Earliest complete common-history timestamp, then every seven days; no performance-based selection',scan_timestamps:selected,scans:[]};
   for(const timestamp of selected) {
     const scanId=`hrp1-${timestamp}-${sourceHash}`,combined=[];
