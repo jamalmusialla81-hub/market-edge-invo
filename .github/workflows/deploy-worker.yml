@@ -26,13 +26,14 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Apply changed D1 migrations
-        run: |
-          if git diff --quiet HEAD~1 HEAD -- backend/migrations; then
-            echo "No D1 migrations changed in this deployment."
-          else
-            npx --yes wrangler@4.33.1 d1 migrations apply market-edge-research --remote --config backend/wrangler.jsonc
-          fi
+      - name: Check D1 access
+        run: node backend/deployment-preflight.mjs
+      # Check migration history on every deployment: a failed earlier deploy
+      # may leave pending migrations even when HEAD changes no SQL files.
+      - name: Apply pending D1 migrations
+        run: npx --yes wrangler@4.33.1 d1 migrations apply market-edge-research --remote --config backend/wrangler.jsonc
+      - name: Verify research tables
+        run: node backend/deployment-preflight.mjs --verify-schema
       - name: Deploy private market evaluator
         run: npx --yes wrangler@4.33.1 deploy --config backend/evaluator.wrangler.jsonc
       - name: Deploy public Worker
