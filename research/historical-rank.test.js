@@ -22,6 +22,14 @@ test('outcomes fail closed across a missing expected 5m candle',()=>{
   assert.equal(target.reason,'OUTCOME_CANDLE_GAP_EXCEEDED');
 });
 
+test('a rankable candidate without a valid next execution candle is terminally unresolved',()=>{
+  const timestamp=1_700_000_000_000,candidate={timestamp,valid_current_geometry:true,direction:'long',stop:95,rr:1.8,strategy:'TREND CONTINUATION'};
+  const rows=Array.from({length:Rank.OUTCOME_BARS},(_,index)=>({time:timestamp+index*Rank.BASE_MS,open:index?100:null,high:101,low:99,close:100}));
+  const target=Rank.resolveCandidate(candidate,rows);
+  assert.equal(target.status,'UNRESOLVED_DATA_GAP');
+  assert.equal(target.reason,'INVALID_NEXT_VALID_EXECUTION_CANDLE');
+});
+
 test('snapshot hash is deterministic and candidate rank only applies to valid geometry',()=>{
   const rows=[{valid_current_geometry:true,quant_score:80,strategy:'A',direction:'long',entry:100,stop:99,target1:102,target2:103},{valid_current_geometry:false,quant_score:99,strategy:'B',direction:'short'}];
   // Directly test the invariant represented by snapshot payloads without a

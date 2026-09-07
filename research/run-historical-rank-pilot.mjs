@@ -54,10 +54,10 @@ async function main() {
     if(!dryRun) await worker({operation:'historical_rank_snapshot_commit',snapshot,candidates:combined});
     // The snapshot is now immutable.  Only then do we inspect the subsequent
     // completed candles to form outcome labels.
-    const outcomes=[]; let unavailableFuture=0,dataGaps=0;
-    for(const candidate of combined) { const assetRows=frames.get(candidate.asset).rows, position=assetRows.findIndex(row=>row.time>=timestamp); if(position<0){unavailableFuture++;continue;} const target=Rank.resolveCandidate(candidate,assetRows.slice(position)); if(target){if(target.status==='UNRESOLVED_DATA_GAP')dataGaps++;outcomes.push({candidate_id:candidate.candidate_id,targets:target,outcome_hash:Rank.hash({candidate_id:candidate.candidate_id,targets:target})});} else unavailableFuture++; }
+    const outcomes=[]; let dataGaps=0;
+    for(const candidate of combined) { if(!candidate.valid_current_geometry)continue; const assetRows=frames.get(candidate.asset).rows, position=assetRows.findIndex(row=>row.time>=timestamp); const target=position<0?{status:'UNRESOLVED_DATA_GAP',reason:'OUTCOME_WINDOW_NOT_AVAILABLE_IN_CACHE',next_valid_candle_gap_ms:null,available_bars:0,execution:'No execution or outcome was inferred because the cached 5m outcome window is unavailable'}:Rank.resolveCandidate(candidate,assetRows.slice(position))||{status:'UNRESOLVED_DATA_GAP',reason:'INVALID_NEXT_VALID_EXECUTION_CANDLE',next_valid_candle_gap_ms:null,available_bars:assetRows.length-position,execution:'No execution or outcome was inferred because the next valid execution candle is unusable'};if(target.status==='UNRESOLVED_DATA_GAP')dataGaps++;outcomes.push({candidate_id:candidate.candidate_id,targets:target,outcome_hash:Rank.hash({candidate_id:candidate.candidate_id,targets:target})}); }
     if(!dryRun&&outcomes.length)await worker({operation:'historical_rank_outcome_commit',scan_id:scanId,outcomes});
-    report.scans.push({scan_id:scanId,timestamp,candidates:combined.length,ranked:combined.filter(row=>row.candidate_rank!==null).length,resolved:outcomes.filter(row=>row.targets.status==='RESOLVED').length,unresolved_data_gap:dataGaps,unresolved_missing_future_cache:unavailableFuture});
+    report.scans.push({scan_id:scanId,timestamp,candidates:combined.length,ranked:combined.filter(row=>row.candidate_rank!==null).length,resolved:outcomes.filter(row=>row.targets.status==='RESOLVED').length,unresolved_data_gap:dataGaps});
     console.log(JSON.stringify({progress:'historical-rank-scan-complete',scan_id:scanId,timestamp,candidates:combined.length,ranked:combined.filter(row=>row.candidate_rank!==null).length,resolved:outcomes.filter(row=>row.targets.status==='RESOLVED').length,unresolved_data_gap:dataGaps}));
     await sleep(100);
   }

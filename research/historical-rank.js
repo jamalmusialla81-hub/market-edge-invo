@@ -61,8 +61,8 @@ function resolveCandidate(candidate,future) {
   if(!Number.isFinite(firstTime))return unresolved('INVALID_NEXT_VALID_CANDLE');
   if(firstTime-expected>BASE_MS*2)return unresolved('NEXT_VALID_CANDLE_GAP_EXCEEDED',firstTime-expected);
   for(let index=1;index<OUTCOME_BARS;index++){const previous=finite(future[index-1]?.time),current=finite(future[index]?.time);if(!Number.isFinite(previous)||!Number.isFinite(current))return unresolved('INVALID_OUTCOME_CANDLE');if(current-previous>BASE_MS*2)return unresolved('OUTCOME_CANDLE_GAP_EXCEEDED',current-previous);}
-  const first=future[0], rawEntry=finite(first.open), plannedStop=finite(candidate.stop); if (!rawEntry || !plannedStop) return null;
-  const direction=candidate.direction, distance=Math.abs(rawEntry-plannedStop); if (!distance) return null;
+  const first=future[0], rawEntry=finite(first.open), plannedStop=finite(candidate.stop); if (!rawEntry || !plannedStop) return unresolved('INVALID_NEXT_VALID_EXECUTION_CANDLE');
+  const direction=candidate.direction, distance=Math.abs(rawEntry-plannedStop); if (!distance) return unresolved('INVALID_NEXT_VALID_EXECUTION_GEOMETRY');
   const entry=rawEntry*(direction==='long'?1.0003:.9997), stop=direction==='long'?entry-distance:entry+distance, tp1=direction==='long'?entry+distance*candidate.rr:entry-distance*candidate.rr, tp2=direction==='long'?entry+distance*Math.max(candidate.rr+1,3):entry-distance*Math.max(candidate.rr+1,3);
   let tp1Hit=false,tp2Hit=false,stopHit=false,mfe=0,mae=0,finalR=0,bars=0;
   for (const candle of future.slice(0,OUTCOME_BARS)) { bars++; const high=finite(candle.high),low=finite(candle.low),close=finite(candle.close); if (![high,low,close].every(Number.isFinite)) return unresolved('INVALID_OUTCOME_CANDLE'); const favourable=(direction==='long'?high-entry:entry-low)/distance, adverse=(direction==='long'?low-entry:entry-high)/distance; mfe=Math.max(mfe,favourable); mae=Math.min(mae,adverse); const activeStop=tp1Hit?entry:stop, hitStop=direction==='long'?low<=activeStop:high>=activeStop, hitOne=direction==='long'?high>=tp1:low<=tp1, hitTwo=direction==='long'?high>=tp2:low<=tp2;
