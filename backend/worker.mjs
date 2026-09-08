@@ -206,11 +206,21 @@ async function historicalRankOutcomeCommit(payload,env,now){
   let terminal=0,resolved=0,dataGaps=0;for(const row of targets){const result=await env.MARKET_EDGE_DB.prepare(`UPDATE historical_scan_candidates SET targets_json=?,resolved_at=? WHERE candidate_id=? AND scan_id=? AND targets_json LIKE '%PENDING_OUTCOME%'`).bind(JSON.stringify(row.target),now,row.id,scanId).run();const changed=Number(result?.meta?.changes)||0;terminal+=changed;if(changed&&row.status==='RESOLVED')resolved+=changed;if(changed&&row.status==='UNRESOLVED_DATA_GAP')dataGaps+=changed;}
   return {accepted:true,operation:'historical_rank_outcome_commit',scan_id:scanId,resolved,data_gaps:dataGaps,terminal,immutable:true};
 }
+// Recovery may only replace a terminal data-gap label. Candidate snapshots,
+// ranks, features, and sequences remain immutable, and an existing resolved
+// label can never be overwritten by a later proxy source.
+async function historicalRankOutcomeRecoveryCommit(payload,env,now){
+  const scanId=safeText(payload?.scan_id,180),targets=Array.isArray(payload?.outcomes)?payload.outcomes.map(historicalRankTarget):[];
+  if(!scanId||!targets.length||targets.length>96||new Set(targets.map(row=>row.id)).size!==targets.length||targets.some(row=>row.status!=='RESOLVED'||safeText(row.target?.outcome_source,40)!=='BINANCE_PROXY'))throw Object.assign(new Error('Invalid historical rank proxy recovery batch'),{status:400,code:'HISTORICAL_RANK_RECOVERY_INVALID'});
+  let resolved=0;for(const row of targets){const result=await env.MARKET_EDGE_DB.prepare(`UPDATE historical_scan_candidates SET targets_json=?,resolved_at=? WHERE candidate_id=? AND scan_id=? AND targets_json LIKE '%UNRESOLVED_DATA_GAP%'`).bind(JSON.stringify(row.target),now,row.id,scanId).run();resolved+=Number(result?.meta?.changes)||0;}
+  return {accepted:true,operation:'historical_rank_outcome_recovery_commit',scan_id:scanId,resolved,immutable_inputs:true};
+}
 async function researchIngest(request,env,payload,now=Date.now()){
   researchToken(request,env);
   if(payload?.operation==='experiment_commit')return researchExperimentIngest(payload,env,now);
   if(payload?.operation==='historical_rank_snapshot_commit')return historicalRankSnapshotCommit(payload,env,now);
   if(payload?.operation==='historical_rank_outcome_commit')return historicalRankOutcomeCommit(payload,env,now);
+  if(payload?.operation==='historical_rank_outcome_recovery_commit')return historicalRankOutcomeRecoveryCommit(payload,env,now);
   if(payload?.operation!=='replay_commit')throw Object.assign(new Error('Unsupported research operation'),{status:400,code:'RESEARCH_INVALID_OPERATION'});
   const asset=safeAsset(payload.asset),version=safeText(payload.dataset_version,80),sourceHash=safeText(payload.source_dataset_hash,120),runId=safeText(payload.run_id,180),cursor=Number(payload.cursor_timestamp),last=Number(payload.last_processed_timestamp),processed=Number(payload.candles_processed),inputCursor=Number(payload.input_cursor);
   if(!['BTC','ETH','SOL','XRP','DOGE','LTC'].includes(asset)||version!=='EARLY-WINDOW-RESEARCH-V1'||!runId||!sourceHash||![cursor,last,processed,inputCursor].every(Number.isFinite)||processed<1||processed>288||last>=cursor)throw Object.assign(new Error('Invalid replay commit'),{status:400,code:'RESEARCH_INVALID_COMMIT'});
