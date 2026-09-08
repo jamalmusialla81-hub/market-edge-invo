@@ -76,3 +76,28 @@ jobs:
             research/outcome-cache
           if-no-files-found: warn
           retention-days: 90
+
+  v0_epoch_training:
+    needs: full_recovery
+    if: ${{ success() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: 8ea7796a8fb13ffb612245e8a08a55d6
+      MARKET_EDGE_D1_DATABASE_ID: 39a4082e-41a4-45e9-9b76-99cf10eaca01
+      MARKET_EDGE_RESEARCH_TOKEN: ${{ secrets.MARKET_EDGE_RESEARCH_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Train V0 research models only when the resolved-rankable gate passes
+        run: node research/v0-epoch-training.mjs | tee v0-epoch-training.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: v0-epoch-training
+          path: v0-epoch-training.json
+          if-no-files-found: warn
+          retention-days: 90
