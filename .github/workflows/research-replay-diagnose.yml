@@ -22,13 +22,13 @@ jobs:
           node-version: 22
       - name: Capture the live replay exception and response safely
         run: |
-          npx --yes wrangler@4.33.1 tail market-edge-ai --format json --config backend/wrangler.jsonc > worker-tail.jsonl 2>&1 &
+          stdbuf -oL -eL npx --yes wrangler@4.33.1 tail market-edge-ai --format pretty --config backend/wrangler.jsonc > worker-tail.log 2>&1 &
           TAIL_PID=$!
-          sleep 5
+          sleep 10
           curl --silent --show-error --output replay-response.json --write-out '%{http_code}\n' \
             -H "Authorization: Bearer ${MARKET_EDGE_RESEARCH_TOKEN}" \
             "${MARKET_EDGE_API}/v1/research/replay" > replay-http-status.txt || true
-          sleep 6
+          sleep 12
           kill "$TAIL_PID" || true
       - uses: actions/upload-artifact@v4
         if: always()
@@ -37,5 +37,5 @@ jobs:
           path: |
             replay-http-status.txt
             replay-response.json
-            worker-tail.jsonl
+            worker-tail.log
           retention-days: 7
