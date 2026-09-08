@@ -2,6 +2,12 @@ name: Historical Rank Outcome Recovery
 
 on:
   workflow_dispatch:
+    inputs:
+      wait_until_d1_reset:
+        description: Wait for the next midnight-UTC D1 allowance reset before recovery
+        required: false
+        default: false
+        type: boolean
   schedule:
     - cron: '5 0 * * *'
 
@@ -13,7 +19,23 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  wait_for_d1_reset:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.wait_until_d1_reset }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Wait until shortly after the next UTC reset
+        run: |
+          now=$(date -u +%s)
+          target=$(date -u -d 'tomorrow 00:02 UTC' +%s)
+          if [ "$now" -ge "$target" ]; then
+            target=$(date -u -d 'tomorrow 00:02 UTC' +%s)
+          fi
+          sleep "$((target-now))"
+
   proof:
+    needs: wait_for_d1_reset
+    if: ${{ always() && (needs.wait_for_d1_reset.result == 'success' || needs.wait_for_d1_reset.result == 'skipped') }}
     runs-on: ubuntu-latest
     timeout-minutes: 12
     env:
