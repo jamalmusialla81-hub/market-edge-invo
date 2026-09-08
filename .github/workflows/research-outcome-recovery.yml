@@ -30,6 +30,12 @@ jobs:
           node-version: 22
       - name: Deploy only the research outcome-recovery endpoint
         run: npx --yes wrangler@4.33.1 deploy --config backend/wrangler.jsonc
+      - name: Prove the replay status endpoint is healthy after the D1 reset
+        run: |
+          curl --fail --silent --show-error \
+            -H "Authorization: Bearer ${MARKET_EDGE_RESEARCH_TOKEN}" \
+            https://market-edge-ai.jakob-market-edge.workers.dev/v1/research/replay \
+            --output replay-after-reset.json
       - name: Resolve ten frozen data-gap candidates with cached Binance proxy candles
         run: node research/recover-historical-rank-outcomes.mjs
       - uses: actions/upload-artifact@v4
@@ -38,6 +44,7 @@ jobs:
           name: historical-rank-outcome-proof
           path: |
             outcome-recovery-proof.json
+            replay-after-reset.json
             research/outcome-cache
           if-no-files-found: warn
           retention-days: 90

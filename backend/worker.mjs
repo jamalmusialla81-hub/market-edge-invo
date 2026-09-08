@@ -51,6 +51,10 @@ const chatSchema = {
 function json(data,status=200,headers={}) {
   return new Response(JSON.stringify(data),{status,headers:{'content-type':'application/json; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff',...headers}});
 }
+function researchReplayFailure(error,cors={}) {
+  const message=safeText(error?.message||'Research replay storage is unavailable',240),d1Limit=/D1_ERROR:.*daily row read limit/i.test(message);
+  return json({error:{code:d1Limit?'RESEARCH_D1_READ_LIMITED':'RESEARCH_REPLAY_UNAVAILABLE',message:d1Limit?'Research storage has reached its daily read allowance; retry after the D1 UTC reset.':'Research replay storage is temporarily unavailable.'}},503,cors);
+}
 function safeText(value,max=2000) { return String(value==null?'':value).replace(/[\u0000-\u001f\u007f]/g,' ').trim().slice(0,max); }
 function safeAsset(value) { const asset=safeText(value,15).toUpperCase(); return /^[A-Z0-9]{2,12}$/.test(asset)?asset:'UNKNOWN'; }
 function allowedOrigins(env) {
@@ -548,7 +552,7 @@ export async function handleRequest(request,env={},ctx={},deps={}) {
   }
   if(request.method==='GET'&&url.pathname==='/v1/monitor/latest') return json(await latestMonitor(env.MARKET_EDGE_DB),200,cors);
   if(request.method==='GET'&&url.pathname==='/v1/research/historical') return json(await latestHistorical(env.MARKET_EDGE_DB),200,cors);
-  if(request.method==='GET'&&url.pathname==='/v1/research/replay') return json(await replayProgress(env.MARKET_EDGE_DB),200,cors);
+  if(request.method==='GET'&&url.pathname==='/v1/research/replay') { try{return json(await replayProgress(env.MARKET_EDGE_DB),200,cors);}catch(error){return researchReplayFailure(error,cors);} }
   if(request.method==='GET'&&url.pathname==='/v1/research/status') return json(await researchStatus(env.MARKET_EDGE_DB),200,cors);
   if(request.method==='GET'&&url.pathname==='/v1/research/ml/dataset') { try{return json(await mlDataset(request,env,url),200,cors);}catch(error){return json({error:{code:error.code||'ML_DATASET_ERROR',message:safeText(error.message,240)}},error.status||400,cors);} }
   if(request.method==='GET'&&url.pathname==='/v1/research/ml/generation-status') { try{return json(await mlGenerationStatus(request,env),200,cors);}catch(error){return json({error:{code:error.code||'ML_GENERATION_STATUS_ERROR',message:safeText(error.message,240)}},error.status||400,cors);} }

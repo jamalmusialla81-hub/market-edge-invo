@@ -99,6 +99,9 @@ class FakeStatement {
 }
 class FakeD1 { constructor(){this.calls=[];} prepare(sql){return new FakeStatement(this,sql);} async batch(items){for(const item of items)await item.run();} }
 const researchEnv={...env,RESEARCH_INGEST_TOKEN:'test-research-secret',MARKET_EDGE_DB:new FakeD1()};
+class ExhaustedReplayD1 { prepare(){return {all:async()=>{throw new Error("D1_ERROR: Your account has exceeded D1's free tier daily row read limit.");}};} }
+response=await handleRequest(new Request('https://market-edge-ai.test/v1/research/replay',{headers:{origin:'https://jamalmusialla81-hub.github.io'}}),{...env,MARKET_EDGE_DB:new ExhaustedReplayD1()},{},{});
+assert.equal(response.status,503);assert.equal((await response.json()).error.code,'RESEARCH_D1_READ_LIMITED');
 function stable(value){if(Array.isArray(value))return`[${value.map(stable).join(',')}]`;if(value&&typeof value==='object')return`{${Object.keys(value).sort().map(key=>`${JSON.stringify(key)}:${stable(value[key])}`).join(',')}}`;return JSON.stringify(value);}
 function stableHash(value){let hash=0x811c9dc5,text=stable(value);for(let index=0;index<text.length;index++){hash^=text.charCodeAt(index);hash=Math.imul(hash,0x01000193);}return(hash>>>0).toString(16).padStart(8,'0');}
 response=await handleRequest(new Request('https://market-edge-ai.test/v1/research/ml/dataset?id=EARLY-WINDOW-RESEARCH-V1',{headers:{origin:'https://jamalmusialla81-hub.github.io'}}),researchEnv,{},{});
