@@ -1,0 +1,71 @@
+name: Historical Rank Outcome Recovery
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '5 0 * * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: historical-rank-v2-write
+  cancel-in-progress: false
+
+jobs:
+  proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: 8ea7796a8fb13ffb612245e8a08a55d6
+      MARKET_EDGE_D1_DATABASE_ID: 39a4082e-41a4-45e9-9b76-99cf10eaca01
+      MARKET_EDGE_RESEARCH_TOKEN: ${{ secrets.MARKET_EDGE_RESEARCH_TOKEN }}
+      OUTCOME_RECOVERY_LIMIT: '10'
+      OUTCOME_RECOVERY_REPORT: outcome-recovery-proof.json
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Deploy only the research outcome-recovery endpoint
+        run: npx --yes wrangler@4.33.1 deploy --config backend/wrangler.jsonc
+      - name: Resolve ten frozen data-gap candidates with cached Binance proxy candles
+        run: node research/recover-historical-rank-outcomes.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: historical-rank-outcome-proof
+          path: |
+            outcome-recovery-proof.json
+            research/outcome-cache
+          if-no-files-found: warn
+          retention-days: 90
+
+  full_recovery:
+    needs: proof
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: 8ea7796a8fb13ffb612245e8a08a55d6
+      MARKET_EDGE_D1_DATABASE_ID: 39a4082e-41a4-45e9-9b76-99cf10eaca01
+      MARKET_EDGE_RESEARCH_TOKEN: ${{ secrets.MARKET_EDGE_RESEARCH_TOKEN }}
+      OUTCOME_RECOVERY_LIMIT: '500'
+      OUTCOME_RECOVERY_REPORT: outcome-recovery-full.json
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Resolve all remaining frozen data-gap candidates only after proof passes
+        run: node research/recover-historical-rank-outcomes.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: historical-rank-outcome-recovery
+          path: |
+            outcome-recovery-full.json
+            research/outcome-cache
+          if-no-files-found: warn
+          retention-days: 90
