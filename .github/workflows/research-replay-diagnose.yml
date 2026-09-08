@@ -1,0 +1,41 @@
+name: Diagnose Research Replay Endpoint
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: 8ea7796a8fb13ffb612245e8a08a55d6
+      MARKET_EDGE_RESEARCH_TOKEN: ${{ secrets.MARKET_EDGE_RESEARCH_TOKEN }}
+      MARKET_EDGE_API: https://market-edge-ai.jakob-market-edge.workers.dev
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Capture the live replay exception and response safely
+        run: |
+          npx --yes wrangler@4.33.1 tail market-edge-ai --format json --config backend/wrangler.jsonc > worker-tail.jsonl 2>&1 &
+          TAIL_PID=$!
+          sleep 5
+          curl --silent --show-error --output replay-response.json --write-out '%{http_code}\n' \
+            -H "Authorization: Bearer ${MARKET_EDGE_RESEARCH_TOKEN}" \
+            "${MARKET_EDGE_API}/v1/research/replay" > replay-http-status.txt || true
+          sleep 6
+          kill "$TAIL_PID" || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: research-replay-diagnostic
+          path: |
+            replay-http-status.txt
+            replay-response.json
+            worker-tail.jsonl
+          retention-days: 7
