@@ -7,7 +7,7 @@ const finite=value=>Number.isFinite(Number(value))?Number(value):null;
 function symbolFor(asset){return SYMBOLS[String(asset||'').toUpperCase()]||null;}
 function candlesFromBinance(payload){
   if(!Array.isArray(payload))return[];
-  return payload.map(row=>({time:finite(row?.[0]),open:finite(row?.[1]),high:finite(row?.[2]),low:finite(row?.[3]),close:finite(row?.[4]),volume:finite(row?.[5]),close_time:finite(row?.[6])}));
+  return payload.map(row=>({time:finite(row?.[0]??row?.time),open:finite(row?.[1]??row?.open),high:finite(row?.[2]??row?.high),low:finite(row?.[3]??row?.low),close:finite(row?.[4]??row?.close),volume:finite(row?.[5]??row?.volume),close_time:finite(row?.[6]??row?.close_time)}));
 }
 function completeWindow(rows,timestamp){
   const expected=Number(timestamp),need=Rank.OUTCOME_BARS,interval=Rank.BASE_MS,window=rows.filter(row=>Number.isFinite(row.time)&&row.time>=expected).slice(0,need);
