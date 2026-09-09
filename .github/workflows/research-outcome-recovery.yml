@@ -73,6 +73,7 @@ jobs:
 
   full_recovery:
     needs: proof
+    if: ${{ always() && needs.proof.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
@@ -101,7 +102,7 @@ jobs:
 
   v0_epoch_training:
     needs: full_recovery
-    if: ${{ success() }}
+    if: ${{ always() && needs.full_recovery.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
