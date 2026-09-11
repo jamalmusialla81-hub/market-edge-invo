@@ -1,0 +1,90 @@
+name: Phase 5 — V1 Daily Dataset Expansion
+
+on:
+  workflow_dispatch:
+  schedule:
+    # One bounded batch per day remains well inside the D1 free-tier read
+    # budget.  It resumes itself from immutable V1 state; no GPT session is
+    # required after the initial dispatch.
+    - cron: '20 0 * * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: historical-rank-v1-write
+  cancel-in-progress: false
+
+env:
+  CLOUDFLARE_ACCOUNT_ID: 8ea7796a8fb13ffb612245e8a08a55d6
+  MARKET_EDGE_D1_DATABASE_ID: 39a4082e-41a4-45e9-9b76-99cf10eaca01
+  HISTORICAL_RANK_ENGINE_VERSION: HISTORICAL-RANK-V1
+  HISTORICAL_RANK_CADENCE_MS: '86400000'
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      target: ${{ steps.plan.outputs.phase5_target }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - id: plan
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: node research/phase5-rank-plan.mjs
+
+  replay:
+    needs: plan
+    if: ${{ needs.plan.outputs.target != 'COMPLETE' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: true
+      max-parallel: 1
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      MARKET_EDGE_RESEARCH_TOKEN: ${{ secrets.MARKET_EDGE_RESEARCH_TOKEN }}
+      HISTORICAL_RANK_PILOT_SCANS: ${{ matrix.scan_count }}
+      HISTORICAL_RANK_START_INDEX: ${{ matrix.start_index }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Freeze a bounded deterministic V1 slice, then resolve only later outcomes
+        run: node research/run-historical-rank-pilot.mjs
+
+  recover_and_audit:
+    needs: [plan, replay]
+    if: ${{ always() && needs.plan.result == 'success' && (needs.replay.result == 'success' || needs.replay.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      MARKET_EDGE_RESEARCH_TOKEN: ${{ secrets.MARKET_EDGE_RESEARCH_TOKEN }}
+      OUTCOME_RECOVERY_LIMIT: '500'
+      OUTCOME_RECOVERY_REPORT: phase5-v1-outcome-recovery.json
+      HISTORICAL_RANK_REPORT_FILE: phase5-v1-dataset-audit.json
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Recover only immutable V1 data-gap outcomes through the validated proxy
+        run: node research/recover-historical-rank-outcomes.mjs
+      - name: Audit V1 provenance, no-lookahead, and density
+        run: node research/historical-rank-report.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: phase5-v1-dataset-${{ github.run_id }}
+          path: |
+            phase5-v1-outcome-recovery.json
+            phase5-v1-dataset-audit.json
+          if-no-files-found: error
+          retention-days: 90

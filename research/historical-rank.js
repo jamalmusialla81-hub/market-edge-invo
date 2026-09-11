@@ -8,7 +8,9 @@ const Replay = require('../replay-engine.js');
 const Features = require('./feature-engine.js');
 const Sequences = require('./candle-sequence.js');
 
-const VERSION = 'HISTORICAL-RANK-PILOT-V2';
+// A dataset generation is immutable once written.  Phase 5 uses a new,
+// daily-cadence generation while retaining the exact same shared evaluator.
+const VERSION = process.env.HISTORICAL_RANK_ENGINE_VERSION || 'HISTORICAL-RANK-PILOT-V2';
 const ASSETS = ['BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'LTC'];
 const BASE_MS = 300000;
 const OUTCOME_BARS = 288;

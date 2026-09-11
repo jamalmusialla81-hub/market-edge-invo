@@ -6,7 +6,7 @@ import Rank from './historical-rank.js';
 import Replay from '../replay-engine.js';
 
 const API=(process.env.MARKET_EDGE_API||'https://market-edge-ai.jakob-market-edge.workers.dev').replace(/\/$/,''),RESEARCH_TOKEN=process.env.MARKET_EDGE_RESEARCH_TOKEN||'',CF_TOKEN=process.env.CLOUDFLARE_API_TOKEN||'',ACCOUNT=process.env.CLOUDFLARE_ACCOUNT_ID||'8ea7796a8fb13ffb612245e8a08a55d6',DB=process.env.MARKET_EDGE_D1_DATABASE_ID||'39a4082e-41a4-45e9-9b76-99cf10eaca01';
-const CADENCE=7*24*60*60*1000,SCAN_LIMIT=Math.max(1,Math.min(8,Number(process.env.HISTORICAL_RANK_PILOT_SCANS)||4)),START_INDEX=Math.max(0,Number(process.env.HISTORICAL_RANK_START_INDEX)||0);
+const CADENCE=Math.max(Rank.BASE_MS,Number(process.env.HISTORICAL_RANK_CADENCE_MS)||7*24*60*60*1000),SCAN_LIMIT=Math.max(1,Math.min(8,Number(process.env.HISTORICAL_RANK_PILOT_SCANS)||4)),START_INDEX=Math.max(0,Number(process.env.HISTORICAL_RANK_START_INDEX)||0);
 const args=new Set(process.argv.slice(2)),dryRun=args.has('--dry-run');
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 const finite=value=>Number.isFinite(Number(value))?Number(value):null;
@@ -48,7 +48,7 @@ async function main() {
   if(!selected.length){console.log(JSON.stringify({dataset:Rank.VERSION,status:'NO_COMPLETE_COMMON_HISTORY_REMAINING',start_index:START_INDEX,scan_limit:SCAN_LIMIT}));return;}
   const sourceHashes=await d1(`SELECT asset,dataset_hash FROM historical_dataset_manifests WHERE exchange='COINBASE' AND base_timeframe='5m' AND asset IN ('BTC','ETH','SOL','XRP','DOGE','LTC') ORDER BY asset`);
   const sourceHash=Rank.hash(sourceHashes.map(row=>[row.asset,row.dataset_hash]));
-  const planned=selected.map(timestamp=>({timestamp,scanId:`hrp2-${timestamp}-${sourceHash}`})),complete=await completedScans(planned.map(item=>item.scanId)),remaining=planned.filter(item=>!complete.has(item.scanId)),report={dataset:Rank.VERSION,universe_mode:'HISTORICAL_DATA_UNIVERSE_PROXY',cadence_ms:CADENCE,start_index:START_INDEX,selection:'Earliest complete common-history timestamp, then every seven days; no performance-based selection',scan_timestamps:selected,skipped_complete:planned.filter(item=>complete.has(item.scanId)).map(item=>item.scanId),scans:[]};
+  const planned=selected.map(timestamp=>({timestamp,scanId:`hrp-${Rank.VERSION}-${CADENCE}-${timestamp}-${sourceHash}`})),complete=await completedScans(planned.map(item=>item.scanId)),remaining=planned.filter(item=>!complete.has(item.scanId)),report={dataset:Rank.VERSION,universe_mode:'HISTORICAL_DATA_UNIVERSE_PROXY',cadence_ms:CADENCE,start_index:START_INDEX,selection:`Earliest complete common-history timestamp, then every ${CADENCE}ms; no performance-based selection`,scan_timestamps:selected,skipped_complete:planned.filter(item=>complete.has(item.scanId)).map(item=>item.scanId),scans:[]};
   if(!remaining.length){console.log(JSON.stringify(report,null,2));return;}
   const start=commonStart,end=remaining.at(-1).timestamp+(Rank.OUTCOME_BARS+2)*Rank.BASE_MS,frames=new Map();
   // These D1 reads are independent and immutable. Parallelising this load does
