@@ -49,6 +49,8 @@ test('runner finalizes real historical candidate rows using combined_score',()=>
   ];
   const finalized=Rank.finalizeCandidates(rows);
   assert.equal(finalized.length,3);
+  assert.deepEqual(finalized.map(row=>row.candidate_id),['high','low','rejected']);
+  assert.deepEqual(finalized.filter(row=>row.valid_current_geometry).map(row=>row.candidate_rank),[1,2]);
   assert.equal(finalized.find(row=>row.candidate_id==='high').candidate_rank,1);
   assert.equal(finalized.find(row=>row.candidate_id==='low').candidate_rank,2);
   assert.equal(finalized.find(row=>row.candidate_id==='rejected').candidate_rank,undefined);

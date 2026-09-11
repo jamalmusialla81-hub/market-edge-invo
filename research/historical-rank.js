@@ -60,9 +60,15 @@ function snapshot({scanId,timestamp,universe,sourceHash,cadenceMs,candidates}) {
 // manufacturing a separate combined value.
 function finalizeCandidates(rows) {
   const combined=Array.isArray(rows)?rows.slice():[];
-  combined.filter(row=>row.valid_current_geometry).sort((a,b)=>(b.combined_score??-Infinity)-(a.combined_score??-Infinity)||String(a.asset).localeCompare(String(b.asset))||String(a.strategy).localeCompare(String(b.strategy))||String(a.direction).localeCompare(String(b.direction))).forEach((row,index)=>{row.candidate_rank=index+1;});
-  combined.forEach(row=>{row.candidate_count=combined.length;row.candidate_hash=hash({...row,targets:undefined,candidate_hash:undefined});});
-  return combined;
+  const ranked=combined.filter(row=>row.valid_current_geometry).sort((a,b)=>(b.combined_score??-Infinity)-(a.combined_score??-Infinity)||String(a.asset).localeCompare(String(b.asset))||String(a.strategy).localeCompare(String(b.strategy))||String(a.direction).localeCompare(String(b.direction)));
+  ranked.forEach((row,index)=>{row.candidate_rank=index+1;});
+  // The persisted API contract requires rankable candidates in their frozen
+  // rank order.  Returning the evaluator's asset iteration order can produce
+  // a valid rank set such as [2, 1], which the immutable writer correctly
+  // rejects as non-contiguous in payload order.
+  const ordered=[...ranked,...combined.filter(row=>!row.valid_current_geometry)];
+  ordered.forEach(row=>{row.candidate_count=ordered.length;row.candidate_hash=hash({...row,targets:undefined,candidate_hash:undefined});});
+  return ordered;
 }
 function resolveCandidate(candidate,future) {
   if (!candidate?.valid_current_geometry) return null;
