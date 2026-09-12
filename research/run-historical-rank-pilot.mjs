@@ -4,6 +4,7 @@
 // snapshot has been accepted by the protected Worker.
 import Rank from './historical-rank.js';
 import Replay from '../replay-engine.js';
+import Control from './outcome-recovery-control.js';
 
 const API=(process.env.MARKET_EDGE_API||'https://market-edge-ai.jakob-market-edge.workers.dev').replace(/\/$/,''),RESEARCH_TOKEN=process.env.MARKET_EDGE_RESEARCH_TOKEN||'',CF_TOKEN=process.env.CLOUDFLARE_API_TOKEN||'',ACCOUNT=process.env.CLOUDFLARE_ACCOUNT_ID||'8ea7796a8fb13ffb612245e8a08a55d6',DB=process.env.MARKET_EDGE_D1_DATABASE_ID||'39a4082e-41a4-45e9-9b76-99cf10eaca01';
 const CADENCE=Math.max(Rank.BASE_MS,Number(process.env.HISTORICAL_RANK_CADENCE_MS)||7*24*60*60*1000),SCAN_LIMIT=Math.max(1,Math.min(8,Number(process.env.HISTORICAL_RANK_PILOT_SCANS)||4)),START_INDEX=Math.max(0,Number(process.env.HISTORICAL_RANK_START_INDEX)||0);
@@ -36,7 +37,7 @@ async function completedScans(scanIds) {
   // outcome is deliberately replayed, but frozen candidate inputs are never
   // replaced because the Worker accepts only the identical provenance hash.
   const placeholders=scanIds.map(()=>'?').join(','),rows=await d1(`SELECT snapshot.scan_id AS scan_id,SUM(CASE WHEN candidate.valid_current_geometry=1 AND candidate.targets_json LIKE '%PENDING_OUTCOME%' THEN 1 ELSE 0 END) AS pending_rankable FROM historical_scan_snapshots snapshot LEFT JOIN historical_scan_candidates candidate ON candidate.scan_id=snapshot.scan_id WHERE snapshot.scan_id IN (${placeholders}) GROUP BY snapshot.scan_id`,scanIds);
-  return new Set(rows.filter(row=>Number(row.pending_rankable||0)===0).map(row=>String(row.scan_id)));
+  return Control.completedScanIds(rows);
 }
 async function main() {
   const bounds=await d1(`SELECT asset,MIN(open_time) AS first_time,MAX(open_time) AS last_time,COUNT(*) AS candle_count FROM canonical_candles WHERE exchange='COINBASE' AND interval='5m' AND asset IN ('BTC','ETH','SOL','XRP','DOGE','LTC') GROUP BY asset ORDER BY asset`);

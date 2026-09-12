@@ -215,9 +215,9 @@ async function historicalRankOutcomeCommit(payload,env,now){
 // label can never be overwritten by a later proxy source.
 async function historicalRankOutcomeRecoveryCommit(payload,env,now){
   const scanId=safeText(payload?.scan_id,180),targets=Array.isArray(payload?.outcomes)?payload.outcomes.map(historicalRankTarget):[];
-  if(!scanId||!targets.length||targets.length>96||new Set(targets.map(row=>row.id)).size!==targets.length||targets.some(row=>row.status!=='RESOLVED'||safeText(row.target?.outcome_source,40)!=='BINANCE_PROXY'))throw Object.assign(new Error('Invalid historical rank proxy recovery batch'),{status:400,code:'HISTORICAL_RANK_RECOVERY_INVALID'});
-  let resolved=0;for(const row of targets){const result=await env.MARKET_EDGE_DB.prepare(`UPDATE historical_scan_candidates SET targets_json=?,resolved_at=? WHERE candidate_id=? AND scan_id=? AND targets_json LIKE '%UNRESOLVED_DATA_GAP%'`).bind(JSON.stringify(row.target),now,row.id,scanId).run();resolved+=Number(result?.meta?.changes)||0;}
-  return {accepted:true,operation:'historical_rank_outcome_recovery_commit',scan_id:scanId,resolved,immutable_inputs:true};
+  if(!scanId||!targets.length||targets.length>96||new Set(targets.map(row=>row.id)).size!==targets.length||targets.some(row=>!['RESOLVED','UNRESOLVED_DATA_GAP'].includes(row.status)||safeText(row.target?.outcome_source,40)!=='BINANCE_PROXY'))throw Object.assign(new Error('Invalid historical rank proxy recovery batch'),{status:400,code:'HISTORICAL_RANK_RECOVERY_INVALID'});
+  let resolved=0,terminalUnresolved=0;for(const row of targets){const result=await env.MARKET_EDGE_DB.prepare(`UPDATE historical_scan_candidates SET targets_json=?,resolved_at=? WHERE candidate_id=? AND scan_id=? AND targets_json LIKE '%UNRESOLVED_DATA_GAP%'`).bind(JSON.stringify(row.target),now,row.id,scanId).run();const changed=Number(result?.meta?.changes)||0;if(row.status==='RESOLVED')resolved+=changed;else terminalUnresolved+=changed;}
+  return {accepted:true,operation:'historical_rank_outcome_recovery_commit',scan_id:scanId,resolved,terminal_unresolved:terminalUnresolved,immutable_inputs:true};
 }
 async function researchIngest(request,env,payload,now=Date.now()){
   researchToken(request,env);
