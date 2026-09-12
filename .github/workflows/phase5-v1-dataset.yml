@@ -27,6 +27,7 @@ jobs:
     outputs:
       matrix: ${{ steps.plan.outputs.matrix }}
       target: ${{ steps.plan.outputs.phase5_target }}
+      resolved: ${{ steps.plan.outputs.phase5_resolved }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -86,5 +87,31 @@ jobs:
           path: |
             phase5-v1-outcome-recovery.json
             phase5-v1-dataset-audit.json
+          if-no-files-found: error
+          retention-days: 90
+
+  v1_research_training:
+    needs: [plan, recover_and_audit]
+    if: ${{ always() && needs.plan.result == 'success' && needs.recover_and_audit.result == 'success' && fromJSON(needs.plan.outputs.resolved) >= 500 }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      MARKET_EDGE_RESEARCH_TOKEN: ${{ secrets.MARKET_EDGE_RESEARCH_TOKEN }}
+      HISTORICAL_RANK_ENGINE_VERSION: HISTORICAL-RANK-V1
+      RANK_TRAINING_LABEL: V1
+      RANK_TRAINING_MIN_RESOLVED: '500'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Run the research-only V1 challenger suite after the integrity gate
+        run: node research/v0-epoch-training.mjs | tee phase5-v1-training.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: phase5-v1-training-${{ github.run_id }}
+          path: phase5-v1-training.json
           if-no-files-found: error
           retention-days: 90
