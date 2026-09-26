@@ -12,18 +12,31 @@ def intent(leverage=1, entry=100.0, stop=95.0, side="buy"):
 
 
 def test_exposure_cap_counts_already_open_notional():
-    # One trade here is 1% risk / 5% stop = 20% notional -- exactly at the cap
-    # alone, so any open notional must push it over.
+    # 1% risk / 5% stop = 20% notional -- exactly the cap on its own.
     fresh = approve(intent(), AccountState(equity=10_000))
-    assert fresh.decision.approved
-    stacked = approve(intent(), AccountState(equity=10_000, open_positions=1, open_notional=500))
-    assert not stacked.decision.approved
-    assert stacked.decision.reason == "MAX_PORTFOLIO_EXPOSURE_EXCEEDED"
+    assert fresh.decision.approved and not fresh.exposure_capped
+    partial = approve(intent(), AccountState(equity=10_000, open_positions=1, open_notional=500))
+    assert partial.decision.approved and partial.exposure_capped
+    assert partial.notional == pytest.approx(1_500)       # only the room left under 20%
+    assert partial.max_loss == pytest.approx(75.0)  # smaller loss, never larger
+    sliver = approve(intent(), AccountState(equity=10_000, open_positions=1, open_notional=1_990))
+    assert not sliver.decision.approved  # would risk $0.50: not a real trade
+    full = approve(intent(), AccountState(equity=10_000, open_positions=1, open_notional=2_000))
+    assert not full.decision.approved and full.decision.reason == "MAX_PORTFOLIO_EXPOSURE_EXCEEDED"
+
+
+def test_tight_stop_is_sized_down_to_the_cap_not_rejected():
+    # CI Part F: NEAR stop 1.9% away needed ~53% notional for 1% risk.
+    near = approve(intent(entry=4.9483, stop=4.854921), AccountState(equity=10_000))
+    assert near.decision.approved and near.exposure_capped
+    assert near.notional == pytest.approx(2_000)
+    assert near.max_loss == pytest.approx(2_000 / 4.9483 * (4.9483 - 4.854921))
+    assert near.max_loss < 100
 
 
 def test_endurance_segment_1_stacking_would_now_be_blocked():
     # Segment 1: ENA ~0.2824, each entry ~$679 notional on $10k. Replaying
-    # the stack through the aggregate check must stop it at the 20% cap.
+    # the stack must never take total notional past the 20% cap.
     acc_notional, opened = 0.0, 0
     for _ in range(12):
         a = approve(intent(entry=0.2824, stop=0.2824 * (1 - 0.1473)), AccountState(equity=10_000, open_positions=0, open_notional=acc_notional))
@@ -31,8 +44,8 @@ def test_endurance_segment_1_stacking_would_now_be_blocked():
             break
         acc_notional += a.notional
         opened += 1
-    assert opened == 2
-    assert acc_notional / 10_000 * 100 <= 20.0
+    assert opened == 3  # two full-size entries, then one sized down to the remaining room
+    assert acc_notional == pytest.approx(2_000)
 
 
 @pytest.mark.parametrize("leverage", [1, 2, 3, 5, 10])

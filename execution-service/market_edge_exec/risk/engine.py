@@ -39,6 +39,7 @@ class RiskLimits:
     min_liquidation_buffer_pct: float = 1.0    # stop must be hit this far before liquidation
     daily_loss_limit_pct: float = 5.0
     drawdown_limit_pct: float = 15.0
+    min_capped_risk_fraction: float = 0.1     # a trade shrunk by the exposure cap must still risk >= 10% of the budget
 
 
 @dataclass
@@ -53,6 +54,7 @@ class RiskAssessment:
     notional: float = 0.0
     requested_leverage: float = 0.0
     liquidation_buffer_pct: Optional[float] = None
+    exposure_capped: bool = False
 
 
 def liquidation_price(entry: float, leverage: float, side: str, maintenance_margin_pct: float = 0.5) -> float:
@@ -96,8 +98,18 @@ def approve(intent: ExecutionIntent, account: AccountState, limits: RiskLimits =
     max_loss = position_size * stop_distance  # == risk_budget by construction; leverage cannot raise this
     notional = position_size * entry
 
-    if (account.open_notional + notional) / account.equity * 100 > limits.max_portfolio_exposure_pct:
+    # When the exposure cap binds, shrink the position to fit it instead of
+    # rejecting: the loss at the stop only gets smaller than risk_budget.
+    room = account.equity * limits.max_portfolio_exposure_pct / 100.0 - account.open_notional
+    if room <= 0:
         return reject("MAX_PORTFOLIO_EXPOSURE_EXCEEDED")
+    exposure_capped = notional > room
+    if exposure_capped:
+        position_size = room / entry
+        notional = room
+        max_loss = position_size * stop_distance
+        if max_loss < risk_budget * limits.min_capped_risk_fraction:
+            return reject("MAX_PORTFOLIO_EXPOSURE_EXCEEDED")
 
     requested_leverage = max(intent.leverage, 0.0001)
 
@@ -126,7 +138,8 @@ def approve(intent: ExecutionIntent, account: AccountState, limits: RiskLimits =
     return RiskAssessment(
         decision=RiskDecision(signal_id=intent.signal_id, approved=True, approved_leverage=approved_leverage,
                                max_position_notional=notional),
-        position_size=position_size, risk_amount=risk_budget, max_loss=max_loss,
+        position_size=position_size, risk_amount=max_loss, max_loss=max_loss,
         margin_required=margin_required, liquidation_estimate=liq_price, stop_distance=stop_distance,
         notional=notional, requested_leverage=requested_leverage, liquidation_buffer_pct=buffer_pct,
+        exposure_capped=exposure_capped,
     )

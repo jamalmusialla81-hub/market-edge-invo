@@ -139,6 +139,7 @@ class PaperEngine:
             "stop_distance": assessment.stop_distance, "risk_amount": assessment.risk_amount, "max_loss": assessment.max_loss,
             "liquidation_estimate": assessment.liquidation_estimate, "liquidation_buffer_pct": assessment.liquidation_buffer_pct,
             "equity_at_entry": account.equity, "risk_pct_of_equity": assessment.risk_amount / account.equity * 100,
+            "exposure_capped": assessment.exposure_capped,
             "realized_pnl": 0.0, "unrealized_pnl": 0.0, "fees": entry_fee,
             "slippage_cost": abs(entry_fill - mark_price) * qty, "mark_price": mark_price, "last_checked_ms": now_ms,
             "quant_score": signal.quant_score, "exits": [],
