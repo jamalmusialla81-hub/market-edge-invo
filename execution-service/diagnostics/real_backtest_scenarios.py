@@ -92,7 +92,6 @@ class ScenarioStrategy(Strategy):
                 self.cancel_order(self.cache.order(self.cancel_target_id))
                 self.events.append({"scenario": "CANCEL_SUBMIT", "order_id": str(self.cancel_target_id)})
         elif count == 3:
-            position = self.cache.position_for_order(instrument_id=instrument_id) if hasattr(self.cache, "position_for_order") else None
             net = self.portfolio.net_position(instrument_id)
             if net != 0:
                 reduce_side = OrderSide.SELL if net > 0 else OrderSide.BUY
