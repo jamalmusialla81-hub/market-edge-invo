@@ -142,11 +142,15 @@ jobs:
         run: |
           docker compose logs hummingbot > hummingbot_container.log 2>&1 || true
           docker compose logs bridge > bridge_container.log 2>&1 || true
+          echo "--- hummingbot container log (for diagnosing crash-loop / restart) ---"
+          cat hummingbot_container.log
+          echo "--- bridge container log ---"
+          cat bridge_container.log
 
       - name: Verify real mode is what's selected (never a silent mock fallback)
         working-directory: execution-service
         run: |
-          python -m pip install --quiet httpx pytest fastapi "uvicorn[standard]"
+          python -m pip install --quiet nautilus_trader httpx pytest fastapi "uvicorn[standard]"
           python -m pytest tests/test_hummingbot_real_client.py -q | tee real_client_ci.log
 
       - name: Part 5 — end-to-end testnet flow (PASS or SKIPPED_NOT_CONFIGURED)
@@ -162,6 +166,9 @@ jobs:
       - name: Tear down
         if: always()
         working-directory: hummingbot-service
+        env:
+          HUMMINGBOT_CONFIG_PASSWORD: ci-paper-only
+          HUMMINGBOT_BRIDGE_API_KEY: ci-bridge-key
         run: docker compose down -v || true
 
       - name: Upload Hummingbot/bridge artifacts
