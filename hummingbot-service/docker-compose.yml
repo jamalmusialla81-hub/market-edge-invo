@@ -34,7 +34,7 @@ services:
       - USERNAME=${HUMMINGBOT_API_USERNAME:?set in your own .env}
       - PASSWORD=${HUMMINGBOT_API_PASSWORD:?set in your own .env}
       - CONFIG_PASSWORD=${HUMMINGBOT_CONFIG_PASSWORD:?set in your own .env}
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-hbot}:${POSTGRES_PASSWORD:?set in your own .env}@postgres:5432/${POSTGRES_DB:-hummingbot_api}
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-hbot}:${POSTGRES_PASSWORD:?set in your own .env}@postgres:5432/${POSTGRES_DB:-hummingbot_api}
       - BROKER_HOST=emqx
       - BROKER_USERNAME=${BROKER_USERNAME:-hbot}
       - BROKER_PASSWORD=${BROKER_PASSWORD:?set in your own .env}
@@ -43,7 +43,10 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - hummingbot-api-data:/data
+      # Same layout as the official compose (./bots:/hummingbot-api/bots).
+      # The API refuses to start without bots/credentials/master_account/;
+      # run ./setup_bots.sh once to create it.
+      - ./bots:/hummingbot-api/bots
       # hummingbot-api orchestrates bot containers through the Docker daemon.
       - /var/run/docker.sock:/var/run/docker.sock
     restart: unless-stopped
@@ -64,4 +67,3 @@ services:
 
 volumes:
   hummingbot-postgres-data:
-  hummingbot-api-data:
