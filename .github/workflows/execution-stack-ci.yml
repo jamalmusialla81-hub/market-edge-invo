@@ -7,6 +7,13 @@ name: Execution Stack CI (Nautilus / Hummingbot, paper/testnet only)
 # Market Edge (quant-engine.js, replay-engine.js, backend/, customer-beta/).
 on:
   workflow_dispatch:
+    inputs:
+      max_cycles:
+        description: 'Part I endurance harness only: number of forward-loop cycles to run (5-min cadence default => cycles*5min ~= wall-clock duration)'
+        default: '12'
+      cycle_interval_ms:
+        description: 'Part I endurance harness only: milliseconds between cycles (default matches the real Market Edge 5-minute scan cadence)'
+        default: '300000'
   push:
     branches: ['claude/**']
     paths:
@@ -298,6 +305,85 @@ jobs:
             forward_loop_result.log
             positions.json
             execution-service/health.json
+            execution-service/uvicorn.log
+          if-no-files-found: warn
+          retention-days: 90
+
+  endurance-harness:
+    name: Part I — endurance harness (manual trigger only; resumable via cache across runs)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install execution-service dependencies
+        working-directory: execution-service
+        run: |
+          python -m pip install --upgrade pip
+          pip install fastapi "uvicorn[standard]" pydantic httpx nautilus_trader
+
+      - name: Restore persisted paper-trading state from the most recent prior segment (if any)
+        uses: actions/cache/restore@v4
+        id: restore-state
+        with:
+          path: execution-service/endurance_state.sqlite3
+          key: endurance-state-${{ github.run_id }}
+          restore-keys: |
+            endurance-state-
+
+      - name: Start the paper execution-service against the persisted DB
+        working-directory: execution-service
+        env:
+          MARKET_EDGE_EXEC_API_KEY: ci-endurance-key
+          EXECUTION_SERVICE_DB_PATH: endurance_state.sqlite3
+        run: |
+          nohup python run_server.py > uvicorn.log 2>&1 &
+          for i in $(seq 1 20); do curl -sf http://127.0.0.1:8000/health && break; sleep 1; done
+          curl -sf http://127.0.0.1:8000/health
+
+      - name: Run the endurance forward loop (never resets account/trade history between segments)
+        env:
+          MARKET_EDGE_EXEC_API_KEY: ci-endurance-key
+          EXECUTION_SERVICE_URL: http://127.0.0.1:8000
+          MAX_CYCLES: ${{ github.event.inputs.max_cycles || '12' }}
+          CYCLE_INTERVAL_MS: ${{ github.event.inputs.cycle_interval_ms || '300000' }}
+        run: node signal-bridge/forward_loop.mjs | tee endurance_loop.log
+
+      - name: Final metrics + positions/orders snapshot
+        if: always()
+        run: |
+          curl -sS -H "X-API-Key: ci-endurance-key" http://127.0.0.1:8000/positions | tee execution-service/final_positions.json
+          curl -sS -H "X-API-Key: ci-endurance-key" http://127.0.0.1:8000/orders | tee execution-service/final_orders.json
+          curl -sS -X POST -H "X-API-Key: ci-endurance-key" http://127.0.0.1:8000/reconcile | tee execution-service/final_reconcile.json
+
+      - name: Server log
+        if: always()
+        run: cat execution-service/uvicorn.log || true
+
+      - name: Save persisted state for the next segment (fail the job, not the save, if this step has nothing to save)
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: execution-service/endurance_state.sqlite3
+          key: endurance-state-${{ github.run_id }}
+
+      - name: Upload endurance artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: endurance-report-${{ github.run_id }}
+          path: |
+            endurance_loop.log
+            execution-service/final_positions.json
+            execution-service/final_orders.json
+            execution-service/final_reconcile.json
             execution-service/uvicorn.log
           if-no-files-found: warn
           retention-days: 90
