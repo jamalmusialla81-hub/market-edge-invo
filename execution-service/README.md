@@ -39,36 +39,62 @@ python -m pytest -q
 uvicorn market_edge_exec.api.app:create_app --factory --reload
 ```
 
-## NautilusTrader — installed for real
+## NautilusTrader — installed for real, engine blocked by a native crash
 
 `nautilus_trader==1.221.0` installs from a prebuilt wheel and is imported
 for real: `nautilus/portfolio.py` round-trips every instrument id, side,
 quantity, and price through Nautilus's own `InstrumentId`/`OrderSide`/
 `Quantity`/`Price` types before this service's `NautilusPortfolio` class
-records the position. **What is not wired up in this pass**: the full
-`TradingNode` / `BacktestEngine` order-matching, actor, and message-bus
-stack. That requires venue/instrument configuration and an async runtime
-that a synchronous FastAPI request/response service doesn't naturally host,
-and is a distinct, larger piece of work (see NEXT STEP). Canonical
-position/PnL bookkeeping in this pass is `NautilusPortfolio`, backed by
-SQLite — genuinely the "system of record" role Nautilus is supposed to
-play, just not yet running inside Nautilus's own engine.
+records the position.
 
-## Hummingbot — MOCK, not the real connector
+**Phase 3 attempted to replace this with Nautilus's own `BacktestEngine`
+(real `SimulatedExchange`/`OrderMatchingEngine`/`Portfolio`/`Cache` matching
+engine) and hit a reproducible native crash**: `engine.run()` aborts with
+`double free or corruption (out)` -- a C-level memory error, not a Python
+exception -- in this container. This was isolated to the engine itself, not
+application code: it reproduces with the official
+`TestInstrumentProvider.btcusdt_perp_binance()` stub instrument, with zero
+strategies attached, with a market order, with a non-filling resting limit
+order, and with both numpy>=2 and numpy<2. See
+`diagnostics/backtest_engine_crash_repro.py` for the minimal repro (a
+venue + one instrument + one bar + `run()`, no strategy at all). This
+points at a build/ABI incompatibility between this prebuilt wheel and this
+container (most likely glibc or another native library version), not
+something fixable from Python-level code in this session.
 
-`pip install hummingbot` was attempted; dependency resolution alone did not
-finish within a 180-second budget (its tree — a cython-built core, exchange
-connectors, TA-Lib, etc. — is much heavier than a single-package install
-and wasn't going to complete in this pass). Per this task's own fallback
-instruction, `hummingbot/mock_client.py` is **a controlled mock**: it
-implements the full `HummingbotExecutionClient` interface (submit / cancel
-/ amend / fill / partial-fill / reject / reduce-only / leverage
-translation / external-id mapping / position+order query) against an
-in-memory simulated venue, reports its backend name as `HUMMINGBOT_MOCK`
-(never `HUMMINGBOT`, so logs/tests can't mistake it for the real thing),
-and can be swapped for a real Hummingbot gateway process later by
-implementing the same interface — no router, risk, or persistence code
-changes needed.
+Given that, canonical position/PnL bookkeeping in this pass remains
+`NautilusPortfolio` (Phase 2's approach), backed by SQLite and using real
+Nautilus value types for every field -- genuinely the "system of record"
+role, just not yet running inside Nautilus's own matching engine. The
+`live.node.TradingNode` + a real venue adapter (see `VENUE_DECISION.md`) is
+the next attempt, in an environment where this crash can first be
+root-caused or worked around (e.g. building nautilus_trader from source
+against this container's actual system libraries, or running in a
+container image closer to what the wheel was built for).
+
+## Hummingbot — real bridge code written, MOCK still the default (Phase 3)
+
+`pip install hummingbot` was attempted again in Phase 3 with the same
+result: dependency resolution alone did not finish within a 180-second
+budget. Per instruction, Hummingbot now runs as its own service
+(`../hummingbot-service/`, Dockerfile + docker-compose.yml + a narrow FastAPI
+bridge) instead of being pip-installed here. `hummingbot/real_client.py`
+(`HummingbotExecutionClientReal`) makes real HTTP calls to that bridge and
+reports backend `HUMMINGBOT` (only this class may use that name).
+`hummingbot/mock_client.py` (`HummingbotExecutionClient`, backend name
+`HUMMINGBOT_MOCK`) is unchanged and still available. `hummingbot/factory.py`
+picks one explicitly by `mode` ("mock" or "real") and **never falls back
+from real to mock** -- asking for "real" without a reachable bridge raises
+immediately.
+
+Honesty note: `../hummingbot-service/` has not been built or run in this
+environment (no Docker daemon is reachable here -- `docker version` finds
+only the CLI). Its bridge logic is tested against a fake Gateway server
+(`hummingbot-service/tests/test_bridge_contract.py`), and
+`HummingbotExecutionClientReal` is tested against a fake bridge
+(`tests/test_hummingbot_real_client.py`) -- both prove the HTTP contracts
+are internally consistent, neither proves a real Hummingbot instance fills
+a real (paper) order yet.
 
 ## Idempotency
 

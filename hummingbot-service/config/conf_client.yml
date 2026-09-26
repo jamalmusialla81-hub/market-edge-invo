@@ -1,0 +1,9 @@
+# Hummingbot client config -- PAPER TRADING ONLY.
+# Real venue credentials are supplied via environment variables in
+# docker-compose.yml (BINANCE_TESTNET_API_KEY / _SECRET), never written here.
+paper_trade_enabled: true
+paper_trade_account_balance:
+  USDT: 100000
+  BTC: 0
+  ETH: 0
+instance_id: market-edge-paper
