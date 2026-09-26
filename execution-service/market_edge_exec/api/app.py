@@ -77,7 +77,7 @@ def create_app(db_path: str = "market_edge_exec.sqlite3", hummingbot_mode: str =
         backends={BACKEND_NAUTILUS_NATIVE: PaperBackendAdapter(portfolio, BACKEND_NAUTILUS_NATIVE),
                   **({BACKEND_HUMMINGBOT: hummingbot} if hummingbot else {})},
     )
-    paper = PaperEngine(ledger, router, store)
+    paper = PaperEngine(ledger, router, store, portfolio=portfolio)
     app.state.store, app.state.portfolio, app.state.hummingbot, app.state.router = store, portfolio, hummingbot, router
     app.state.ledger, app.state.paper = ledger, paper
 

@@ -200,3 +200,16 @@ def test_leverage_rotation_logs_full_risk_fields_and_keeps_loss_constant(db):
         assert trade["margin_used"] == pytest.approx(trade["notional"] / trade["approved_leverage"])
         losses.append(trade["max_loss"])
     assert losses[0] == pytest.approx(losses[1], rel=0.02)  # equity moves slightly with fees
+
+
+def test_position_opened_outside_the_paper_session_blocks_entry_on_that_instrument(db):
+    # CI Part F: a BTC fill via /execution/signal, then a paper BTC entry,
+    # merged into one portfolio position and tripped reconciliation.
+    app = create_app(db_path=db)
+    client = TestClient(app)
+    outside = {"signal_id": "outside-1", "instrument": "ETH-PERP", "side": "buy", "quantity": 1.0, "order_type": "MARKET",
+               "strategy_id": "alpha", "limit_price": 100.0, "stop": 90.0, "leverage": 1}
+    assert client.post("/execution/intent", json=outside, headers=HEADERS).status_code == 200
+    result = open_trade(app)
+    assert not result.accepted and result.reason == "POSITION_ALREADY_OPEN_ON_INSTRUMENT"
+    assert client.post("/reconcile", json={}, headers=HEADERS).json()["reconciled"] is True
