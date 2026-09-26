@@ -74,11 +74,12 @@ def test_same_instrument_cannot_pyramid(db):
 
 def test_exposure_cap_counts_open_trades_across_instruments(db):
     app = create_app(db_path=db)
-    # 10% stops => 10% notional each at 1% risk; the third breaches 20%.
+    # 10% stops => 10% notional each at 1% risk; two fill the 20% cap.
     assert open_trade(app, "a", asset="ETH").accepted
     assert open_trade(app, "b", asset="BTC").accepted
     third = open_trade(app, "c", asset="SOL")
     assert not third.accepted and third.reason == "MAX_PORTFOLIO_EXPOSURE_EXCEEDED"
+    assert app.state.ledger.account_state().open_notional <= 2_000 + 1e-6
 
 
 def test_duplicate_signal_id_rejected(db):
