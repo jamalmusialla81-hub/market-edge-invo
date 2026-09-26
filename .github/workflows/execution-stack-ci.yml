@@ -1,0 +1,215 @@
+name: Execution Stack CI (Nautilus / Hummingbot, paper/testnet only)
+
+# Validates the execution-service/hummingbot-service stack in a clean
+# environment, since the sandboxed dev session hit two environment-specific
+# blockers: a native crash in nautilus_trader's BacktestEngine, and no
+# Docker daemon to run Hummingbot. This workflow does not touch production
+# Market Edge (quant-engine.js, replay-engine.js, backend/, customer-beta/).
+on:
+  workflow_dispatch:
+  push:
+    branches: ['claude/**']
+    paths:
+      - 'execution-service/**'
+      - 'hummingbot-service/**'
+      - '.github/workflows/execution-stack-ci.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  nautilus-matrix:
+    name: Nautilus (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.11', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install execution-service dependencies
+        working-directory: execution-service
+        run: |
+          python -m pip install --upgrade pip
+          pip install nautilus_trader fastapi "uvicorn[standard]" pydantic httpx pytest
+
+      - name: Environment report
+        working-directory: execution-service
+        run: python diagnostics/environment_report.py | tee environment_report.json
+
+      - name: Minimal crash repro (do not hide crashes)
+        id: repro
+        working-directory: execution-service
+        continue-on-error: true
+        run: |
+          set +e
+          python diagnostics/backtest_engine_crash_repro.py > repro.log 2>&1
+          code=$?
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          cat repro.log
+          if [ $code -eq 0 ] && grep -q "NO STRATEGY run complete, no crash" repro.log; then
+            echo "result=PASS" >> "$GITHUB_OUTPUT"
+          else
+            echo "result=FAIL" >> "$GITHUB_OUTPUT"
+          fi
+          exit 0
+
+      - name: Report minimal repro result
+        working-directory: execution-service
+        run: |
+          echo "MINIMAL_REPRO_RESULT=${{ steps.repro.outputs.result }} (exit_code=${{ steps.repro.outputs.exit_code }})"
+          echo '{"minimal_repro_result": "${{ steps.repro.outputs.result }}", "exit_code": "${{ steps.repro.outputs.exit_code }}"}' > repro_result.json
+
+      - name: Real BacktestEngine BTC/ETH long/short/reduce-only/cancel scenario
+        id: scenario
+        if: steps.repro.outputs.result == 'PASS'
+        working-directory: execution-service
+        continue-on-error: true
+        run: |
+          set +e
+          python diagnostics/real_backtest_scenarios.py > scenario.log 2>&1
+          code=$?
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          cat scenario.log
+          if [ $code -eq 0 ]; then echo "result=PASS" >> "$GITHUB_OUTPUT"; else echo "result=FAIL" >> "$GITHUB_OUTPUT"; fi
+          exit 0
+
+      - name: Skip note if minimal repro failed
+        if: steps.repro.outputs.result != 'PASS'
+        working-directory: execution-service
+        run: echo "Skipping real_backtest_scenarios.py: minimal repro did not pass in this environment (Python ${{ matrix.python-version }})." | tee scenario.log
+
+      - name: Existing execution-service test suite (Phase 2/3 bookkeeping paper route — always runs, independent of the engine crash)
+        working-directory: execution-service
+        run: python -m pytest -q | tee pytest.log
+
+      - name: Upload Nautilus environment artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nautilus-report-py${{ matrix.python-version }}
+          path: |
+            execution-service/environment_report.json
+            execution-service/repro.log
+            execution-service/repro_result.json
+            execution-service/scenario.log
+            execution-service/real_backtest_scenarios.json
+            execution-service/pytest.log
+          if-no-files-found: warn
+          retention-days: 90
+
+  hummingbot-docker:
+    name: Hummingbot container + bridge (Docker)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Bring up Hummingbot + bridge
+        working-directory: hummingbot-service
+        env:
+          HUMMINGBOT_CONFIG_PASSWORD: ci-paper-only
+          HUMMINGBOT_BRIDGE_API_KEY: ci-bridge-key
+        run: |
+          docker compose up -d
+          echo "Waiting for containers to settle..."
+          sleep 20
+          docker compose ps
+
+      - name: Health check both containers
+        id: health
+        working-directory: hummingbot-service
+        continue-on-error: true
+        run: |
+          set +e
+          echo "--- hummingbot container status ---"
+          docker inspect -f '{{.State.Status}}' market-edge-hummingbot-paper || echo "hummingbot container not found"
+          echo "--- bridge health ---"
+          curl -sS -m 10 http://localhost:8090/health | tee bridge_health.json
+          bridge_code=$?
+          echo "bridge_health_exit_code=$bridge_code" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Collect container logs (always, even on failure)
+        if: always()
+        working-directory: hummingbot-service
+        run: |
+          docker compose logs hummingbot > hummingbot_container.log 2>&1 || true
+          docker compose logs bridge > bridge_container.log 2>&1 || true
+
+      - name: Verify real mode is what's selected (never a silent mock fallback)
+        working-directory: execution-service
+        run: |
+          python -m pip install --quiet httpx pytest fastapi "uvicorn[standard]"
+          python -m pytest tests/test_hummingbot_real_client.py -q | tee real_client_ci.log
+
+      - name: Part 5 — end-to-end testnet flow (PASS or SKIPPED_NOT_CONFIGURED)
+        working-directory: execution-service
+        env:
+          BINANCE_TESTNET_API_KEY: ${{ secrets.BINANCE_TESTNET_API_KEY }}
+          BINANCE_TESTNET_API_SECRET: ${{ secrets.BINANCE_TESTNET_API_SECRET }}
+          HUMMINGBOT_BRIDGE_URL: http://localhost:8090
+          HUMMINGBOT_BRIDGE_API_KEY: ci-bridge-key
+          PYTHONPATH: .
+        run: python diagnostics/end_to_end_testnet_flow.py | tee e2e_testnet.json
+
+      - name: Tear down
+        if: always()
+        working-directory: hummingbot-service
+        run: docker compose down -v || true
+
+      - name: Upload Hummingbot/bridge artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hummingbot-docker-report
+          path: |
+            hummingbot-service/bridge_health.json
+            hummingbot-service/hummingbot_container.log
+            hummingbot-service/bridge_container.log
+            execution-service/real_client_ci.log
+            execution-service/e2e_testnet.json
+          if-no-files-found: warn
+          retention-days: 90
+
+  binance-testnet:
+    name: Binance USDT-M Futures Testnet connectivity (conditional on secrets)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install deps
+        run: python -m pip install --quiet httpx
+
+      - name: Testnet connectivity check (or SKIPPED_NOT_CONFIGURED)
+        env:
+          BINANCE_TESTNET_API_KEY: ${{ secrets.BINANCE_TESTNET_API_KEY }}
+          BINANCE_TESTNET_API_SECRET: ${{ secrets.BINANCE_TESTNET_API_SECRET }}
+        run: |
+          python execution-service/diagnostics/binance_testnet_connectivity.py | tee testnet_report.json
+
+      - name: Upload testnet report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: binance-testnet-report
+          path: testnet_report.json
+          if-no-files-found: warn
+          retention-days: 90
+
+  node-tests:
+    name: Node production test suite (must stay green — proves no production impact)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm test
