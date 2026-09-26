@@ -141,6 +141,36 @@ def probe_reads(base_url: str, auth, spec: dict) -> list[dict]:
     return probes
 
 
+def account_lifecycle(base_url: str, auth) -> dict:
+    """Create, inspect and delete a throwaway account on the live API. No
+    credentials are added, so nothing here can reach an exchange."""
+    name = "market_edge_ci_probe"
+    steps = {}
+    with httpx.Client(base_url=base_url, auth=auth, timeout=30) as http:
+        def step(label, method, path, **kw):
+            try:
+                r = http.request(method, path, **kw)
+                steps[label] = {"status": r.status_code, "body": r.text[:300]}
+                return r
+            except httpx.HTTPError as error:
+                steps[label] = {"status": None, "error": str(error)}
+                return None
+        step("add_account", "POST", "/accounts/add-account", params={"account_name": name})
+        listed = step("list_accounts", "GET", "/accounts/")
+        steps["account_listed"] = bool(listed is not None and listed.status_code == 200 and name in listed.json())
+        step("list_credentials", "GET", f"/accounts/{name}/credentials")
+        step("portfolio_state", "POST", "/portfolio/state", json={"account_names": [name], "skip_gateway": True})
+        step("positions", "POST", "/trading/positions", json={"account_names": [name]})
+        step("active_orders", "POST", "/trading/orders/active", json={"account_names": [name]})
+        connectors = step("connectors", "GET", "/connectors/")
+        if connectors is not None and connectors.status_code == 200:
+            steps["perpetual_connectors"] = sorted(c for c in connectors.json() if "perpetual" in c)
+        step("delete_account", "POST", "/accounts/delete-account", params={"account_name": name})
+    required = ("add_account", "list_credentials", "portfolio_state", "positions", "active_orders", "delete_account")
+    steps["ok"] = steps.get("account_listed") is True and all(steps.get(k, {}).get("status") == 200 for k in required)
+    return steps
+
+
 def main() -> int:
     base_url = os.environ.get("HUMMINGBOT_API_URL", "http://localhost:8000")
     auth = (os.environ["HUMMINGBOT_API_USERNAME"], os.environ["HUMMINGBOT_API_PASSWORD"])
@@ -158,7 +188,8 @@ def main() -> int:
     report["paths"] = {p: sorted(ops) for p, ops in spec.get("paths", {}).items()}
     report["client_requests"] = verify_requests(spec)
     report["read_probes"] = probe_reads(base_url, auth, spec)
-    auth_ok = any(p.get("status") == 200 for p in report["read_probes"])
+    report["account_lifecycle"] = account_lifecycle(base_url, auth)
+    auth_ok = any(p.get("status") == 200 for p in report["read_probes"]) and report["account_lifecycle"]["ok"]
     requests_ok = all(r["ok"] for r in report["client_requests"])
     report["authenticated_reads_ok"] = auth_ok
     report["client_schema_ok"] = requests_ok

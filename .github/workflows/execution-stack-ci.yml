@@ -166,6 +166,10 @@ jobs:
           echo "    mapping (currently best-effort, see its own docstring) can be verified/corrected"
           echo "    against the real schema in a follow-up pass, not guessed at again ---"
           curl -sS -m 10 http://localhost:8000/openapi.json | tee hummingbot_api_openapi.json
+          echo "--- source of the RUNNING API (response shapes are undeclared in openapi.json) ---"
+          docker cp hummingbot-api:/hummingbot-api/routers upstream_routers
+          docker cp hummingbot-api:/hummingbot-api/services upstream_services
+          tar czf hummingbot_api_upstream_src.tgz upstream_routers upstream_services && ls -la hummingbot_api_upstream_src.tgz
           echo "--- bridge health (talks to hummingbot-api, not Gateway) ---"
           curl -sS -m 10 http://localhost:8090/health | tee bridge_health.json
           bridge_code=$?
@@ -219,7 +223,7 @@ jobs:
         run: |
           python -m pip install --quiet httpx
           code=0; python verify_openapi.py > hummingbot_api_verification.json || code=$?
-          python -c "import json;r=json.load(open('hummingbot_api_verification.json'));print(json.dumps({k:r.get(k) for k in ('verdict','api_version','path_count','authenticated_reads_ok','client_schema_ok','error')},indent=2));[print(x['method'],x['path'],'OK' if x['ok'] else x['problems']) for x in r.get('client_requests',[])];[print('GET',x['path'],x.get('status')) for x in r.get('read_probes',[])]"
+          python -c "import json;r=json.load(open('hummingbot_api_verification.json'));print(json.dumps({k:r.get(k) for k in ('verdict','api_version','path_count','authenticated_reads_ok','client_schema_ok','error','account_lifecycle')},indent=2));[print(x['method'],x['path'],'OK' if x['ok'] else x['problems']) for x in r.get('client_requests',[])];[print('GET',x['path'],x.get('status')) for x in r.get('read_probes',[])]"
           exit $code
 
       - name: Tear down
@@ -245,6 +249,7 @@ jobs:
             hummingbot-service/hummingbot_api_health.json
             hummingbot-service/hummingbot_api_openapi.json
             hummingbot-service/hummingbot_api_verification.json
+            hummingbot-service/hummingbot_api_upstream_src.tgz
             hummingbot-service/official_hummingbot_api_compose.yml
             hummingbot-service/hummingbot_api_container.log
             hummingbot-service/bridge_container.log
