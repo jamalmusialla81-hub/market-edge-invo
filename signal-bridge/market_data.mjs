@@ -19,11 +19,24 @@ async function post(fetchImpl, body, timeoutMs = 8000) {
   }
 }
 
-export async function fetchMid(coin, { fetchImpl = fetch, now = Date.now } = {}) {
-  const mids = await post(fetchImpl, { type: 'allMids' });
-  const price = Number(mids?.[coin]);
-  if (!Number.isFinite(price) || price <= 0) throw new Error(`no live mid for ${coin}`);
-  return { price, at: now() };
+// The scan makes many Hyperliquid calls right before this, so a transient
+// failure (e.g. HTTP 429) is retried briefly; a missing coin is not.
+export async function fetchMid(coin, { fetchImpl = fetch, now = Date.now, retries = 3, sleep = (ms) => new Promise((r) => setTimeout(r, ms)) } = {}) {
+  let lastError;
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    if (attempt > 0) await sleep(1000 * 2 ** (attempt - 1));
+    let mids;
+    try {
+      mids = await post(fetchImpl, { type: 'allMids' });
+    } catch (error) {
+      lastError = error;
+      continue;
+    }
+    const price = Number(mids?.[coin]);
+    if (!Number.isFinite(price) || price <= 0) throw new Error(`no live mid for ${coin} (allMids has ${Object.keys(mids || {}).length} coins)`);
+    return { price, at: now() };
+  }
+  throw new Error(`allMids failed after ${retries + 1} attempts: ${lastError?.message}`);
 }
 
 export function parseCompletedCandles(rows, now, intervalMs = FIVE_MINUTES) {
