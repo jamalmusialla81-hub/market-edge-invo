@@ -243,6 +243,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install fastapi "uvicorn[standard]" pydantic httpx nautilus_trader
 
+      - name: Signal-bridge unit tests (pure logic, no network)
+        run: node --test signal-bridge/forward_loop.test.mjs
+
       - name: Start the paper execution-service in the background
         working-directory: execution-service
         env:
@@ -271,6 +274,14 @@ jobs:
           echo "--- resulting paper positions ---"
           curl -sS -H "X-API-Key: ci-signal-bridge-key" http://127.0.0.1:8000/positions | tee positions.json
 
+      - name: Part F smoke test — forward loop runs a few real bounded cycles (not the full endurance run)
+        env:
+          MARKET_EDGE_EXEC_API_KEY: ci-signal-bridge-key
+          EXECUTION_SERVICE_URL: http://127.0.0.1:8000
+          MAX_CYCLES: 3
+          CYCLE_INTERVAL_MS: 15000
+        run: node signal-bridge/forward_loop.mjs | tee forward_loop_result.log
+
       - name: Server log
         if: always()
         run: cat execution-service/uvicorn.log || true
@@ -284,6 +295,7 @@ jobs:
             dry_run_result.json
             dry_run_result.log
             e2e_signal_result.json
+            forward_loop_result.log
             positions.json
             execution-service/health.json
             execution-service/uvicorn.log
