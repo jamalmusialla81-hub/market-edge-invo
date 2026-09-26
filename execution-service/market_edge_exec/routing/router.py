@@ -32,6 +32,8 @@ class ExecutionRouter:
 
     def __post_init__(self):
         self.routing_table = self.routing_table or {}
+        if self.store.active_halt():
+            self.killed = True
 
     def _resolve_backend(self, intent: ExecutionIntent) -> str:
         if intent.venue_preference and intent.venue_preference in self.backends:
@@ -48,7 +50,9 @@ class ExecutionRouter:
     def route(self, intent: ExecutionIntent, risk_decision: Optional[RiskDecision] = None) -> tuple[str, ExecutionFill]:
         log_event("signal_received", signal_id=intent.signal_id, strategy_id=intent.strategy_id, instrument=intent.instrument)
 
-        if self.killed:
+        # Reduce-only orders can only shrink exposure, so a halt must not
+        # trap a position open past its stop; everything else is blocked.
+        if self.killed and not intent.reduce_only:
             self.store.record_failure(intent.signal_id, "KILL_SWITCH_ACTIVE")
             log_event("risk_rejected", signal_id=intent.signal_id, reason="KILL_SWITCH_ACTIVE")
             raise RouterError("EXECUTION_ROUTER_KILLED")
@@ -107,6 +111,8 @@ class ExecutionRouter:
         log_event("cancel", signal_id=signal_id, backend=backend_name)
         return fill
 
-    def kill(self) -> None:
+    def kill(self, reason: str = "KILL_SWITCH") -> None:
+        if not self.killed:
+            self.store.set_halt(reason)
         self.killed = True
-        log_event("kill_switch_engaged")
+        log_event("kill_switch_engaged", reason=reason)

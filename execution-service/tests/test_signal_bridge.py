@@ -69,6 +69,8 @@ def test_is_fresh_boundary():
     now_ms = 1_000_000_000
     assert is_fresh(AlphaSignal.create({"signal_id": "s", "asset": "BTC", "direction": "long", "timestamp": now_ms - MAX_SIGNAL_AGE_SECONDS * 1000}), now_ms) is True
     assert is_fresh(AlphaSignal.create({"signal_id": "s", "asset": "BTC", "direction": "long", "timestamp": now_ms - (MAX_SIGNAL_AGE_SECONDS + 1) * 1000}), now_ms) is False
+    assert is_fresh(AlphaSignal.create({"signal_id": "s", "asset": "BTC", "direction": "long", "timestamp": now_ms + 5_000}), now_ms) is True
+    assert is_fresh(AlphaSignal.create({"signal_id": "s", "asset": "BTC", "direction": "long", "timestamp": now_ms + 120_000}), now_ms) is False
 
 
 def test_risk_rejection_is_logged_as_a_no_trade_decision_not_dropped(setup):

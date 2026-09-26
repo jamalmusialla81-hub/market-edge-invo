@@ -24,15 +24,19 @@ class AccountState:
     daily_pnl: float = 0.0
     peak_equity: Optional[float] = None
     killed: bool = False
+    # Notional already open. Without it the exposure cap only ever saw the
+    # new trade, which let endurance segment 1 stack ENA 12x to ~81% notional.
+    open_notional: float = 0.0
 
 
 @dataclass
 class RiskLimits:
     max_risk_per_trade_pct: float = 1.0       # % of equity
-    max_portfolio_exposure_pct: float = 20.0  # % of equity, notional
+    max_portfolio_exposure_pct: float = 20.0  # % of equity, notional, open + new
     max_concurrent_positions: int = 5
     leverage_ceiling: float = 10.0
-    min_liquidation_distance_pct: float = 5.0  # stop must sit this far from liquidation, at minimum
+    min_liquidation_distance_pct: float = 5.0  # entry to liquidation, at minimum
+    min_liquidation_buffer_pct: float = 1.0    # stop must be hit this far before liquidation
     daily_loss_limit_pct: float = 5.0
     drawdown_limit_pct: float = 15.0
 
@@ -46,6 +50,9 @@ class RiskAssessment:
     margin_required: float
     liquidation_estimate: Optional[float]
     stop_distance: float
+    notional: float = 0.0
+    requested_leverage: float = 0.0
+    liquidation_buffer_pct: Optional[float] = None
 
 
 def liquidation_price(entry: float, leverage: float, side: str, maintenance_margin_pct: float = 0.5) -> float:
@@ -89,20 +96,27 @@ def approve(intent: ExecutionIntent, account: AccountState, limits: RiskLimits =
     max_loss = position_size * stop_distance  # == risk_budget by construction; leverage cannot raise this
     notional = position_size * entry
 
-    if notional / account.equity * 100 > limits.max_portfolio_exposure_pct:
+    if (account.open_notional + notional) / account.equity * 100 > limits.max_portfolio_exposure_pct:
         return reject("MAX_PORTFOLIO_EXPOSURE_EXCEEDED")
 
     requested_leverage = max(intent.leverage, 0.0001)
+
+    def liquidation_ok(leverage: float) -> tuple[bool, float, float]:
+        liq = liquidation_price(entry, leverage, intent.side)
+        distance_pct = abs(entry - liq) / entry * 100
+        # The stop must trigger before liquidation, with a buffer: otherwise
+        # leverage could turn a 1R stop-out into a larger liquidation loss.
+        buffer_pct = ((intent.stop - liq) if intent.side == "buy" else (liq - intent.stop)) / entry * 100
+        return (distance_pct >= limits.min_liquidation_distance_pct and buffer_pct >= limits.min_liquidation_buffer_pct), liq, buffer_pct
+
     approved_leverage = min(requested_leverage, limits.leverage_ceiling)
-    liq_price = liquidation_price(entry, approved_leverage, intent.side)
-    liquidation_distance_pct = abs(entry - liq_price) / entry * 100
-    if liquidation_distance_pct < limits.min_liquidation_distance_pct:
-        # walk leverage down until the liquidation distance clears the floor, or reject
-        for band in sorted(LEVERAGE_BANDS):
-            candidate_liq = liquidation_price(entry, band, intent.side)
-            if abs(entry - candidate_liq) / entry * 100 >= limits.min_liquidation_distance_pct:
-                approved_leverage = min(band, limits.leverage_ceiling)
-                liq_price = candidate_liq
+    ok, liq_price, buffer_pct = liquidation_ok(approved_leverage)
+    if not ok:
+        # walk leverage down (never up) until it clears both floors, or reject
+        for band in sorted((b for b in LEVERAGE_BANDS if b < approved_leverage), reverse=True):
+            ok, liq_price, buffer_pct = liquidation_ok(band)
+            if ok:
+                approved_leverage = band
                 break
         else:
             return reject("LIQUIDATION_DISTANCE_TOO_TIGHT")
@@ -114,4 +128,5 @@ def approve(intent: ExecutionIntent, account: AccountState, limits: RiskLimits =
                                max_position_notional=notional),
         position_size=position_size, risk_amount=risk_budget, max_loss=max_loss,
         margin_required=margin_required, liquidation_estimate=liq_price, stop_distance=stop_distance,
+        notional=notional, requested_leverage=requested_leverage, liquidation_buffer_pct=buffer_pct,
     )

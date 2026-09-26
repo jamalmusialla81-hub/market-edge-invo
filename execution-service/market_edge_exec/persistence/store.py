@@ -55,6 +55,12 @@ CREATE TABLE IF NOT EXISTS failures (
     reason TEXT NOT NULL,
     created_at REAL NOT NULL
 );
+CREATE TABLE IF NOT EXISTS halts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    reason TEXT NOT NULL,
+    created_at REAL NOT NULL,
+    cleared_at REAL
+);
 """
 
 
@@ -140,4 +146,26 @@ class Store:
     def record_failure(self, signal_id: Optional[str], reason: str) -> None:
         with closing(self._connect()) as conn:
             conn.execute("INSERT INTO failures (signal_id, reason, created_at) VALUES (?, ?, ?)", (signal_id, reason, time.time()))
+            conn.commit()
+
+    def failures(self) -> list[dict]:
+        with closing(self._connect()) as conn:
+            rows = conn.execute("SELECT signal_id, reason, created_at FROM failures ORDER BY id").fetchall()
+            return [dict(row) for row in rows]
+
+    def set_halt(self, reason: str) -> None:
+        with closing(self._connect()) as conn:
+            conn.execute("INSERT INTO halts (reason, created_at) VALUES (?, ?)", (reason, time.time()))
+            conn.commit()
+
+    def active_halt(self) -> Optional[str]:
+        """A halt survives restarts until explicitly cleared by a human --
+        restarting the process must never be a way to un-kill trading."""
+        with closing(self._connect()) as conn:
+            row = conn.execute("SELECT reason FROM halts WHERE cleared_at IS NULL ORDER BY id DESC LIMIT 1").fetchone()
+            return row["reason"] if row else None
+
+    def clear_halts(self) -> None:
+        with closing(self._connect()) as conn:
+            conn.execute("UPDATE halts SET cleared_at = ? WHERE cleared_at IS NULL", (time.time(),))
             conn.commit()
