@@ -118,26 +118,44 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Bring up Hummingbot + bridge
+      - name: Bring up the real Hummingbot API stack (postgres + EMQX + hummingbot-api) + bridge
+        # Gateway (port 15888) is DEX-only middleware, confirmed wrong for
+        # CEX control by Phase 4 research -- see hummingbot-service/README.md
+        # "Architecture correction". This brings up the officially documented
+        # surface instead: the separate Hummingbot API project.
         working-directory: hummingbot-service
         env:
           HUMMINGBOT_CONFIG_PASSWORD: ci-paper-only
           HUMMINGBOT_BRIDGE_API_KEY: ci-bridge-key
+          POSTGRES_PASSWORD: ci-postgres-only
+          BROKER_DASHBOARD_PASSWORD: ci-broker-only
+          BROKER_PASSWORD: ci-broker-only
+          HUMMINGBOT_API_USERNAME: ci-hb-api
+          HUMMINGBOT_API_PASSWORD: ci-hb-api-password
         run: |
           docker compose up -d
           echo "Waiting for containers to settle..."
-          sleep 20
+          sleep 30
           docker compose ps
 
-      - name: Health check both containers
+      - name: Health check every container + save the live OpenAPI contract
         id: health
         working-directory: hummingbot-service
         continue-on-error: true
         run: |
           set +e
-          echo "--- hummingbot container status ---"
-          docker inspect -f '{{.State.Status}}' market-edge-hummingbot-paper || echo "hummingbot container not found"
-          echo "--- bridge health ---"
+          echo "--- hummingbot-api container status ---"
+          docker inspect -f '{{.State.Status}}' hummingbot-api || echo "hummingbot-api container not found"
+          echo "--- postgres/emqx container status ---"
+          docker inspect -f '{{.State.Status}}' hummingbot-postgres || echo "postgres container not found"
+          docker inspect -f '{{.State.Status}}' hummingbot-broker || echo "broker container not found"
+          echo "--- hummingbot-api liveness (GET / needs no auth per docs) ---"
+          curl -sS -m 10 http://localhost:8000/ | tee hummingbot_api_health.json
+          echo "--- live OpenAPI contract, saved so bridge/hummingbot_api_client.py's field-name"
+          echo "    mapping (currently best-effort, see its own docstring) can be verified/corrected"
+          echo "    against the real schema in a follow-up pass, not guessed at again ---"
+          curl -sS -m 10 http://localhost:8000/openapi.json | tee hummingbot_api_openapi.json
+          echo "--- bridge health (talks to hummingbot-api, not Gateway) ---"
           curl -sS -m 10 http://localhost:8090/health | tee bridge_health.json
           bridge_code=$?
           echo "bridge_health_exit_code=$bridge_code" >> "$GITHUB_OUTPUT"
@@ -149,11 +167,18 @@ jobs:
         env:
           HUMMINGBOT_CONFIG_PASSWORD: ci-paper-only
           HUMMINGBOT_BRIDGE_API_KEY: ci-bridge-key
+          POSTGRES_PASSWORD: ci-postgres-only
+          BROKER_DASHBOARD_PASSWORD: ci-broker-only
+          BROKER_PASSWORD: ci-broker-only
+          HUMMINGBOT_API_USERNAME: ci-hb-api
+          HUMMINGBOT_API_PASSWORD: ci-hb-api-password
         run: |
-          docker compose logs hummingbot > hummingbot_container.log 2>&1 || true
+          docker compose logs hummingbot-api > hummingbot_api_container.log 2>&1 || true
           docker compose logs bridge > bridge_container.log 2>&1 || true
-          echo "--- hummingbot container log (for diagnosing crash-loop / restart) ---"
-          cat hummingbot_container.log
+          docker compose logs postgres > postgres_container.log 2>&1 || true
+          docker compose logs emqx > emqx_container.log 2>&1 || true
+          echo "--- hummingbot-api container log ---"
+          cat hummingbot_api_container.log
           echo "--- bridge container log ---"
           cat bridge_container.log
 
@@ -179,6 +204,11 @@ jobs:
         env:
           HUMMINGBOT_CONFIG_PASSWORD: ci-paper-only
           HUMMINGBOT_BRIDGE_API_KEY: ci-bridge-key
+          POSTGRES_PASSWORD: ci-postgres-only
+          BROKER_DASHBOARD_PASSWORD: ci-broker-only
+          BROKER_PASSWORD: ci-broker-only
+          HUMMINGBOT_API_USERNAME: ci-hb-api
+          HUMMINGBOT_API_PASSWORD: ci-hb-api-password
         run: docker compose down -v || true
 
       - name: Upload Hummingbot/bridge artifacts
@@ -188,8 +218,12 @@ jobs:
           name: hummingbot-docker-report
           path: |
             hummingbot-service/bridge_health.json
-            hummingbot-service/hummingbot_container.log
+            hummingbot-service/hummingbot_api_health.json
+            hummingbot-service/hummingbot_api_openapi.json
+            hummingbot-service/hummingbot_api_container.log
             hummingbot-service/bridge_container.log
+            hummingbot-service/postgres_container.log
+            hummingbot-service/emqx_container.log
             execution-service/real_client_ci.log
             execution-service/e2e_testnet.json
           if-no-files-found: warn

@@ -1,7 +1,8 @@
-"""Narrow, private bridge API in front of Hummingbot's Gateway. Every
-endpoint requires X-Bridge-Key (checked against BRIDGE_API_KEY). No exchange
-secret ever passes through this API -- those live only as env vars on the
-`hummingbot` container (docker-compose.yml), read by Hummingbot itself.
+"""Narrow, private bridge API in front of the real Hummingbot API project
+(NOT Gateway -- see bridge/hummingbot_api_client.py). Every endpoint
+requires X-Bridge-Key (checked against BRIDGE_API_KEY). No exchange secret
+ever passes through this API -- those live only as env vars on the
+`hummingbot-api` container (docker-compose.yml), read by Hummingbot itself.
 """
 from __future__ import annotations
 
@@ -9,12 +10,16 @@ import os
 
 from fastapi import Depends, FastAPI, Header, HTTPException
 
-from bridge.hummingbot_gateway import HummingbotGatewayClient
+from bridge.hummingbot_api_client import HummingbotApiClient
 
 
-def create_app(gateway: HummingbotGatewayClient = None) -> FastAPI:
+def create_app(gateway: HummingbotApiClient = None) -> FastAPI:
     app = FastAPI(title="Market Edge - Hummingbot bridge (paper only)")
-    gateway = gateway or HummingbotGatewayClient(os.environ.get("HUMMINGBOT_GATEWAY_URL", "http://hummingbot:15888"))
+    gateway = gateway or HummingbotApiClient(
+        os.environ.get("HUMMINGBOT_API_URL", "http://hummingbot-api:8000"),
+        username=os.environ.get("HUMMINGBOT_API_USERNAME", ""),
+        password=os.environ.get("HUMMINGBOT_API_PASSWORD", ""),
+    )
     app.state.gateway = gateway
 
     def require_bridge_key(x_bridge_key: str = Header(default=None)):
