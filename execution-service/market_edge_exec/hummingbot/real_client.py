@@ -76,4 +76,8 @@ class HummingbotExecutionClientReal:
             response = self._client.get("/positions")
         except httpx.HTTPError as error:
             raise HummingbotBridgeUnavailable(f"HUMMINGBOT_BRIDGE_UNREACHABLE: {error}") from error
-        return response.json().get("positions", [])
+        # An error body must never read as "no positions" (e.g. while
+        # Hummingbot restarts), or reconciliation would pass on stale truth.
+        if response.status_code >= 400:
+            raise HummingbotBridgeUnavailable(f"HUMMINGBOT_BRIDGE_ERROR: {response.status_code} {response.text}")
+        return response.json()["positions"]
