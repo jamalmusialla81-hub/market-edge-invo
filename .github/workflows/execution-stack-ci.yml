@@ -14,11 +14,18 @@ on:
       cycle_interval_ms:
         description: 'Part I endurance harness only: milliseconds between cycles (default matches the real Market Edge 5-minute scan cadence)'
         default: '300000'
+      segments:
+        description: 'Endurance only: JSON list of sequential segments to run in this dispatch, e.g. [1,2] (each is one job of max_cycles)'
+        default: '[1]'
+      leverage_rotation:
+        description: 'Endurance only: requested paper leverage rotation; risk approves or walks it down per trade'
+        default: '1,2,3,5,10'
   push:
     branches: ['claude/**']
     paths:
       - 'execution-service/**'
       - 'hummingbot-service/**'
+      - 'signal-bridge/**'
       - '.github/workflows/execution-stack-ci.yml'
 
 permissions:
@@ -348,10 +355,19 @@ jobs:
           retention-days: 90
 
   endurance-harness:
-    name: Part I — endurance harness (manual trigger only; resumable via cache across runs)
+    name: Forward-paper endurance segment ${{ matrix.segment }} (manual trigger; persistent state via cache)
     runs-on: ubuntu-latest
     if: github.event_name == 'workflow_dispatch'
     timeout-minutes: 360
+    # One writer at a time: overlapping segments would race on the saved state.
+    concurrency:
+      group: paper-session-v1
+      cancel-in-progress: false
+    strategy:
+      fail-fast: false
+      max-parallel: 1  # segments run one after another, each continuing the last one's state
+      matrix:
+        segment: ${{ fromJSON(github.event.inputs.segments || '[1]') }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -367,58 +383,72 @@ jobs:
           python -m pip install --upgrade pip
           pip install fastapi "uvicorn[standard]" pydantic httpx nautilus_trader
 
-      - name: Restore persisted paper-trading state from the most recent prior segment (if any)
+      # paper-session-v1 is the persistent forward-paper account. Endurance
+      # segment 1 (run 36237547517, endurance-state-* cache) ran through the
+      # pre-ledger path and is deliberately not continued: it had no equity
+      # accounting and its ENA stack came from the exposure bug.
+      - name: Restore the persistent paper session (account, trades, signal and idempotency history)
         uses: actions/cache/restore@v4
         id: restore-state
         with:
-          path: execution-service/endurance_state.sqlite3
-          key: endurance-state-${{ github.run_id }}
+          path: execution-service/paper_session.sqlite3
+          key: paper-session-v1-${{ github.run_id }}-${{ matrix.segment }}
           restore-keys: |
-            endurance-state-
+            paper-session-v1-
+
+      - name: Report what state this segment starts from
+        run: |
+          echo "restored_key=${{ steps.restore-state.outputs.cache-matched-key }}"
+          ls -la execution-service/paper_session.sqlite3 2>/dev/null || echo "no prior state: starting a new paper account"
 
       - name: Start the paper execution-service against the persisted DB
         working-directory: execution-service
         env:
           MARKET_EDGE_EXEC_API_KEY: ci-endurance-key
-          EXECUTION_SERVICE_DB_PATH: endurance_state.sqlite3
+          EXECUTION_SERVICE_DB_PATH: paper_session.sqlite3
         run: |
           nohup python run_server.py > uvicorn.log 2>&1 &
           for i in $(seq 1 20); do curl -sf http://127.0.0.1:8000/health && break; sleep 1; done
           curl -sf http://127.0.0.1:8000/health
 
-      - name: Run the endurance forward loop (never resets account/trade history between segments)
+      - name: Run the forward-paper loop
         env:
           MARKET_EDGE_EXEC_API_KEY: ci-endurance-key
           EXECUTION_SERVICE_URL: http://127.0.0.1:8000
           MAX_CYCLES: ${{ github.event.inputs.max_cycles || '12' }}
           CYCLE_INTERVAL_MS: ${{ github.event.inputs.cycle_interval_ms || '300000' }}
+          LEVERAGE_ROTATION: ${{ github.event.inputs.leverage_rotation || '1,2,3,5,10' }}
+          SEGMENT_NAME: run-${{ github.run_id }}-seg-${{ matrix.segment }}
         run: node signal-bridge/forward_loop.mjs | tee endurance_loop.log
 
-      - name: Final metrics + positions/orders snapshot
+      - name: Final report, positions, orders, reconciliation
         if: always()
         run: |
+          curl -sS -H "X-API-Key: ci-endurance-key" http://127.0.0.1:8000/paper/report | tee execution-service/paper_report.json
           curl -sS -H "X-API-Key: ci-endurance-key" http://127.0.0.1:8000/positions | tee execution-service/final_positions.json
-          curl -sS -H "X-API-Key: ci-endurance-key" http://127.0.0.1:8000/orders | tee execution-service/final_orders.json
+          curl -sS -H "X-API-Key: ci-endurance-key" http://127.0.0.1:8000/orders > execution-service/final_orders.json
           curl -sS -X POST -H "X-API-Key: ci-endurance-key" http://127.0.0.1:8000/reconcile | tee execution-service/final_reconcile.json
 
       - name: Server log
         if: always()
-        run: cat execution-service/uvicorn.log || true
+        run: tail -n 400 execution-service/uvicorn.log || true
 
-      - name: Save persisted state for the next segment (fail the job, not the save, if this step has nothing to save)
+      - name: Save the paper session for the next segment
         if: always()
         uses: actions/cache/save@v4
         with:
-          path: execution-service/endurance_state.sqlite3
-          key: endurance-state-${{ github.run_id }}
+          path: execution-service/paper_session.sqlite3
+          key: paper-session-v1-${{ github.run_id }}-${{ matrix.segment }}
 
       - name: Upload endurance artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: endurance-report-${{ github.run_id }}
+          name: paper-session-${{ github.run_id }}-seg-${{ matrix.segment }}
           path: |
             endurance_loop.log
+            execution-service/paper_report.json
+            execution-service/paper_session.sqlite3
             execution-service/final_positions.json
             execution-service/final_orders.json
             execution-service/final_reconcile.json

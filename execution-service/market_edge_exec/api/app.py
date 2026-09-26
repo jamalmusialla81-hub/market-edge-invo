@@ -17,9 +17,12 @@ from fastapi import Depends, FastAPI, Header, HTTPException
 from market_edge_exec.domain.contracts import ContractError, ExecutionIntent
 from market_edge_exec.hummingbot.mock_client import HummingbotExecutionClient
 from market_edge_exec.nautilus.portfolio import NautilusPortfolio
+from market_edge_exec.paper.engine import PaperEngine
+from market_edge_exec.paper.ledger import PaperLedger
+from market_edge_exec.paper.report import build_report
 from market_edge_exec.persistence.store import Store
 from market_edge_exec.reconciliation.reconcile import reconcile
-from market_edge_exec.risk.engine import AccountState, approve
+from market_edge_exec.risk.engine import approve
 from market_edge_exec.routing.router import BACKEND_HUMMINGBOT, BACKEND_NAUTILUS_NATIVE, ExecutionRouter, RouterError
 from market_edge_exec.signal_bridge.bridge import process_signal
 
@@ -54,17 +57,24 @@ def create_app(db_path: str = "market_edge_exec.sqlite3") -> FastAPI:
     store = Store(db_path)
     portfolio = NautilusPortfolio(store)
     hummingbot = HummingbotExecutionClient()
-    account = AccountState(equity=10_000.0, peak_equity=10_000.0)
+    ledger = PaperLedger(db_path)
+
+    # Account state is re-derived from the persistent ledger on every call.
+    # It used to be one AccountState built at startup and never updated, so
+    # risk limits never saw open trades.
+    def current_account():
+        return ledger.account_state(killed=router.killed)
 
     def risk_gate(intent: ExecutionIntent):
-        assessment = approve(intent, account)
-        return assessment.decision
+        return approve(intent, current_account()).decision
 
     router = ExecutionRouter(
         store=store, risk_gate=risk_gate,
         backends={BACKEND_NAUTILUS_NATIVE: PaperBackendAdapter(portfolio, BACKEND_NAUTILUS_NATIVE), BACKEND_HUMMINGBOT: hummingbot},
     )
+    paper = PaperEngine(ledger, router, store)
     app.state.store, app.state.portfolio, app.state.hummingbot, app.state.router = store, portfolio, hummingbot, router
+    app.state.ledger, app.state.paper = ledger, paper
 
     def require_api_key(x_api_key: str = Header(default=None)):
         expected = os.environ.get("MARKET_EDGE_EXEC_API_KEY")
@@ -99,7 +109,7 @@ def create_app(db_path: str = "market_edge_exec.sqlite3") -> FastAPI:
         instrument = payload.get("instrument")
         if not isinstance(signal_payload, dict) or not instrument:
             raise HTTPException(status_code=422, detail="signal and instrument are required")
-        result = process_signal(signal_payload, instrument, router, account, store,
+        result = process_signal(signal_payload, instrument, router, current_account(), store,
                                  venue_preference=payload.get("venue_preference"))
         if not result.accepted:
             raise HTTPException(status_code=409, detail={"signal_id": result.signal_id, "reason": result.reason})
@@ -138,12 +148,65 @@ def create_app(db_path: str = "market_edge_exec.sqlite3") -> FastAPI:
         canonical = [p.to_dict() for p in portfolio.open_positions() if p.backend == BACKEND_HUMMINGBOT]
         backend_positions = hummingbot.positions()
         result = reconcile(canonical, backend_positions, store=store)
-        if not result.reconciled:
-            router.kill()
+        native = [p.to_dict() for p in portfolio.open_positions() if p.backend == BACKEND_NAUTILUS_NATIVE]
+        ledger_check = paper.reconcile_ledger(native)
+        reconciled = result.reconciled and ledger_check["reconciled"]
+        if not reconciled:
+            router.kill("RECONCILIATION_FAILED")
         return {
-            "reconciled": result.reconciled, "orphan_orders": result.orphan_orders,
-            "unknown_positions": result.unknown_positions, "mismatched": result.mismatched,
+            "reconciled": reconciled, "orphan_orders": result.orphan_orders,
+            "unknown_positions": result.unknown_positions, "mismatched": result.mismatched + ledger_check["mismatched"],
             "missing_fills": result.missing_fills, "halted": router.killed,
         }
+
+    @app.post("/kill", dependencies=[Depends(require_api_key)])
+    def kill(payload: dict):
+        router.kill(payload.get("reason") or "MANUAL_KILL_SWITCH")
+        return {"halted": True, "reason": store.active_halt()}
+
+    # ---- persistent forward-paper session -----------------------------
+    @app.post("/paper/signal", dependencies=[Depends(require_api_key)])
+    def paper_signal(payload: dict):
+        signal_payload, instrument = payload.get("signal"), payload.get("instrument")
+        if not isinstance(signal_payload, dict) or not instrument:
+            raise HTTPException(status_code=422, detail="signal and instrument are required")
+        result = paper.open_from_signal(
+            signal_payload, instrument, payload.get("mark_price"), payload.get("mark_at_ms"),
+            requested_leverage=float(payload.get("requested_leverage") or 1.0),
+            venue_preference=payload.get("venue_preference"), now_ms=payload.get("now_ms"), coin=payload.get("coin"),
+        )
+        return {"accepted": result.accepted, "signal_id": result.signal_id, "reason": result.reason, "trade": result.trade}
+
+    @app.post("/paper/no-trade", dependencies=[Depends(require_api_key)])
+    def paper_no_trade(payload: dict):
+        paper.record_no_trade(payload.get("reason") or "NO_VALID_CANDIDATE", payload.get("detail"))
+        return {"recorded": True}
+
+    @app.get("/paper/open", dependencies=[Depends(require_api_key)])
+    def paper_open():
+        return {"trades": [{"trade_id": t["trade_id"], "instrument": t["instrument"], "asset": t["asset"], "coin": t.get("coin") or t["asset"],
+                            "last_checked_ms": t["last_checked_ms"], "opened_at_ms": t["opened_at_ms"]}
+                           for t in ledger.trades("OPEN")]}
+
+    @app.post("/paper/mark", dependencies=[Depends(require_api_key)])
+    def paper_mark(payload: dict):
+        instrument, candles = payload.get("instrument"), payload.get("candles")
+        if not instrument or not isinstance(candles, list):
+            raise HTTPException(status_code=422, detail="instrument and candles are required")
+        result = paper.mark(instrument, candles, now_ms=payload.get("now_ms"))
+        return {"instrument": result.instrument, "exits": result.exits, "mark_price": result.mark_price, "skipped": result.skipped}
+
+    @app.post("/paper/segment/start", dependencies=[Depends(require_api_key)])
+    def segment_start(payload: dict):
+        return {"segment_row": ledger.start_segment(payload.get("segment") or "unnamed")}
+
+    @app.post("/paper/segment/end", dependencies=[Depends(require_api_key)])
+    def segment_end(payload: dict):
+        ledger.end_segment(int(payload["segment_row"]))
+        return {"ended": True}
+
+    @app.get("/paper/report", dependencies=[Depends(require_api_key)])
+    def paper_report():
+        return build_report(ledger, halted_reason=store.active_halt())
 
     return app

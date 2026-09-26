@@ -58,9 +58,12 @@ class SignalBridgeResult:
     assessment: Optional[RiskAssessment] = None
 
 
+MAX_CLOCK_SKEW_SECONDS = 30  # scanner and service clocks differ; a far-future timestamp is still rejected
+
+
 def is_fresh(signal: AlphaSignal, now_ms: int, max_age_seconds: int = MAX_SIGNAL_AGE_SECONDS) -> bool:
     age_seconds = (now_ms - signal.timestamp) / 1000.0
-    return 0 <= age_seconds <= max_age_seconds
+    return -MAX_CLOCK_SKEW_SECONDS <= age_seconds <= max_age_seconds
 
 
 def signal_to_provisional_intent(signal: AlphaSignal, instrument: str, venue_preference: Optional[str] = None) -> ExecutionIntent:

@@ -25,6 +25,9 @@ from market_edge_exec.domain.contracts import ExecutionIntent, PositionSnapshot
 from market_edge_exec.persistence.store import Store
 
 
+QUANTITY_DUST = 5e-8  # below the 8dp quantity precision used for every fill
+
+
 def to_instrument_id(instrument: str) -> InstrumentId:
     """'BTC-PERP' -> InstrumentId(Symbol('BTC-PERP'), Venue('MARKET_EDGE'))."""
     return InstrumentId(Symbol(instrument), Venue("MARKET_EDGE"))
@@ -66,13 +69,24 @@ class NautilusPortfolio:
         signed_qty = float(qty) if side == OrderSide.BUY else -float(qty)
         existing = self._positions.get(intent.instrument, _Position(0.0, float(price), backend=backend))
         new_quantity = existing.quantity + signed_qty
+        if abs(new_quantity) < QUANTITY_DUST:
+            # Each fill is rounded to 8dp separately, so closing a position in
+            # parts can leave a 1e-8 residue that would read as a ghost position.
+            new_quantity = 0.0
         realized = existing.realized_pnl
-        if existing.quantity != 0 and (existing.quantity > 0) != (new_quantity > 0) and new_quantity != existing.quantity:
+        reducing = existing.quantity != 0 and (signed_qty > 0) != (existing.quantity > 0)
+        if reducing:
+            # Realize on any reduction (a partial TP1 exit included), not only
+            # when the position flips sign.
             closed = min(abs(existing.quantity), abs(signed_qty))
             direction = 1 if existing.quantity > 0 else -1
             realized += direction * closed * (float(price) - existing.avg_entry)
-        avg_entry = float(price) if existing.quantity == 0 or (existing.quantity > 0) != (new_quantity > 0) else \
-            (existing.avg_entry * abs(existing.quantity) + float(price) * quantity_filled) / (abs(existing.quantity) + quantity_filled)
+        if existing.quantity == 0 or (reducing and new_quantity != 0 and (new_quantity > 0) != (existing.quantity > 0)):
+            avg_entry = float(price)  # fresh position, or flipped through zero
+        elif reducing:
+            avg_entry = existing.avg_entry  # a partial close does not move the entry
+        else:
+            avg_entry = (existing.avg_entry * abs(existing.quantity) + float(price) * quantity_filled) / (abs(existing.quantity) + quantity_filled)
 
         # The backend of record for an instrument is whichever backend most
         # recently filled it -- a position only ever lives on one backend at

@@ -34,6 +34,13 @@ export function toInstrument(asset) {
   return `${asset}-PERP`;
 }
 
+// The Hyperliquid market name production scanned (market.invoInstrument,
+// surfaced as bestTradeNow.instrument); falls back to the asset symbol.
+export function toCoin(scan) {
+  const best = scan?.bestTradeNow;
+  return best?.instrument || best?.asset || null;
+}
+
 async function postSignal(signal) {
   if (!EXECUTION_SERVICE_API_KEY) {
     throw new Error('MARKET_EDGE_EXEC_API_KEY is not set -- refusing to call the execution service without auth');
@@ -54,7 +61,7 @@ export async function runOnce({ fetchImpl = fetch, now = Date.now(), dryRun = fa
     return { scanId: scan.scanId, scannedAt: scan.scannedAt, status: scan.status, signal: null, reason: 'NO_VALID_CANDIDATE', posted: null };
   }
   if (dryRun) {
-    return { scanId: scan.scanId, scannedAt: scan.scannedAt, status: scan.status, signal, posted: null };
+    return { scanId: scan.scanId, scannedAt: scan.scannedAt, status: scan.status, signal, coin: toCoin(scan), posted: null };
   }
   const posted = await postSignal(signal);
   return { scanId: scan.scanId, scannedAt: scan.scannedAt, status: scan.status, signal, posted };
