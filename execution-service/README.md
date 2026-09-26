@@ -39,40 +39,52 @@ python -m pytest -q
 uvicorn market_edge_exec.api.app:create_app --factory --reload
 ```
 
-## NautilusTrader — installed for real, engine blocked by a native crash
+## NautilusTrader — RESOLVED for real in CI: Python 3.12 runs the real BacktestEngine
 
-`nautilus_trader==1.221.0` installs from a prebuilt wheel and is imported
-for real: `nautilus/portfolio.py` round-trips every instrument id, side,
-quantity, and price through Nautilus's own `InstrumentId`/`OrderSide`/
-`Quantity`/`Price` types before this service's `NautilusPortfolio` class
-records the position.
+**Phase 4 finding (2026-09-26, GitHub Actions run 36235564843, clean
+`ubuntu-latest` runner, not this sandbox):** the native crash
+(`double free or corruption (out)`) is specific to the `nautilus_trader`
+build that installs on **Python 3.11** (resolves to `1.221.0`). On
+**Python 3.12**, pip resolves a newer `nautilus_trader==1.231.0` with
+`numpy==2.5.3`, and the crash **does not occur**. The real `BacktestEngine`
+(genuine `SimulatedExchange`/`OrderMatchingEngine`/`Portfolio`/`Cache`, not
+a substitute) ran a full BTC/ETH scenario for real:
+BTC perpetual long entry (market, filled), ETH perpetual short entry
+(market, filled), a resting limit order (submitted then cancelled --
+`CANCELED` status confirmed from `engine.cache`), and reduce-only exits on
+both instruments, ending with net position `0.0` on both BTC and ETH and
+the account's PnL reflected in `account_balances`
+(`1000001.63108200 USDT` off the `1,000,000` starting balance). 5 orders
+total, 4 filled, 2 positions closed. Full report:
+`diagnostics/real_backtest_scenarios.py`, output artifact
+`nautilus-report-py3.12/real_backtest_scenarios.json`.
 
-**Phase 3 attempted to replace this with Nautilus's own `BacktestEngine`
-(real `SimulatedExchange`/`OrderMatchingEngine`/`Portfolio`/`Cache` matching
-engine) and hit a reproducible native crash**: `engine.run()` aborts with
-`double free or corruption (out)` -- a C-level memory error, not a Python
-exception -- in this container. This was isolated to the engine itself, not
-application code: it reproduces with the official
-`TestInstrumentProvider.btcusdt_perp_binance()` stub instrument, with zero
-strategies attached, with a market order, with a non-filling resting limit
-order, and with both numpy>=2 and numpy<2. See
-`diagnostics/backtest_engine_crash_repro.py` for the minimal repro (a
-venue + one instrument + one bar + `run()`, no strategy at all). This
-points at a build/ABI incompatibility between this prebuilt wheel and this
-container (most likely glibc or another native library version), not
-something fixable from Python-level code in this session.
+**Frozen environment for this stack going forward:**
+`ubuntu-latest` (GitHub Actions), **Python 3.12.14**,
+**nautilus_trader 1.231.0**, **numpy 2.5.3**. Python 3.11 is NOT used for
+this stack -- it still reproduces the native crash in the same clean
+runner (see `diagnostics/backtest_engine_crash_repro.py`, run via
+`.github/workflows/execution-stack-ci.yml`'s `nautilus-matrix` job, which
+keeps both versions in the matrix specifically so this doesn't silently
+regress).
 
-Given that, canonical position/PnL bookkeeping in this pass remains
-`NautilusPortfolio` (Phase 2's approach), backed by SQLite and using real
-Nautilus value types for every field -- genuinely the "system of record"
-role, just not yet running inside Nautilus's own matching engine. The
-`live.node.TradingNode` + a real venue adapter (see `VENUE_DECISION.md`) is
-the next attempt, in an environment where this crash can first be
-root-caused or worked around (e.g. building nautilus_trader from source
-against this container's actual system libraries, or running in a
-container image closer to what the wheel was built for).
+The original sandboxed dev session (this repo's earlier Phase 3 work) ran
+an older `nautilus_trader==1.221.0` and could not get past the crash
+locally -- that observation stands for that specific container, but is now
+superseded operationally: **the frozen, working environment is Python
+3.12 in a clean container**, validated by real CI runs, not the sandbox.
 
-## Hummingbot — real bridge code written, MOCK still the default (Phase 3)
+Given the crash is Python-3.11-specific rather than universal, the
+Phase-2 `NautilusPortfolio` bookkeeping backend (SQLite-backed, using real
+Nautilus value types) remains available as a fallback/comparison path, but
+is no longer the only working route -- the real `BacktestEngine` is now
+the primary paper-execution engine on the frozen environment. Next: wire
+`nautilus_trader.live.node.TradingNode` (or keep using `BacktestEngine`
+fed live/replayed bars) behind the same `ExecutionIntent` contract for the
+forward paper loop (see Part E/F of the overnight work order in project
+memory).
+
+## Hummingbot — real bridge code written, MOCK still the default (Phase 3); see hummingbot-service/README.md for a Phase 4 architecture correction
 
 `pip install hummingbot` was attempted again in Phase 3 with the same
 result: dependency resolution alone did not finish within a 180-second

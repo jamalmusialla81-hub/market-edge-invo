@@ -139,6 +139,9 @@ jobs:
       - name: Collect container logs (always, even on failure)
         if: always()
         working-directory: hummingbot-service
+        env:
+          HUMMINGBOT_CONFIG_PASSWORD: ci-paper-only
+          HUMMINGBOT_BRIDGE_API_KEY: ci-bridge-key
         run: |
           docker compose logs hummingbot > hummingbot_container.log 2>&1 || true
           docker compose logs bridge > bridge_container.log 2>&1 || true
