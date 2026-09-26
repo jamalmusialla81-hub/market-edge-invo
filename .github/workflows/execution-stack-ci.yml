@@ -133,10 +133,13 @@ jobs:
           HUMMINGBOT_API_USERNAME: ci-hb-api
           HUMMINGBOT_API_PASSWORD: ci-hb-api-password
         run: |
+          echo "--- official hummingbot-api compose file, saved to diff our stack against ---"
+          curl -sSfL https://raw.githubusercontent.com/hummingbot/hummingbot-api/main/docker-compose.yml -o official_hummingbot_api_compose.yml || echo "could not fetch official compose file"
+          cat official_hummingbot_api_compose.yml || true
           docker compose up -d
-          echo "Waiting for containers to settle..."
-          sleep 30
-          docker compose ps
+          echo "Waiting up to 120s for hummingbot-api to answer GET / ..."
+          for i in $(seq 1 60); do curl -sf -m 3 http://localhost:8000/ >/dev/null && echo "hummingbot-api up after ~$((i*2))s" && break; sleep 2; done
+          docker compose ps -a
 
       - name: Health check every container + save the live OpenAPI contract
         id: health
@@ -220,6 +223,7 @@ jobs:
             hummingbot-service/bridge_health.json
             hummingbot-service/hummingbot_api_health.json
             hummingbot-service/hummingbot_api_openapi.json
+            hummingbot-service/official_hummingbot_api_compose.yml
             hummingbot-service/hummingbot_api_container.log
             hummingbot-service/bridge_container.log
             hummingbot-service/postgres_container.log
