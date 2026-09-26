@@ -7,4 +7,4 @@ COPY bridge/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY bridge/ ./bridge/
 EXPOSE 8090
-CMD ["uvicorn", "bridge.app:app", "--host", "0.0.0.0", "--port", "8090"]
+CMD ["uvicorn", "bridge.app:create_app", "--factory", "--host", "0.0.0.0", "--port", "8090"]

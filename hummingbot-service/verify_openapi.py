@@ -82,18 +82,27 @@ def record_client_requests() -> list[httpx.Request]:
 
     def handler(request: httpx.Request) -> httpx.Response:
         captured.append(request)
+        path = request.url.path
+        if path == "/trading/orders":
+            return httpx.Response(201, json={"order_id": "probe-order", "status": "submitted"})
+        if path.endswith("/credentials"):
+            return httpx.Response(200, json=["binance_perpetual_testnet"])
+        if path in ("/trading/positions", "/trading/orders/active", "/trading/orders/search"):
+            return httpx.Response(200, json={"data": [], "pagination": {"has_more": False}})
+        if path == "/accounts/":
+            return httpx.Response(200, json=[])
         return httpx.Response(200, json={})
 
-    client = HummingbotApiClient("http://recorder", username="u", password="p", transport=httpx.MockTransport(handler))
-    base = {"client_order_id": "probe-1", "instrument": "BTC-PERP", "side": "BUY", "quantity": 0.001, "order_type": "MARKET"}
+    client = HummingbotApiClient("http://recorder", username="u", password="p", transport=httpx.MockTransport(handler), fill_wait_s=0)
+    base = {"client_order_id": "probe-1", "instrument": "BTC-PERP", "side": "BUY", "quantity": 0.001, "order_type": "MARKET", "leverage": 3}
     client.place_order(base)
-    client.place_order({**base, "client_order_id": "probe-2", "side": "SELL", "order_type": "LIMIT", "price": 100000.0})
-    client.place_order({**base, "client_order_id": "probe-3", "side": "SELL", "reduce_only": True})
-    client.cancel_order("probe-1")
+    client.place_order({**base, "side": "SELL", "order_type": "LIMIT", "price": 100000.0})
+    client.place_order({**base, "side": "SELL", "reduce_only": True})
+    client.cancel_order("probe-order")
     client.positions()
-    for name in ("balances", "active_orders"):
-        if hasattr(client, name):
-            getattr(client, name)()
+    client.active_orders()
+    client.balances()
+    client.ensure_account()
     return captured
 
 
@@ -167,7 +176,7 @@ def account_lifecycle(base_url: str, auth) -> dict:
             steps["perpetual_connectors"] = sorted(c for c in connectors.json() if "perpetual" in c)
         step("delete_account", "POST", "/accounts/delete-account", params={"account_name": name})
     required = ("add_account", "list_credentials", "portfolio_state", "positions", "active_orders", "delete_account")
-    steps["ok"] = steps.get("account_listed") is True and all(steps.get(k, {}).get("status") == 200 for k in required)
+    steps["ok"] = steps.get("account_listed") is True and all(200 <= (steps.get(k, {}).get("status") or 0) < 300 for k in required)
     return steps
 
 

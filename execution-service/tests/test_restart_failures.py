@@ -82,7 +82,7 @@ def test_hummingbot_error_body_never_reads_as_no_positions():
 
 
 def test_reconcile_halts_when_hummingbot_positions_are_unreadable(db):
-    app = create_app(db_path=db)
+    app = create_app(db_path=db, hummingbot_mode="mock")
 
     def down():
         raise HummingbotBridgeUnavailable("HUMMINGBOT_BRIDGE_UNREACHABLE: connection refused")
@@ -128,3 +128,18 @@ def test_partial_fill_then_restart_keeps_partial_quantity_and_blocks_replay(db):
     router = ExecutionRouter(store=store_b, risk_gate=approve, backends={"NAUTILUS_NATIVE": object()})
     with pytest.raises(RouterError, match="DUPLICATE"):
         router.route(partial)
+
+
+def test_default_runtime_has_no_hummingbot_backend_and_no_mock(db, monkeypatch):
+    monkeypatch.delenv("HUMMINGBOT_MODE", raising=False)
+    app = create_app(db_path=db)
+    assert app.state.hummingbot is None
+    assert BACKEND_HUMMINGBOT not in app.state.router.backends
+    assert TestClient(app).get("/health").json()["hummingbot_mode"] == "disabled"
+
+
+def test_real_mode_without_a_bridge_refuses_to_start(db, monkeypatch):
+    from market_edge_exec.hummingbot.factory import HummingbotModeError
+    monkeypatch.delenv("HUMMINGBOT_BRIDGE_URL", raising=False)
+    with pytest.raises(HummingbotModeError):
+        create_app(db_path=db, hummingbot_mode="real")

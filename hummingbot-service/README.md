@@ -37,63 +37,41 @@ the documented service/container names) instead of the bare
 (replaces `bridge/hummingbot_gateway.py`) calls the documented endpoints
 above with HTTP Basic Auth.
 
-**Still open**: the docs above publish endpoint *paths* but not exact
-request/response *field names*, so this client's payload shape
-(`account_name`/`connector_name`/`trading_pair`/`trade_type`/`order_type`/
-`amount`/`client_order_id`) is a best-effort mapping from Hummingbot's own
-bot-orchestration conventions, not yet diffed against a live schema. The
-CI job now curls the running container's `GET /openapi.json` and saves it
-as `hummingbot_api_openapi.json` in the `hummingbot-docker-report`
-artifact specifically so that diff can be done and the client corrected if
-any field names are wrong -- do not report this client's request bodies as
-proven correct until that diff has actually happened.
-`HummingbotExecutionClientReal`'s interface
-(`execution-service/market_edge_exec/hummingbot/real_client.py`) did not
-need to change -- only what this bridge calls on the other side of it.
+**Verified against the live API (CI, hummingbot-api 1.0.1).**
+`verify_openapi.py` drives the client through a recording transport and
+checks every request it sends against the running container's
+`/openapi.json` (path, method, fields, required fields, enums); CI fails if
+anything does not match. Response fields the schema leaves undeclared were
+read from the source running in that container (CI saves `routers/` and
+`services/` as `hummingbot_api_upstream_src.tgz`). What that showed:
 
-## Why a separate service
+- `POST /trading/orders` takes account_name, connector_name, trading_pair,
+  trade_type (BUY/SELL), amount, order_type (LIMIT/MARKET/LIMIT_MAKER), price,
+  position_action (OPEN/CLOSE). There is no client id and no leverage field;
+  the first version of this client sent both.
+- Leverage is set separately: `POST /trading/{account}/{connector}/leverage`
+  with an integer 1-125.
+- Placing an order returns 201 `{order_id, ..., status: "submitted"}`, an
+  acknowledgement only. The bridge polls `/trading/orders/active` and
+  `/trading/orders/search` for the real state and never reports a fill it
+  did not observe.
+- Positions and active orders come back as `{data, pagination}`, and the API
+  logs and skips per-connector errors, so an empty list can mean the
+  connector failed. `positions()` refuses to answer unless the connector is
+  configured for the account.
+- Account lifecycle (add, list, credentials, portfolio state, positions,
+  active orders, delete) works end to end on the live API.
+- `binance_perpetual_testnet` is an available connector.
 
-Hummingbot's own dependency tree (a cython-built core, per-exchange
-connectors, TA-Lib, etc.) did not finish `pip install` dependency
-resolution within a 180-second budget when tried directly inside
-`execution-service/`'s virtualenv. Per instruction, it runs as its own
-container stack instead: `docker-compose.yml` here runs the official
-`hummingbot-api` + `postgres` + `emqx` containers plus this bridge in a
-small container that only depends on `fastapi`/`httpx`.
+## Bridge API
 
-## What's here
-
-```
-hummingbot-service/
-  Dockerfile           builds the bridge (NOT Hummingbot itself -- that
-                        comes from the official hummingbot-api/postgres/emqx images)
-  docker-compose.yml    four services: postgres + emqx + hummingbot-api
-                        (official Hummingbot API stack, paper/testnet only)
-                        + bridge (this package)
-  config/
-    conf_client.yml     legacy single-container config, kept for reference
-    conf_paper_trade.yml  paper account starting balances
-  bridge/
-    app.py              FastAPI app implementing the narrow bridge API
-    hummingbot_api_client.py   translates bridge calls to the real
-                        Hummingbot API (https://hummingbot.org/hummingbot-api/),
-                        not Gateway -- see docstring for verification status
-  tests/
-    test_bridge_contract.py  tests the bridge's request/response shapes
-                        against a FAKE hummingbot-api server (not the real one)
-```
-
-## Bridge API (as required)
-
-`POST /orders`, `DELETE /orders/{id}`, `PATCH /orders/{id}` (where
-supported -- Hummingbot's perpetual connectors generally do not support
-amend, so this returns 501 unless the underlying connector does),
-`GET /orders`, `GET /positions`, `GET /balances`, `GET /health`. Every
-response includes `signal_id` (as `client_order_id`), `instrument`,
-`backend_order_id`, and `timestamp`, matching
-`execution-service/market_edge_exec/hummingbot/real_client.py`'s
-expectations exactly -- that client and this bridge were written against
-the same contract, so no translation layer sits between them.
+`POST /orders` (sets leverage, places, polls to a real state), `DELETE
+/orders/{signal_id}`, `PATCH /orders/{signal_id}` (501: not supported),
+`GET /orders/active`, `GET /positions`, `GET /balances`, `GET /health`.
+The bridge keeps a persistent `signal_id -> order_id` map (SQLite on the
+`bridge-data` volume) because the Hummingbot API assigns its own ids. That
+keeps cancels working across bridge restarts and refuses a `signal_id`
+it has already sent.
 
 ## Paper only
 
@@ -107,6 +85,7 @@ variables to the `hummingbot-api` container, never committed.
 ```
 cd hummingbot-service
 cp .env.example .env   # fill in USERNAME/PASSWORD/CONFIG_PASSWORD/etc, keep out of git
+./setup_bots.sh        # the API will not start without bots/credentials/master_account/
 docker compose up --build
 curl localhost:8090/health   # the bridge
 curl -u $HUMMINGBOT_API_USERNAME:$HUMMINGBOT_API_PASSWORD localhost:8000/   # hummingbot-api directly
@@ -114,18 +93,10 @@ curl -u $HUMMINGBOT_API_USERNAME:$HUMMINGBOT_API_PASSWORD localhost:8000/   # hu
 
 ## Honesty note
 
-The containers now really run in CI (confirmed via `docker compose ps`
-showing all four `Up`/`running`, and both `GET http://localhost:8000/` and
-the bridge's own `/health` really answering over HTTP). What is now
-targeting the correct real API surface, but NOT yet independently confirmed
-field-for-field: `bridge/hummingbot_api_client.py`'s request/response
-payload shapes are a best-effort mapping from documented endpoint paths,
-not a verified schema -- see that file's docstring and the CI job's
-`hummingbot_api_openapi.json` artifact, saved specifically so that
-verification can happen next. What has NOT been proven at all yet:
-Hummingbot itself placing or filling a real order through this path. The
-bridge's own request/response logic (`bridge/app.py`,
-`bridge/hummingbot_api_client.py`) is tested against a fake hummingbot-api
-server in `tests/test_bridge_contract.py`, which proves the bridge's HTTP
-contract is internally consistent -- it does not, and was never claimed
-to, prove a real fill.
+Proven in CI: the real stack (postgres, EMQX, hummingbot-api 1.0.1, bridge)
+starts and answers; authenticated reads work; the account lifecycle works;
+every request this client sends matches the live schema. Not proven yet: a
+real order placed and filled through this path. That needs Binance
+testnet keys added as the `BINANCE_TESTNET_API_KEY`/`SECRET` repository
+secrets. Until then, the order-state handling is tested against a fake API
+whose responses copy the running source (`tests/test_bridge_contract.py`).

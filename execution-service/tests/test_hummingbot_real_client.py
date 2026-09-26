@@ -77,3 +77,23 @@ def test_factory_rejects_an_unknown_mode():
 def test_factory_returns_mock_only_when_explicitly_asked():
     client = build_hummingbot_client("mock")
     assert isinstance(client, HummingbotExecutionClient)
+
+
+@pytest.mark.parametrize("bridge_status", ["OPEN", "SUBMITTED", "PENDING_CANCEL"])
+def test_non_final_order_is_never_reported_as_a_fill(bridge_status):
+    from market_edge_exec.hummingbot.real_client import HummingbotOrderNotFinal
+    handler = lambda request: httpx.Response(200, json={"backend_order_id": "HB-1", "status": bridge_status, "quantity_filled": 0})
+    with pytest.raises(HummingbotOrderNotFinal):
+        real_client_with_transport(httpx.MockTransport(handler)).submit(intent())
+
+
+def test_failed_order_maps_to_rejected():
+    handler = lambda request: httpx.Response(200, json={"backend_order_id": "HB-1", "status": "FAILED", "quantity_filled": 0})
+    assert real_client_with_transport(httpx.MockTransport(handler)).submit(intent()).status == "REJECTED"
+
+
+def test_cancel_is_only_confirmed_when_the_bridge_says_cancelled():
+    from market_edge_exec.hummingbot.real_client import HummingbotOrderNotFinal
+    handler = lambda request: httpx.Response(200, json={"backend_order_id": "HB-1", "status": "PENDING_CANCEL"})
+    with pytest.raises(HummingbotOrderNotFinal):
+        real_client_with_transport(httpx.MockTransport(handler)).cancel("s1")
