@@ -74,6 +74,24 @@ def test_execution_signal_endpoint_sizes_by_risk_and_executes(client):
     assert body["fill"]["status"] == "FILLED"
 
 
+def test_reconcile_does_not_false_positive_on_nautilus_native_fills(client):
+    # Found via the real Part F forward loop: a NAUTILUS_NATIVE fill has no
+    # reason to appear in Hummingbot's position list, and previously
+    # reconcile_now() compared ALL canonical positions (including
+    # NAUTILUS_NATIVE ones) against Hummingbot's, engaging the kill switch
+    # on every single real trade.
+    test_client, _ = client
+    payload = {"signal_id": "s-native", "instrument": "BTC-PERP", "side": "buy", "quantity": 0.1, "order_type": "MARKET", "strategy_id": "alpha", "limit_price": 60000, "stop": 56000, "leverage": 1}
+    fill_response = test_client.post("/execution/intent", json=payload, headers=HEADERS)
+    assert fill_response.status_code == 200
+
+    reconcile_response = test_client.post("/reconcile", json={}, headers=HEADERS)
+    assert reconcile_response.status_code == 200
+    body = reconcile_response.json()
+    assert body["reconciled"] is True
+    assert body["halted"] is False
+
+
 def test_execution_signal_endpoint_rejects_stale_signal_with_409(client):
     test_client, _ = client
     stale_payload = {"signal_id": "me-stale", "asset": "BTC", "direction": "long", "timestamp": 0, "entry": 60000, "stop": 56000, "strategy_id": "market-edge-alpha"}

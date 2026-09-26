@@ -39,6 +39,7 @@ class _Position:
     quantity: float
     avg_entry: float
     realized_pnl: float = 0.0
+    backend: str = "NAUTILUS_NATIVE"
 
 
 class NautilusPortfolio:
@@ -51,7 +52,9 @@ class NautilusPortfolio:
         self._store = store
         self._positions: dict[str, _Position] = {}
         for row in store.positions():
-            self._positions[row["instrument"]] = _Position(row["quantity"], row.get("avg_entry") or 0.0, row.get("realized_pnl") or 0.0)
+            self._positions[row["instrument"]] = _Position(
+                row["quantity"], row.get("avg_entry") or 0.0, row.get("realized_pnl") or 0.0, row.get("backend") or "NAUTILUS_NATIVE",
+            )
 
     def apply_fill(self, intent: ExecutionIntent, fill_price: float, quantity_filled: float, backend: str) -> PositionSnapshot:
         # Round-trip through real Nautilus value types to validate shape/precision.
@@ -61,7 +64,7 @@ class NautilusPortfolio:
         price = Price.from_str(f"{fill_price:.8f}".rstrip("0").rstrip(".") or "0")
 
         signed_qty = float(qty) if side == OrderSide.BUY else -float(qty)
-        existing = self._positions.get(intent.instrument, _Position(0.0, float(price)))
+        existing = self._positions.get(intent.instrument, _Position(0.0, float(price), backend=backend))
         new_quantity = existing.quantity + signed_qty
         realized = existing.realized_pnl
         if existing.quantity != 0 and (existing.quantity > 0) != (new_quantity > 0) and new_quantity != existing.quantity:
@@ -71,7 +74,10 @@ class NautilusPortfolio:
         avg_entry = float(price) if existing.quantity == 0 or (existing.quantity > 0) != (new_quantity > 0) else \
             (existing.avg_entry * abs(existing.quantity) + float(price) * quantity_filled) / (abs(existing.quantity) + quantity_filled)
 
-        position = _Position(new_quantity, avg_entry, realized)
+        # The backend of record for an instrument is whichever backend most
+        # recently filled it -- a position only ever lives on one backend at
+        # a time in this design (no split routing of the same instrument).
+        position = _Position(new_quantity, avg_entry, realized, backend=backend)
         self._positions[str(instrument_id.symbol)] = position
         snapshot = PositionSnapshot.create({
             "instrument": str(instrument_id.symbol), "quantity": position.quantity, "avg_entry": position.avg_entry,
@@ -84,7 +90,7 @@ class NautilusPortfolio:
         entry = self._positions.get(instrument)
         if not entry or entry.quantity == 0:
             return None
-        return PositionSnapshot.create({"instrument": instrument, "quantity": entry.quantity, "avg_entry": entry.avg_entry, "realized_pnl": entry.realized_pnl, "backend": "NAUTILUS_NATIVE"})
+        return PositionSnapshot.create({"instrument": instrument, "quantity": entry.quantity, "avg_entry": entry.avg_entry, "realized_pnl": entry.realized_pnl, "backend": entry.backend})
 
     def open_positions(self) -> list[PositionSnapshot]:
         return [self.position(instrument) for instrument, position in self._positions.items() if position.quantity != 0]

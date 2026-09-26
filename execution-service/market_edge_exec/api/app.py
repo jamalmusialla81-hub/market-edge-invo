@@ -126,7 +126,16 @@ def create_app(db_path: str = "market_edge_exec.sqlite3") -> FastAPI:
 
     @app.post("/reconcile", dependencies=[Depends(require_api_key)])
     def reconcile_now():
-        canonical = [p.to_dict() for p in portfolio.open_positions()]
+        # Only positions this service actually routed to Hummingbot belong in
+        # this comparison. A position filled via NAUTILUS_NATIVE has no
+        # reason to appear in Hummingbot's own position list -- that is not
+        # a divergence, Nautilus is that fill's own canonical record. Found
+        # by running the real forward loop (Part F): every real
+        # NAUTILUS_NATIVE fill was tripping the kill switch as a false
+        # "unknown position" the instant /reconcile ran, since it compared
+        # ALL canonical positions against Hummingbot's regardless of which
+        # backend actually executed them.
+        canonical = [p.to_dict() for p in portfolio.open_positions() if p.backend == BACKEND_HUMMINGBOT]
         backend_positions = hummingbot.positions()
         result = reconcile(canonical, backend_positions, store=store)
         if not result.reconciled:
