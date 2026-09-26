@@ -1,11 +1,53 @@
 # Hummingbot bridge service (paper/testnet only)
 
-Status: **code written, NOT built or run in this environment.** `docker
-version` finds the Docker CLI here but there is no daemon socket
-(`/var/run/docker.sock` does not exist) -- this sandbox has no
-docker-in-docker, so `docker compose up` cannot be executed from this
-session. This directory is real, complete code for someone with Docker
-access (Jakob's own machine, or a CI runner with Docker) to actually run.
+Status (Phase 4, 2026-09-26, CI run 36235564843): **actually brought up
+with real Docker** in a clean GitHub Actions runner (`hummingbot-docker`
+job in `.github/workflows/execution-stack-ci.yml`) -- this sandboxed dev
+session still has no Docker daemon, but CI does. `docker compose up -d`
+starts the real `hummingbot/hummingbot:latest` image and this bridge for
+real. The bridge container itself comes up healthy and answers
+`GET /health`. It correctly reports `{"status": "hummingbot_unreachable"}`
+though -- see "Architecture correction" below for why that is expected
+with the current bridge code, not a Docker/CI problem.
+
+## Architecture correction: Gateway is DEX-only -- CEX control needs the Hummingbot API, not Gateway
+
+This bridge's `bridge/hummingbot_gateway.py` was written against an
+**unverified assumption**, flagged as such in its own docstring at the
+time: that Hummingbot exposes a REST "Gateway" API for order/position
+control that this bridge could call directly. Phase 4 research
+(hummingbot.org docs, 2026-09-26) confirms that assumption was wrong for
+our use case:
+
+- **Gateway** (`hummingbot/gateway`, port 15888) is middleware for **DEX/AMM
+  connectors only** (on-chain swaps, LP positions). It has nothing to do
+  with centralized exchanges like Binance.
+- The officially documented way to control Hummingbot bots
+  programmatically -- including CEX perpetuals like Binance Futures -- is
+  the separate **Hummingbot API** project
+  (https://hummingbot.org/hummingbot-api/): a FastAPI server (port 8000)
+  backed by PostgreSQL (orders/balances/performance) and an EMQX MQTT
+  broker (bot orchestration), deployed via
+  `hummingbot/deploy`'s official docker-compose stack
+  (`hummingbot-api` + `hummingbot-postgres` + `hummingbot-broker`
+  containers). It documents CEX support (Binance named explicitly) and
+  REST routers for trading operations, portfolio/position management, and
+  bot deploy/start/stop, with interactive docs at `/docs`.
+
+This explains the CI result precisely: our bridge dialed a Gateway URL
+(`http://hummingbot:15888`) that the official `hummingbot/hummingbot`
+image never listens on for CEX use, so `hummingbot_unreachable` is the
+bridge correctly detecting a wrong target, not a flaky container.
+
+**Next concrete step** (unblocked, no credentials needed): replace this
+directory's compose stack with the official `hummingbot/deploy
+--hummingbot-api` stack (postgres + EMQX + hummingbot-api containers),
+bring it up for real in CI, read its live `/openapi.json` to get the exact
+verified request/response contract (not guessed), and rewrite
+`bridge/hummingbot_gateway.py` against that real contract instead of the
+assumed Gateway shape. `HummingbotExecutionClientReal`'s interface
+(`execution-service/market_edge_exec/hummingbot/real_client.py`) does not
+need to change -- only what this bridge calls on the other side of it.
 
 ## Why a separate service
 
@@ -69,9 +111,13 @@ curl localhost:8090/health   # the bridge
 
 ## Honesty note
 
-Nothing in this directory has been executed end-to-end. The bridge's own
-logic (`bridge/app.py`, `bridge/hummingbot_gateway.py`) is tested against a
-fake Gateway server in `tests/test_bridge_contract.py`, which proves the
-bridge's HTTP contract is internally consistent -- it does NOT prove
-Hummingbot itself starts, connects to a venue, or fills an order. That
-proof requires Docker access this session does not have.
+The containers now really run in CI (confirmed via `docker compose ps`
+showing both `Up`/`running`, and the bridge's own `/health` endpoint really
+answering over HTTP). What has NOT been proven: Hummingbot itself placing
+or filling an order, because the bridge is currently wired to the wrong
+API surface (see "Architecture correction" above) -- `hummingbot_unreachable`
+is the bridge honestly reporting that, not a fabricated pass. The bridge's
+own request/response logic (`bridge/app.py`, `bridge/hummingbot_gateway.py`)
+is tested against a fake Gateway server in `tests/test_bridge_contract.py`,
+which proves the bridge's HTTP contract is internally consistent -- it does
+not, and was never claimed to, prove a real fill.
