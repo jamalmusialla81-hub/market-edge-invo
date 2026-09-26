@@ -224,3 +224,68 @@ jobs:
         with:
           node-version: 22
       - run: npm test
+
+  signal-bridge-e2e:
+    name: Part E — real Market Edge signal into paper execution-service (end to end)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install execution-service dependencies
+        working-directory: execution-service
+        run: |
+          python -m pip install --upgrade pip
+          pip install fastapi "uvicorn[standard]" pydantic httpx nautilus_trader
+
+      - name: Start the paper execution-service in the background
+        working-directory: execution-service
+        env:
+          MARKET_EDGE_EXEC_API_KEY: ci-signal-bridge-key
+        run: |
+          nohup python -m uvicorn market_edge_exec.api.app:create_app --factory --host 127.0.0.1 --port 8000 > uvicorn.log 2>&1 &
+          for i in $(seq 1 20); do curl -sf http://127.0.0.1:8000/health && break; sleep 1; done
+          curl -sf http://127.0.0.1:8000/health | tee health.json
+
+      - name: Dry-run the real signal fetch (proves live Market Edge scan -> AlphaSignal mapping, no execution)
+        id: dryrun
+        continue-on-error: true
+        run: |
+          set +e
+          node signal-bridge/fetch_signal.mjs --dry-run > dry_run_result.json 2> dry_run_result.log
+          echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+          cat dry_run_result.json dry_run_result.log
+
+      - name: Real end-to-end signal -> paper execution (only if the dry run found a real candidate)
+        if: steps.dryrun.outputs.exit_code == '0'
+        env:
+          MARKET_EDGE_EXEC_API_KEY: ci-signal-bridge-key
+          EXECUTION_SERVICE_URL: http://127.0.0.1:8000
+        run: |
+          node signal-bridge/fetch_signal.mjs | tee e2e_signal_result.json
+          echo "--- resulting paper positions ---"
+          curl -sS -H "X-API-Key: ci-signal-bridge-key" http://127.0.0.1:8000/positions | tee positions.json
+
+      - name: Server log
+        if: always()
+        run: cat execution-service/uvicorn.log || true
+
+      - name: Upload signal-bridge artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: signal-bridge-e2e-report
+          path: |
+            dry_run_result.json
+            dry_run_result.log
+            e2e_signal_result.json
+            positions.json
+            execution-service/health.json
+            execution-service/uvicorn.log
+          if-no-files-found: warn
+          retention-days: 90

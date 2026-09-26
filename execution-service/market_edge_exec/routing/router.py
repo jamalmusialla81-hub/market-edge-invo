@@ -76,7 +76,22 @@ class ExecutionRouter:
             raise RouterError(f"EXECUTION_ROUTER_BACKEND_UNAVAILABLE: {backend_name}")
         log_event("route_selected", signal_id=intent.signal_id, backend=backend_name)
 
-        fill = backend.submit(intent)
+        try:
+            fill = backend.submit(intent)
+        except Exception as error:
+            # Fail closed: a backend timeout/disconnect must not leave this
+            # signal_id in limbo (intent recorded, no order/failure row) --
+            # that would make it un-retryable (idempotency already consumed
+            # signal_id) while reconciliation has nothing to flag. Recording
+            # SUBMIT_FAILED_UNKNOWN means the order status is honestly
+            # "we don't know if the backend accepted this", not "no order
+            # exists" -- reconcile()'s missing_fills check treats this
+            # signal_id as needing a fill that never arrived, per Part H
+            # ("expected: fail closed").
+            self.store.upsert_order(intent.signal_id, backend_name, "SUBMIT_FAILED_UNKNOWN")
+            self.store.record_failure(intent.signal_id, f"BACKEND_SUBMIT_FAILED: {error}")
+            log_event("backend_disconnect", signal_id=intent.signal_id, backend=backend_name, reason=str(error))
+            raise RouterError(f"EXECUTION_ROUTER_BACKEND_SUBMIT_FAILED: {backend_name}: {error}") from error
         self.store.upsert_order(intent.signal_id, backend_name, fill.status, external_id=fill.fill_id)
         self.store.record_fill(fill.to_dict())
         log_event("order_submitted", signal_id=intent.signal_id, backend=backend_name)

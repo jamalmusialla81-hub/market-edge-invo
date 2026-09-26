@@ -21,6 +21,7 @@ from market_edge_exec.persistence.store import Store
 from market_edge_exec.reconciliation.reconcile import reconcile
 from market_edge_exec.risk.engine import AccountState, approve
 from market_edge_exec.routing.router import BACKEND_HUMMINGBOT, BACKEND_NAUTILUS_NATIVE, ExecutionRouter, RouterError
+from market_edge_exec.signal_bridge.bridge import process_signal
 
 PAPER_ONLY = True  # hard-coded, not configurable via request or env
 
@@ -85,6 +86,24 @@ def create_app(db_path: str = "market_edge_exec.sqlite3") -> FastAPI:
         except RouterError as error:
             raise HTTPException(status_code=409, detail=str(error))
         return {"backend": backend_name, "fill": fill.to_dict()}
+
+    @app.post("/execution/signal", dependencies=[Depends(require_api_key)])
+    def submit_signal(payload: dict):
+        """Part E entry point: takes a Market Edge AlphaSignal shape
+        (signal_id/asset/direction/timestamp/entry/stop/targets/strategy_id)
+        plus the instrument to trade it as, validates freshness, has risk
+        compute the real position size (never the caller's), and routes.
+        Rejections (stale, invalid, risk) are logged and returned, never
+        silently dropped -- see signal_bridge/bridge.py."""
+        signal_payload = payload.get("signal")
+        instrument = payload.get("instrument")
+        if not isinstance(signal_payload, dict) or not instrument:
+            raise HTTPException(status_code=422, detail="signal and instrument are required")
+        result = process_signal(signal_payload, instrument, router, account, store,
+                                 venue_preference=payload.get("venue_preference"))
+        if not result.accepted:
+            raise HTTPException(status_code=409, detail={"signal_id": result.signal_id, "reason": result.reason})
+        return {"accepted": True, "signal_id": result.signal_id, "backend": result.backend, "fill": result.fill}
 
     @app.post("/execution/cancel", dependencies=[Depends(require_api_key)])
     def cancel_intent(payload: dict):
