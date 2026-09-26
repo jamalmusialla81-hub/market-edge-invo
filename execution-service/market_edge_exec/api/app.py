@@ -146,7 +146,12 @@ def create_app(db_path: str = "market_edge_exec.sqlite3") -> FastAPI:
         # ALL canonical positions against Hummingbot's regardless of which
         # backend actually executed them.
         canonical = [p.to_dict() for p in portfolio.open_positions() if p.backend == BACKEND_HUMMINGBOT]
-        backend_positions = hummingbot.positions()
+        try:
+            backend_positions = hummingbot.positions()
+        except Exception as error:
+            router.kill("RECONCILIATION_BACKEND_UNAVAILABLE")
+            return {"reconciled": False, "error": f"HUMMINGBOT_POSITIONS_UNAVAILABLE: {error}", "orphan_orders": [],
+                    "unknown_positions": [], "mismatched": [], "missing_fills": [], "halted": router.killed}
         result = reconcile(canonical, backend_positions, store=store)
         native = [p.to_dict() for p in portfolio.open_positions() if p.backend == BACKEND_NAUTILUS_NATIVE]
         ledger_check = paper.reconcile_ledger(native)
