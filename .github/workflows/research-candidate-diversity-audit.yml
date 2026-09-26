@@ -1,0 +1,47 @@
+name: Research — Candidate Diversity Audit (read-only, Phase A)
+
+# Measures candidates-per-scan density, asset participation, invalidation
+# reasons, and (via a read-only replay through already-exported
+# quant-engine.js / replay-engine.js functions) the closest-miss gate for
+# scans where an asset produced zero candidates. SELECTs only; writes
+# nothing to D1 and changes no production scoring or geometry.
+on:
+  workflow_dispatch:
+  push:
+    branches: ['claude/**']
+    paths:
+      - 'research/candidate-diversity-audit.mjs'
+      - '.github/workflows/research-candidate-diversity-audit.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: research-candidate-diversity-audit
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CLOUDFLARE_ACCOUNT_ID: 8ea7796a8fb13ffb612245e8a08a55d6
+      MARKET_EDGE_D1_DATABASE_ID: 39a4082e-41a4-45e9-9b76-99cf10eaca01
+      HISTORICAL_RANK_ENGINE_VERSION: HISTORICAL-RANK-V1
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Unit tests for the closest-miss classifier
+        run: node research/candidate-diversity-audit.test.mjs
+      - name: Run the candidate diversity audit
+        run: node research/candidate-diversity-audit.mjs | tee candidate-diversity-audit.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: candidate-diversity-audit-${{ github.run_id }}
+          path: candidate-diversity-audit.json
+          if-no-files-found: error
+          retention-days: 90
