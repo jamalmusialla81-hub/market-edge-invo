@@ -143,6 +143,7 @@ jobs:
           echo "--- official hummingbot-api compose file, saved to diff our stack against ---"
           curl -sSfL https://raw.githubusercontent.com/hummingbot/hummingbot-api/main/docker-compose.yml -o official_hummingbot_api_compose.yml || echo "could not fetch official compose file"
           cat official_hummingbot_api_compose.yml || true
+          ./setup_bots.sh
           docker compose up -d
           echo "Waiting up to 120s for hummingbot-api to answer GET / ..."
           for i in $(seq 1 60); do curl -sf -m 3 http://localhost:8000/ >/dev/null && echo "hummingbot-api up after ~$((i*2))s" && break; sleep 2; done
@@ -208,6 +209,19 @@ jobs:
           PYTHONPATH: .
         run: python diagnostics/end_to_end_testnet_flow.py | tee e2e_testnet.json
 
+      - name: Verify client against the LIVE Hummingbot API schema (fails the job on mismatch)
+        if: always()
+        working-directory: hummingbot-service
+        env:
+          HUMMINGBOT_API_URL: http://localhost:8000
+          HUMMINGBOT_API_USERNAME: ci-hb-api
+          HUMMINGBOT_API_PASSWORD: ci-hb-api-password
+        run: |
+          python -m pip install --quiet httpx
+          code=0; python verify_openapi.py > hummingbot_api_verification.json || code=$?
+          python -c "import json;r=json.load(open('hummingbot_api_verification.json'));print(json.dumps({k:r.get(k) for k in ('verdict','api_version','path_count','authenticated_reads_ok','client_schema_ok','error')},indent=2));[print(x['method'],x['path'],'OK' if x['ok'] else x['problems']) for x in r.get('client_requests',[])];[print('GET',x['path'],x.get('status')) for x in r.get('read_probes',[])]"
+          exit $code
+
       - name: Tear down
         if: always()
         working-directory: hummingbot-service
@@ -230,6 +244,7 @@ jobs:
             hummingbot-service/bridge_health.json
             hummingbot-service/hummingbot_api_health.json
             hummingbot-service/hummingbot_api_openapi.json
+            hummingbot-service/hummingbot_api_verification.json
             hummingbot-service/official_hummingbot_api_compose.yml
             hummingbot-service/hummingbot_api_container.log
             hummingbot-service/bridge_container.log
