@@ -68,17 +68,29 @@ function closestMissGate(setup){
 async function missDiagnosis(scanTimestamps){
   const bounds=await d1(`SELECT asset,MIN(open_time) AS first_time,MAX(open_time) AS last_time FROM canonical_candles WHERE exchange='COINBASE' AND interval='5m' AND asset IN (${Rank.ASSETS.map(()=>'?').join(',')}) GROUP BY asset`,Rank.ASSETS);
   const byAsset=new Map(bounds.map(row=>[row.asset,row]));
-  const start=Math.min(...bounds.map(row=>Number(row.first_time))),end=Math.max(...scanTimestamps)+Rank.BASE_MS;
-  const derivedByAsset=new Map();
-  for(const asset of Rank.ASSETS){
-    if(!byAsset.has(asset)){derivedByAsset.set(asset,null);continue;}
-    const rows=await candles(asset,start,end);
-    derivedByAsset.set(asset,rows.length?Replay.derived(rows):null);
-  }
+  const end=Math.max(...scanTimestamps)+Rank.BASE_MS;
+  // Fetch per asset concurrently, bounded by that asset's OWN earliest candle
+  // (not the earliest across all assets) so a late-listed asset doesn't pull
+  // months of rows it never had. This is a performance change only: it does
+  // not alter which candles are read once fetched, only how many empty pages
+  // are requested before the asset's own history begins.
+  console.error(`[candidate-diversity-audit] fetching candle history for ${Rank.ASSETS.length} assets...`);
+  const fetchStart=Date.now();
+  const derivedByAsset=new Map(await Promise.all(Rank.ASSETS.map(async asset=>{
+    if(!byAsset.has(asset))return [asset,null];
+    const assetStart=Number(byAsset.get(asset).first_time);
+    const rows=await candles(asset,assetStart,end);
+    console.error(`[candidate-diversity-audit] ${asset}: ${rows.length} candles fetched (${((Date.now()-fetchStart)/1000).toFixed(1)}s elapsed)`);
+    return [asset,rows.length?Replay.derived(rows):null];
+  })));
+  console.error(`[candidate-diversity-audit] history fetched in ${((Date.now()-fetchStart)/1000).toFixed(1)}s; replaying ${scanTimestamps.length} scans x ${Rank.ASSETS.length} assets...`);
+  const replayStart=Date.now();
   const tally=new Map(),perAsset={};
   for(const asset of Rank.ASSETS)perAsset[asset]={zeroCandidateScans:0,gates:{}};
   let scansChecked=0;
-  for(const timestamp of scanTimestamps){
+  for(let index=0;index<scanTimestamps.length;index++){
+    const timestamp=scanTimestamps[index];
+    if(index&&index%50===0)console.error(`[candidate-diversity-audit] replayed ${index}/${scanTimestamps.length} scans (${((Date.now()-replayStart)/1000).toFixed(1)}s elapsed)`);
     for(const asset of Rank.ASSETS){
       const derived=derivedByAsset.get(asset);
       if(!derived)continue;
