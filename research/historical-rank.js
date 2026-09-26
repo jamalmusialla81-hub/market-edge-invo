@@ -76,20 +76,23 @@ function finalizeCandidates(rows) {
   ordered.forEach(row=>{row.candidate_count=ordered.length;row.candidate_hash=hash({...row,targets:undefined,candidate_hash:undefined});});
   return ordered;
 }
-function resolveCandidate(candidate,future) {
+// outcomeBars defaults to the frozen 24h dataset horizon; research-only
+// horizon studies may pass a longer window without changing entry, stop,
+// targets or the stop-first ordering.
+function resolveCandidate(candidate,future,outcomeBars=OUTCOME_BARS) {
   if (!candidate?.valid_current_geometry) return null;
   const unresolved=(reason,gap=null)=>({status:'UNRESOLVED_DATA_GAP',reason,next_valid_candle_gap_ms:gap,available_bars:Array.isArray(future)?future.length:0,execution:'No execution or outcome was inferred across a missing/incomplete cached 5m window'});
-  if (!Array.isArray(future)||future.length<OUTCOME_BARS) return unresolved('INCOMPLETE_OUTCOME_WINDOW');
+  if (!Array.isArray(future)||future.length<outcomeBars) return unresolved('INCOMPLETE_OUTCOME_WINDOW');
   const expected=Number(candidate.timestamp);
   const firstTime=finite(future[0]?.time);
   if(!Number.isFinite(firstTime))return unresolved('INVALID_NEXT_VALID_CANDLE');
   if(firstTime-expected>BASE_MS*2)return unresolved('NEXT_VALID_CANDLE_GAP_EXCEEDED',firstTime-expected);
-  for(let index=1;index<OUTCOME_BARS;index++){const previous=finite(future[index-1]?.time),current=finite(future[index]?.time);if(!Number.isFinite(previous)||!Number.isFinite(current))return unresolved('INVALID_OUTCOME_CANDLE');if(current-previous>BASE_MS*2)return unresolved('OUTCOME_CANDLE_GAP_EXCEEDED',current-previous);}
+  for(let index=1;index<outcomeBars;index++){const previous=finite(future[index-1]?.time),current=finite(future[index]?.time);if(!Number.isFinite(previous)||!Number.isFinite(current))return unresolved('INVALID_OUTCOME_CANDLE');if(current-previous>BASE_MS*2)return unresolved('OUTCOME_CANDLE_GAP_EXCEEDED',current-previous);}
   const first=future[0], rawEntry=finite(first.open), plannedStop=finite(candidate.stop); if (!rawEntry || !plannedStop) return unresolved('INVALID_NEXT_VALID_EXECUTION_CANDLE');
   const direction=candidate.direction, distance=Math.abs(rawEntry-plannedStop); if (!distance) return unresolved('INVALID_NEXT_VALID_EXECUTION_GEOMETRY');
   const entry=rawEntry*(direction==='long'?1.0003:.9997), stop=direction==='long'?entry-distance:entry+distance, tp1=direction==='long'?entry+distance*candidate.rr:entry-distance*candidate.rr, tp2=direction==='long'?entry+distance*Math.max(candidate.rr+1,3):entry-distance*Math.max(candidate.rr+1,3);
   let tp1Hit=false,tp2Hit=false,stopHit=false,mfe=0,mae=0,finalR=0,bars=0;
-  for (const candle of future.slice(0,OUTCOME_BARS)) { bars++; const high=finite(candle.high),low=finite(candle.low),close=finite(candle.close); if (![high,low,close].every(Number.isFinite)) return unresolved('INVALID_OUTCOME_CANDLE'); const favourable=(direction==='long'?high-entry:entry-low)/distance, adverse=(direction==='long'?low-entry:entry-high)/distance; mfe=Math.max(mfe,favourable); mae=Math.min(mae,adverse); const activeStop=tp1Hit?entry:stop, hitStop=direction==='long'?low<=activeStop:high>=activeStop, hitOne=direction==='long'?high>=tp1:low<=tp1, hitTwo=direction==='long'?high>=tp2:low<=tp2;
+  for (const candle of future.slice(0,outcomeBars)) { bars++; const high=finite(candle.high),low=finite(candle.low),close=finite(candle.close); if (![high,low,close].every(Number.isFinite)) return unresolved('INVALID_OUTCOME_CANDLE'); const favourable=(direction==='long'?high-entry:entry-low)/distance, adverse=(direction==='long'?low-entry:entry-high)/distance; mfe=Math.max(mfe,favourable); mae=Math.min(mae,adverse); const activeStop=tp1Hit?entry:stop, hitStop=direction==='long'?low<=activeStop:high>=activeStop, hitOne=direction==='long'?high>=tp1:low<=tp1, hitTwo=direction==='long'?high>=tp2:low<=tp2;
     // Conservative ambiguity: stop is tested first on each completed candle.
     if (hitStop) { stopHit=true; finalR=tp1Hit?candidate.rr*.5:-1; break; }
     if (!tp1Hit && hitOne) tp1Hit=true;
