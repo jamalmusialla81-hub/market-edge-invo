@@ -48,8 +48,8 @@ class MarkResult:
 
 
 class PaperEngine:
-    def __init__(self, ledger: PaperLedger, router: ExecutionRouter, store: Store, limits: RiskLimits = RiskLimits()):
-        self.ledger, self.router, self.store, self.limits = ledger, router, store, limits
+    def __init__(self, ledger: PaperLedger, router: ExecutionRouter, store: Store, limits: RiskLimits = RiskLimits(), portfolio=None):
+        self.ledger, self.router, self.store, self.limits, self.portfolio = ledger, router, store, limits, portfolio
 
     # ---- entries -------------------------------------------------------
     def _reject(self, signal_id: Optional[str], reason: str, payload: dict, now_ms: int, outcome: str = "REJECTED") -> EntryResult:
@@ -89,9 +89,11 @@ class PaperEngine:
             return self._reject(sid, "NO_MARKET_PRICE", payload, now_ms)
         if (now_ms - mark_at_ms) / 1000.0 > MAX_MARK_AGE_SECONDS:
             return self._reject(sid, "STALE_MARKET_DATA", payload, now_ms)
-        if self.ledger.open_trade_for(instrument):
-            # One live trade per instrument: a fresh scan of the same setup
-            # every 5 minutes must not pyramid into it (endurance segment 1).
+        # One live trade per instrument: a fresh scan of the same setup every
+        # 5 minutes must not pyramid into it (endurance segment 1). The
+        # canonical portfolio counts too: a position opened outside the paper
+        # session would otherwise be merged in and break reconciliation.
+        if self.ledger.open_trade_for(instrument) or (self.portfolio and self.portfolio.position(instrument)):
             return self._reject(sid, "POSITION_ALREADY_OPEN_ON_INSTRUMENT", payload, now_ms)
 
         long = signal.direction == "long"
