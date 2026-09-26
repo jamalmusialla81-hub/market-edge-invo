@@ -1,0 +1,15 @@
+[project]
+name = "market-edge-hummingbot-bridge"
+version = "0.1.0"
+description = "Narrow private bridge in front of Hummingbot's Gateway (paper/testnet only)"
+requires-python = ">=3.11"
+dependencies = ["fastapi", "uvicorn[standard]", "httpx"]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[tool.setuptools]
+packages = ["bridge"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

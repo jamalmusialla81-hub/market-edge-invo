@@ -1,0 +1,34 @@
+services:
+  hummingbot:
+    image: hummingbot/hummingbot:latest
+    container_name: market-edge-hummingbot-paper
+    volumes:
+      - ./config:/conf
+      - hummingbot-data:/data
+      - hummingbot-logs:/logs
+    environment:
+      # Paper/testnet only. Real venue keys, once a testnet account exists,
+      # are injected here as env vars by whoever runs this compose file --
+      # never committed, never pasted into chat.
+      - CONFIG_PASSWORD=${HUMMINGBOT_CONFIG_PASSWORD:?set in your own .env}
+      - BINANCE_TESTNET_API_KEY=${BINANCE_TESTNET_API_KEY:-}
+      - BINANCE_TESTNET_API_SECRET=${BINANCE_TESTNET_API_SECRET:-}
+    tty: true
+    stdin_open: true
+    restart: unless-stopped
+
+  bridge:
+    build: .
+    container_name: market-edge-hummingbot-bridge
+    ports:
+      - "8090:8090"
+    environment:
+      - BRIDGE_API_KEY=${HUMMINGBOT_BRIDGE_API_KEY:?set in your own .env}
+      - HUMMINGBOT_GATEWAY_URL=http://hummingbot:15888
+    depends_on:
+      - hummingbot
+    restart: unless-stopped
+
+volumes:
+  hummingbot-data:
+  hummingbot-logs:
