@@ -80,7 +80,8 @@ jobs:
       - name: Skip note if minimal repro failed
         if: steps.repro.outputs.result != 'PASS'
         working-directory: execution-service
-        run: echo "Skipping real_backtest_scenarios.py: minimal repro did not pass in this environment (Python ${{ matrix.python-version }})." | tee scenario.log
+        run: |
+          echo "Skipping real_backtest_scenarios.py - minimal repro did not pass in this environment (Python ${{ matrix.python-version }})." | tee scenario.log
 
       - name: Existing execution-service test suite (Phase 2/3 bookkeeping paper route — always runs, independent of the engine crash)
         working-directory: execution-service
