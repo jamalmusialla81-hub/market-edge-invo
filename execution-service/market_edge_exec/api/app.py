@@ -15,7 +15,7 @@ import os
 from fastapi import Depends, FastAPI, Header, HTTPException
 
 from market_edge_exec.domain.contracts import ContractError, ExecutionIntent
-from market_edge_exec.hummingbot.mock_client import HummingbotExecutionClient
+from market_edge_exec.hummingbot.factory import build_hummingbot_client
 from market_edge_exec.nautilus.portfolio import NautilusPortfolio
 from market_edge_exec.paper.engine import PaperEngine
 from market_edge_exec.paper.ledger import PaperLedger
@@ -52,11 +52,15 @@ class PaperBackendAdapter:
         return ExecutionFill.create({"signal_id": signal_id, "fill_id": f"{self._name}-{signal_id}-cancel", "status": "CANCELLED", "quantity_filled": 0, "backend": self._name, "timestamp": int(time.time() * 1000)})
 
 
-def create_app(db_path: str = "market_edge_exec.sqlite3") -> FastAPI:
+def create_app(db_path: str = "market_edge_exec.sqlite3", hummingbot_mode: str = None) -> FastAPI:
+    """hummingbot_mode: 'disabled' (default: no Hummingbot backend at all),
+    'real' (bridge must be reachable at startup) or 'mock' (tests only).
+    There is no runtime fallback between them."""
     app = FastAPI(title="Market Edge Execution Service (paper-only)")
     store = Store(db_path)
     portfolio = NautilusPortfolio(store)
-    hummingbot = HummingbotExecutionClient()
+    mode = hummingbot_mode or os.environ.get("HUMMINGBOT_MODE", "disabled")
+    hummingbot = None if mode == "disabled" else build_hummingbot_client(mode)
     ledger = PaperLedger(db_path)
 
     # Account state is re-derived from the persistent ledger on every call.
@@ -70,7 +74,8 @@ def create_app(db_path: str = "market_edge_exec.sqlite3") -> FastAPI:
 
     router = ExecutionRouter(
         store=store, risk_gate=risk_gate,
-        backends={BACKEND_NAUTILUS_NATIVE: PaperBackendAdapter(portfolio, BACKEND_NAUTILUS_NATIVE), BACKEND_HUMMINGBOT: hummingbot},
+        backends={BACKEND_NAUTILUS_NATIVE: PaperBackendAdapter(portfolio, BACKEND_NAUTILUS_NATIVE),
+                  **({BACKEND_HUMMINGBOT: hummingbot} if hummingbot else {})},
     )
     paper = PaperEngine(ledger, router, store)
     app.state.store, app.state.portfolio, app.state.hummingbot, app.state.router = store, portfolio, hummingbot, router
@@ -83,7 +88,7 @@ def create_app(db_path: str = "market_edge_exec.sqlite3") -> FastAPI:
 
     @app.get("/health")
     def health():
-        return {"status": "ok", "paper_only": PAPER_ONLY, "killed": router.killed}
+        return {"status": "ok", "paper_only": PAPER_ONLY, "killed": router.killed, "hummingbot_mode": mode}
 
     @app.post("/execution/intent", dependencies=[Depends(require_api_key)])
     def submit_intent(payload: dict):
@@ -147,7 +152,7 @@ def create_app(db_path: str = "market_edge_exec.sqlite3") -> FastAPI:
         # backend actually executed them.
         canonical = [p.to_dict() for p in portfolio.open_positions() if p.backend == BACKEND_HUMMINGBOT]
         try:
-            backend_positions = hummingbot.positions()
+            backend_positions = hummingbot.positions() if hummingbot else []
         except Exception as error:
             router.kill("RECONCILIATION_BACKEND_UNAVAILABLE")
             return {"reconciled": False, "error": f"HUMMINGBOT_POSITIONS_UNAVAILABLE: {error}", "orphan_orders": [],

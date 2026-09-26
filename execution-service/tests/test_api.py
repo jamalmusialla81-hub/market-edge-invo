@@ -14,7 +14,7 @@ HEADERS = {"X-API-Key": "test-key"}
 
 @pytest.fixture
 def client(tmp_path):
-    app = create_app(db_path=str(tmp_path / "api.sqlite3"))
+    app = create_app(db_path=str(tmp_path / "api.sqlite3"), hummingbot_mode="mock")
     return TestClient(app), app
 
 

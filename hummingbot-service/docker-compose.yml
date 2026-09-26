@@ -61,9 +61,16 @@ services:
       - HUMMINGBOT_API_URL=http://hummingbot-api:8000
       - HUMMINGBOT_API_USERNAME=${HUMMINGBOT_API_USERNAME:?set in your own .env}
       - HUMMINGBOT_API_PASSWORD=${HUMMINGBOT_API_PASSWORD:?set in your own .env}
+      - HUMMINGBOT_ACCOUNT=${HUMMINGBOT_ACCOUNT:-market_edge}
+      - HUMMINGBOT_CONNECTOR=${HUMMINGBOT_CONNECTOR:-binance_perpetual_testnet}
+      - BRIDGE_DB_PATH=/data/bridge.sqlite3
+    volumes:
+      # signal_id -> Hummingbot order_id map; must survive bridge restarts.
+      - bridge-data:/data
     depends_on:
       - hummingbot-api
     restart: unless-stopped
 
 volumes:
   hummingbot-postgres-data:
+  bridge-data:
