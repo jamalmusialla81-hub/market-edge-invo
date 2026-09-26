@@ -73,6 +73,27 @@ def test_db_restart_mid_sequence_preserves_prior_fills_and_accepts_new_ones(tmp_
     assert portfolio_b.position("BTC-PERP").quantity == pytest.approx(1.0)
 
 
+def test_partial_fill_then_restart_preserves_exactly_the_filled_amount(tmp_path):
+    db_path = str(tmp_path / "db.sqlite3")
+    store_a = Store(db_path)
+    portfolio_a = NautilusPortfolio(store_a)
+    portfolio_a.apply_fill(intent(signal_id="s-partial", quantity=1.0), fill_price=60000, quantity_filled=0.35, backend="NAUTILUS_NATIVE")
+    store_a.upsert_order("s-partial", "NAUTILUS_NATIVE", "PARTIALLY_FILLED")
+    del store_a, portfolio_a  # simulate the process being torn down mid-fill
+
+    store_b = Store(db_path)
+    portfolio_b = NautilusPortfolio(store_b)
+    # Only the 0.35 that was actually filled before restart exists -- not the
+    # full 1.0 requested quantity, and not zero.
+    assert portfolio_b.position("BTC-PERP").quantity == pytest.approx(0.35)
+    orders = {o["signal_id"]: o for o in store_b.orders()}
+    assert orders["s-partial"]["status"] == "PARTIALLY_FILLED"
+    # The remaining 0.65 can still fill after restart, on the same signal_id.
+    portfolio_b.apply_fill(intent(signal_id="s-partial", quantity=1.0), fill_price=60050, quantity_filled=0.65, backend="NAUTILUS_NATIVE")
+    store_b.upsert_order("s-partial", "NAUTILUS_NATIVE", "FILLED")
+    assert portfolio_b.position("BTC-PERP").quantity == pytest.approx(1.0)
+
+
 class _TimeoutBackend:
     """Simulates a backend timeout / network loss on submit()."""
 
