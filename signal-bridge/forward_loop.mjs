@@ -114,6 +114,7 @@ export async function runCycle(cycle, metrics, deps = {}) {
     mark = await mid(result.coin || result.signal.asset);
   } catch (error) {
     metrics.stale_market_data += 1;
+    console.error(JSON.stringify({ event: 'NO_LIVE_MID', coin: result.coin || result.signal.asset, error: error.message }));
   }
   const leverage = LEVERAGE_ROTATION[cycle % LEVERAGE_ROTATION.length] || 1;
   const posted = await api('POST', '/paper/signal', {

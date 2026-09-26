@@ -352,7 +352,9 @@ jobs:
           EXECUTION_SERVICE_URL: http://127.0.0.1:8000
           MAX_CYCLES: 3
           CYCLE_INTERVAL_MS: 15000
-        run: node signal-bridge/forward_loop.mjs | tee forward_loop_result.log
+        run: |
+          node --input-type=module -e "import('./signal-bridge/market_data.mjs').then(async (m) => { for (const c of ['BTC', 'ETH', 'NEAR']) { try { console.log('live mid', c, JSON.stringify(await m.fetchMid(c))); } catch (e) { console.log('live mid FAILED', c, e.message, e.cause?.message || ''); } } })"
+          node signal-bridge/forward_loop.mjs | tee forward_loop_result.log
 
       - name: Server log
         if: always()

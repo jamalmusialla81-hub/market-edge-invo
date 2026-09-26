@@ -134,3 +134,18 @@ test('runCycle adds no new risk when an open position has no readable market dat
   assert.equal(metrics.stale_market_data, 1);
   assert.ok(!calls.some((c) => c.path === '/paper/signal'));
 });
+
+test('fetchMid retries a transient failure, but not a missing coin', async () => {
+  const { fetchMid } = await import('./market_data.mjs');
+  let calls = 0;
+  const flaky = async () => {
+    calls += 1;
+    if (calls === 1) return { ok: false, status: 429, json: async () => ({}) };
+    return { ok: true, status: 200, json: async () => ({ NEAR: '2.5' }) };
+  };
+  const mid = await fetchMid('NEAR', { fetchImpl: flaky, now: () => 42, sleep: async () => {} });
+  assert.deepEqual(mid, { price: 2.5, at: 42 });
+  assert.equal(calls, 2);
+  const ok = async () => ({ ok: true, status: 200, json: async () => ({ BTC: '1' }) });
+  await assert.rejects(fetchMid('NEAR', { fetchImpl: ok, sleep: async () => {} }), /no live mid for NEAR/);
+});
