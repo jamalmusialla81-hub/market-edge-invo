@@ -82,5 +82,5 @@ async function run(){
   writeFileSync(REPORT,JSON.stringify({...report,candidates_detail:results.map(({stored,byHorizon,...rest})=>({...rest,h:Object.fromEntries(Object.entries(byHorizon).map(([hours,t])=>[hours,{s:t?.status,stop:t?.STOP_HIT,tp1:t?.TP1_BEFORE_SL,tp2:t?.TP2_HIT,r:t?.FINAL_R,bars:t?.duration_bars}]))}))})+'\n');
   console.log(JSON.stringify(report,null,2));
 }
-export {horizonSummary,lowerBound,monthsBetween};
+export {horizonSummary,lowerBound,monthsBetween,symbolCandles};
 if(import.meta.url===`file://${process.argv[1]}`)run().catch(error=>{console.error(`horizon study failed: ${error.message}`);process.exitCode=1;});
