@@ -9,6 +9,8 @@ from market_edge_exec.domain.contracts import ExecutionFill
 from market_edge_exec.nautilus.portfolio import NautilusPortfolio
 from market_edge_exec.persistence.store import Store
 from market_edge_exec.domain.contracts import ExecutionIntent
+from market_edge_exec.risk.engine import RiskDecision
+from market_edge_exec.routing.router import BACKEND_NAUTILUS_NATIVE, ExecutionRouter, RouterError
 
 
 def intent(**overrides):
@@ -69,3 +71,32 @@ def test_db_restart_mid_sequence_preserves_prior_fills_and_accepts_new_ones(tmp_
     assert portfolio_b.position("BTC-PERP").quantity == pytest.approx(0.5)
     portfolio_b.apply_fill(intent(signal_id="s2", quantity=0.5), fill_price=60100, quantity_filled=0.5, backend="NAUTILUS_NATIVE")
     assert portfolio_b.position("BTC-PERP").quantity == pytest.approx(1.0)
+
+
+class _TimeoutBackend:
+    """Simulates a backend timeout / network loss on submit()."""
+
+    def submit(self, execution_intent):
+        raise TimeoutError("simulated backend timeout")
+
+
+def test_backend_timeout_fails_closed_not_silently(tmp_path):
+    store = Store(str(tmp_path / "db.sqlite3"))
+    router = ExecutionRouter(store=store, risk_gate=lambda i: RiskDecision(signal_id=i.signal_id, approved=True, approved_leverage=1.0),
+                              backends={BACKEND_NAUTILUS_NATIVE: _TimeoutBackend()})
+    with pytest.raises(RouterError, match="BACKEND_SUBMIT_FAILED"):
+        router.route(intent(signal_id="s-timeout"))
+
+    # The signal_id must be left in a state reconciliation can act on --
+    # not a bare crash with no trace, and not silently treated as filled.
+    orders = {o["signal_id"]: o for o in store.orders()}
+    assert orders["s-timeout"]["status"] == "SUBMIT_FAILED_UNKNOWN"
+    with store._connect() as conn:  # noqa: SLF001 -- test-only introspection
+        reason = conn.execute("SELECT reason FROM failures WHERE signal_id = ?", ("s-timeout",)).fetchone()["reason"]
+    assert "BACKEND_SUBMIT_FAILED" in reason
+
+    # And it must not be retryable under the same signal_id (idempotency
+    # already consumed it) -- a caller must generate a new signal_id, not
+    # silently double-submit.
+    with pytest.raises(RouterError, match="DUPLICATE_SIGNAL"):
+        router.route(intent(signal_id="s-timeout"))
