@@ -11,14 +11,16 @@ services:
     restart: unless-stopped
 
   emqx:
-    image: emqx/emqx:5
+    # Pinned to a tag confirmed to exist on Docker Hub; "emqx/emqx:5" does not
+    # exist and broke the whole stack's pull in CI run 36237779430.
+    image: emqx/emqx:5.10.5
     container_name: hummingbot-broker
     environment:
       - EMQX_DASHBOARD__DEFAULT_PASSWORD=${BROKER_DASHBOARD_PASSWORD:?set in your own .env}
     restart: unless-stopped
 
   hummingbot-api:
-    image: hummingbot/hummingbot-api:latest
+    image: hummingbot/hummingbot-api:1.0.1
     container_name: hummingbot-api
     depends_on:
       - postgres
@@ -42,6 +44,8 @@ services:
       - "8000:8000"
     volumes:
       - hummingbot-api-data:/data
+      # hummingbot-api orchestrates bot containers through the Docker daemon.
+      - /var/run/docker.sock:/var/run/docker.sock
     restart: unless-stopped
 
   bridge:
