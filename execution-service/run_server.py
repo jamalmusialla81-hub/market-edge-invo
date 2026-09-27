@@ -82,7 +82,12 @@ def main():
         sys.exit(3)
     server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=int(os.environ.get("EXECUTION_SERVICE_PORT", "8000")),
                                           # the desktop app polls every few seconds; its log view doesn't need each GET
-                                          access_log=os.environ.get("EXECUTION_SERVICE_ACCESS_LOG", "1") != "0"))
+                                          access_log=os.environ.get("EXECUTION_SERVICE_ACCESS_LOG", "1") != "0",
+                                          # every write is its own committed SQLite transaction, so there is nothing
+                                          # to lose by cutting a lingering keep-alive connection short; without a
+                                          # bound, uvicorn's default graceful drain can outlast the desktop app's own
+                                          # shutdown grace period (SERVICE_STOP_GRACE, 15s) and get killed instead
+                                          timeout_graceful_shutdown=5))
 
     def request_shutdown():
         server.should_exit = True
