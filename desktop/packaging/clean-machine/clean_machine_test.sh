@@ -200,7 +200,12 @@ check LIVE_MARKET_DATA "$(st .supervisor.market.detail)" test "$(st .supervisor.
 # never actually prove this run's loop scanned anything.
 wait_for "$TRADE_WAIT_S" '(.loop.cycles_seen // 0) >= 1'
 check LIVE_SCAN_RAN "cycles $(st .loop.cycles_seen), last outcome $(st .loop.last_outcome)" test "$(st .loop.cycles_seen)" -ge 1 -a "$(st .loop.last_outcome)" != ERROR
-if wait_for 30 '(.positions_count // 0) >= 1 or (.trades_count // 0) >= 1'; then
+
+# a first cycle can legitimately come back REJECTED (a startup market-data blip, or a bounded
+# service crash+recovery consuming the loop's first tick) without the loop itself being broken --
+# give it one more full cycle interval (the loop runs every 60s) plus recovery overhead before
+# calling it a failure, rather than a bare 30s that only tolerates a single unbroken first try.
+if wait_for 150 '(.positions_count // 0) >= 1 or (.trades_count // 0) >= 1'; then
   pass PAPER_SIGNAL_ROUTED "$(st '.status.latest_signal | "\(.asset) \(.direction) \(.outcome)"')"
   pass POSITION_APPEARS "$(st '.positions[0] | "\(.asset) \(.direction) qty \(.quantity) @ \(.entry) lev \(.leverage)"')"
 else
@@ -286,7 +291,7 @@ if grep -q '^FAIL' "$RESULTS"; then
   # is not always fetchable, and these are what explains a FAIL
   for f in forward-loop execution-service desktop reconciliation; do
     echo "---- tail of $f.log ----"
-    tail -n 60 "$DATA/logs/$f.log" 2>/dev/null || echo "(no $f.log)"
+    tail -n 200 "$DATA/logs/$f.log" 2>/dev/null || echo "(no $f.log)"
   done
   exit 1
 fi
