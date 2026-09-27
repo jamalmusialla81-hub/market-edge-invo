@@ -117,6 +117,7 @@ async function run() {
   const registry = Registry.status(ENGINE), auditOnly = !registry.trainable;
   const started = Date.now(), counts = await scanCounts(), raw = await loadCandidates(), {rows, excludedHoldoutOrEmbargo, droppedOther, droppedStaleInputs, staleByLabelSource} = V2.parseRows(raw), allDev = V2.parseRows(raw, {includeStale: true}).rows;
   if (excludedHoldoutOrEmbargo) throw new Error('HOLDOUT_BREACH: loader returned rows beyond the development cutoff');
+  if (!allDev.length) { const empty = {version: V2.VERSION, engine: ENGINE, status: 'NO_RESOLVED_DEVELOPMENT_ROWS', scanCounts: counts, readOnly: true, productionInfluence: 'NONE', d1RowsRead: rowsRead}; writeFileSync(REPORT, JSON.stringify(empty, null, 2) + '\n'); console.log(JSON.stringify(empty)); return; }
   const meta = await loadAllCandidateMeta(), audit = V2.datasetAudit(rows, meta), auditIncludingStale = V2.datasetAudit(allDev), first = allDev[0].timestamp, last = allDev.at(-1).timestamp, context = {}, contextStatus = {};
   const validity = {rawResolvedDevelopmentRows: allDev.length, freshRows: rows.length, droppedStaleInputs, staleByLabelSource, freshScanGroups: audit.scanGroups, freshChoiceScanGroups: audit.choiceScanGroups, freshWindow: rows.length ? [new Date(rows[0].timestamp).toISOString(), new Date(rows.at(-1).timestamp).toISOString()] : null};
   for (const [enabled, key, loader, from] of [[CROSS_MARKET, 'crossMarket', hourlyCloses, first - 5 * 24 * HOUR], [DERIVATIVES, 'funding', funding, first - 35 * 24 * HOUR]]) {
