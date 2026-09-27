@@ -118,6 +118,8 @@ pub fn generate_api_key() -> String {
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct ApiKeySource {
     pub persisted: bool,
+    /// generated on this launch (first run, or the store lost it)
+    pub created: bool,
     pub store: String,
     pub warning: Option<String>,
 }
@@ -129,20 +131,20 @@ pub struct ApiKeySource {
 pub fn service_api_key(backend: &dyn SecretBackend) -> (String, ApiKeySource) {
     match backend.get(EXEC_API_KEY) {
         Ok(Some(key)) if key.len() >= 32 => {
-            return (key, ApiKeySource { persisted: true, store: backend.describe().into(), warning: None });
+            return (key, ApiKeySource { persisted: true, created: false, store: backend.describe().into(), warning: None });
         }
         Ok(_) => {
             let key = generate_api_key();
             match backend.set(EXEC_API_KEY, &key) {
-                Ok(()) => return (key, ApiKeySource { persisted: true, store: backend.describe().into(), warning: None }),
+                Ok(()) => return (key, ApiKeySource { persisted: true, created: true, store: backend.describe().into(), warning: None }),
                 Err(e) => {
-                    return (key, ApiKeySource { persisted: false, store: "memory only".into(), warning: Some(e.to_string()) });
+                    return (key, ApiKeySource { persisted: false, created: true, store: "memory only".into(), warning: Some(e.to_string()) });
                 }
             }
         }
         Err(e) => {
             let key = generate_api_key();
-            (key, ApiKeySource { persisted: false, store: "memory only".into(), warning: Some(e.to_string()) })
+            (key, ApiKeySource { persisted: false, created: true, store: "memory only".into(), warning: Some(e.to_string()) })
         }
     }
 }
@@ -191,10 +193,11 @@ mod tests {
     fn api_key_is_created_once_and_reused() {
         let backend = MemoryBackend::default();
         let (first, source) = service_api_key(&backend);
-        assert!(source.persisted);
+        assert!(source.persisted && source.created);
         assert_eq!(first.len(), 64);
-        let (second, _) = service_api_key(&backend);
+        let (second, again) = service_api_key(&backend);
         assert_eq!(first, second);
+        assert!(!again.created, "second launch loads the stored key");
     }
 
     #[test]

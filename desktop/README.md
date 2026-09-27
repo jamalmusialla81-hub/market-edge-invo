@@ -34,7 +34,7 @@ React UI ──Tauri IPC──▶ Rust controller (src-tauri) ──X-API-Key, 1
 | RESUME | Clears the pause. If a halt is active, asks for `CLEAR_HALT`, runs a fresh reconciliation and clears the halt only if it comes back clean. |
 | KILL SWITCH | Asks for `KILL`, then engages the persistent halt. Reduce-only exits still process. |
 
-Ctrl/Cmd + 1–7 switches screens.
+Ctrl/Cmd + 1–8 switches screens.
 
 On exit the app stops the loop gracefully, then asks the execution-service to
 shut down (`POST /system/shutdown`), killing either only after a grace period.
@@ -42,25 +42,77 @@ Every backend write is its own committed SQLite transaction, so no stop leaves
 partial state. A service the app found already running (and that accepts its
 key) is adopted and never stopped by the app.
 
-## Running
+## Installed app (standalone)
 
-Requirements: a checkout of this repository, Python 3.12 with the
-execution-service dependencies, Node 22.
+The installers carry everything the app runs; the machine needs no Python,
+Node, npm or repository.
+
+| Resource (macOS `Contents/Resources/`, Windows install dir, Linux `/usr/lib/Market Edge/`) | What it is |
+|---|---|
+| `execution-service/market-edge-exec[.exe]` | the execution-service frozen with PyInstaller (`packaging/market-edge-exec.spec`): CPython 3.12, FastAPI/uvicorn, SQLite and the complete `nautilus_trader` package. `market-edge-exec nautilus-selftest` runs the real Nautilus BacktestEngine. |
+| `runtime/node[.exe]` | the official Node.js 22 binary, private to the app |
+| `signal-bridge/` | `forward_loop.mjs` and its whole import graph (`backend/scan-core.mjs`, `quant-engine.js`, `ml-engine.js`, ...) copied byte for byte; `MANIFEST.json` lists their sha256 |
+| `migrations/` | numbered SQL migrations for the service's SQLite file |
+| `config/` | `build_info.json` (version, git SHA, build time, packaging) and `defaults.json` |
+
+Nothing is written there. State lives in the OS app-data directory
+(`~/Library/Application Support/Market Edge/`, `%APPDATA%\Market Edge\`,
+`~/.local/share/Market Edge/`): `market_edge_paper.sqlite3`, `config.json`,
+`logs/{desktop,execution-service,forward-loop,reconciliation}.log` (rotated at
+5 MB, 5 kept) and `backups/`. Updating or reinstalling the app never touches it.
+
+A release build only ever runs from its bundle: if the bundle is missing or
+incomplete it refuses to start and says so; it never looks for a repository.
+
+On startup the app creates the app-data folder, starts the execution-service
+(which backs up and migrates an older database first, and refuses a newer one
+without modifying it), reconciles, checks live market data, and starts the
+forward paper loop if it was running when the app was last closed (on by
+default).
+
+Supervision: a crashed execution-service is restarted at most 3 times in 10
+minutes; new entries are paused until a post-restart reconciliation is clean.
+A crashed forward loop pauses entries and is restarted (at most 3 times in 30
+minutes) only if the service is healthy, trading is not halted, market data is
+online and a reconciliation is clean. If live prices can't be fetched the app
+shows MARKET DATA OFFLINE and pauses new entries; only fresh prices lift that
+pause. The supervisor never lifts an operator's pause or a kill switch. If the
+app itself dies, the service notices its closed stdin and shuts down.
+
+About → EXPORT BACKUP / IMPORT BACKUP: a `.mebackup` zip of a consistent
+database snapshot plus non-secret settings, with a manifest (schema version,
+sha256, row counts). Import validates it (checksum, SQLite integrity, required
+tables, schema not newer) before anything changes, keeps the current database
+in `backups/`, restores, reconciles and leaves new entries paused. Keys stay in
+the keychain and are never exported. The same operations exist headless for
+support and tests: `--self-check`, `--export-backup F`, `--verify-backup F`,
+`--restore-backup F --confirm RESTORE` (refused while the app is running).
+
+## Building installers
 
 ```
-cd execution-service && python3.12 -m venv .venv && .venv/bin/pip install nautilus_trader fastapi "uvicorn[standard]" pydantic httpx
-cd ../desktop && npm ci
-npm run tauri dev            # development
-npx tauri build              # installers: .app/.dmg on macOS, .exe/.msi on Windows
+python3.12 -m pip install nautilus_trader fastapi "uvicorn[standard]" pydantic httpx pyinstaller
+python3.12 -m PyInstaller --noconfirm --distpath /tmp/pyi desktop/packaging/market-edge-exec.spec
+python3.12 desktop/packaging/stage_resources.py --exec-dist /tmp/pyi/execution-service   # -> src-tauri/bundle/
+cd desktop && npm ci
+npx tauri build --bundles app,dmg --config src-tauri/tauri.bundle.conf.json    # macOS
+npx tauri build --bundles nsis,msi --config src-tauri/tauri.bundle.conf.json   # Windows
 ```
 
-The app finds the checkout by walking up from its working directory or
-executable, or from `MARKET_EDGE_HOME`. Other overrides: `MARKET_EDGE_PYTHON`,
-`MARKET_EDGE_NODE`, `MARKET_EDGE_EXEC_PORT` (default 8765),
-`MARKET_EDGE_DB_PATH` (default: the app data dir), `MARKET_EDGE_CYCLE_INTERVAL_MS`.
+Signing: with `APPLE_CERTIFICATE`/`APPLE_SIGNING_IDENTITY` (+ `APPLE_ID`,
+`APPLE_PASSWORD`, `APPLE_TEAM_ID` for notarization and stapling) or
+`WINDOWS_CERTIFICATE` repository secrets, CI signs every bundled binary
+(`packaging/sign/`) and the installers. Without them it builds unsigned and
+reports `SIGNING: SKIPPED_NOT_CONFIGURED`.
 
-Installed builds are not self-contained yet: they still need the checkout,
-Python and Node on the machine. Builds are unsigned.
+## Developer mode
+
+`npm run tauri dev` (or any debug build) runs the repo's own
+`execution-service/run_server.py` with a Python 3.12 that has the dependencies
+above and `signal-bridge/forward_loop.mjs` with system Node. Overrides:
+`MARKET_EDGE_HOME`, `MARKET_EDGE_PYTHON`, `MARKET_EDGE_NODE` (developer layout
+only), `MARKET_EDGE_EXEC_PORT` (default 8765), `MARKET_EDGE_DATA_DIR`,
+`MARKET_EDGE_CYCLE_INTERVAL_MS`.
 
 ## Tests
 
@@ -68,8 +120,11 @@ Python and Node on the machine. Builds are unsigned.
   application code never renders demo values.
 - `cargo test --lib` — controller unit tests. `MARKET_EDGE_KEYRING_TEST=1`
   adds a real OS credential-store round trip (run on macOS and Windows in CI).
-- `MARKET_EDGE_INTEGRATION=1 MARKET_EDGE_PYTHON=... cargo test --test process_integration`
-  — launches the real execution-service and forward loop, runs a live cycle,
-  stops the loop gracefully, shuts down, restarts on the same database.
+- `MARKET_EDGE_INTEGRATION=1 [MARKET_EDGE_BUNDLE_DIR=src-tauri/bundle | MARKET_EDGE_PYTHON=...] cargo test --test process_integration`
+  — launches the real (frozen or developer) execution-service and forward loop: live cycle,
+  graceful stop/shutdown/restart, crash recovery with bounded restarts, the market-data gate,
+  backup export/validate/restore and migration of a pre-versioning database.
+- `packaging/clean-machine/clean_machine_test.sh` — CI installs the .dmg/.app, .exe/.msi and
+  .deb on runners with Python and Node removed and no checkout, and runs the whole paper flow.
 - `scripts/linux_app_e2e.sh` — drives the built app under a virtual display
   and captures every screen (CI: `.github/workflows/desktop-app.yml`).

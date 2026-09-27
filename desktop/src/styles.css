@@ -187,3 +187,14 @@ input:disabled { opacity: 0.5; }
 .modal-confirm { display: flex; flex-direction: column; gap: 6px; margin: 12px 0; color: var(--text-2); }
 .modal-confirm code { color: var(--text); font-weight: 700; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
+
+/* startup */
+.startup { min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+.startup-card { display: flex; flex-direction: column; gap: 14px; min-width: 420px; max-width: 640px; padding: 28px 32px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-panel); }
+.startup-brand { font-size: 22px; }
+.startup-step { display: flex; align-items: center; gap: 10px; }
+.spinner { width: 14px; height: 14px; border-radius: 50%; border: 2px solid currentColor; border-right-color: transparent; animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }
+.controls-inline { display: flex; gap: 8px; margin: 8px 0; }
+.seg select { background: transparent; color: inherit; border: 1px solid var(--border); border-radius: 4px; padding: 2px 6px; margin-right: 8px; font: inherit; }

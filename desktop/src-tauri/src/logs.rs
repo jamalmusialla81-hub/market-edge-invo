@@ -4,20 +4,129 @@
 //! Every line is classified into one of the five levels the System screen
 //! filters on (INFO, WARN, ERROR, RISK, EXECUTION) from the structured JSON
 //! events the services already emit (telemetry/logging.py, forward_loop.mjs).
-//! Lines are kept in a bounded in-memory ring and appended to a log file in
-//! the app data directory; neither is trading state.
+//! Lines are kept in a bounded in-memory ring (loop telemetry) and written to
+//! rotating files in <app data>/logs/, which the System screen reads:
+//!   desktop.log            the controller's own events (startup, supervision, controls)
+//!   execution-service.log  the frozen Python service's stdout/stderr
+//!   forward-loop.log       the Node forward loop's stdout/stderr
+//!   reconciliation.log     every reconciliation result, whichever process reported it
+//! Each file rotates at 5 MB, keeping 5 old files. None of this is trading state.
 
 use serde::Serialize;
 use std::collections::VecDeque;
 use std::fs::{File, OpenOptions};
-use std::io::Write;
-use std::path::Path;
+use std::io::{Read, Seek, SeekFrom, Write};
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 const CAPACITY: usize = 5000;
+pub const ROTATE_BYTES: u64 = 5 * 1024 * 1024;
+pub const ROTATE_KEEP: usize = 5;
+pub const LOG_FILES: &[&str] = &["desktop", "execution-service", "forward-loop", "reconciliation"];
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+/// Append-only file that rotates to name.1 .. name.KEEP when it grows past
+/// `max_bytes`.
+pub struct RotatingFile {
+    path: PathBuf,
+    file: Option<File>,
+    size: u64,
+    max_bytes: u64,
+    keep: usize,
+}
+
+impl RotatingFile {
+    pub fn open(path: PathBuf, max_bytes: u64, keep: usize) -> Self {
+        if let Some(dir) = path.parent() {
+            let _ = std::fs::create_dir_all(dir);
+        }
+        let file = OpenOptions::new().create(true).append(true).open(&path).ok();
+        let size = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
+        RotatingFile { path, file, size, max_bytes, keep }
+    }
+
+    fn rotated(&self, n: usize) -> PathBuf {
+        let mut name = self.path.file_name().unwrap_or_default().to_os_string();
+        name.push(format!(".{n}"));
+        self.path.with_file_name(name)
+    }
+
+    fn rotate(&mut self) {
+        self.file = None;
+        let _ = std::fs::remove_file(self.rotated(self.keep));
+        for n in (1..self.keep).rev() {
+            let _ = std::fs::rename(self.rotated(n), self.rotated(n + 1));
+        }
+        let _ = std::fs::rename(&self.path, self.rotated(1));
+        self.file = OpenOptions::new().create(true).append(true).open(&self.path).ok();
+        self.size = 0;
+    }
+
+    pub fn write_line(&mut self, line: &str) {
+        if self.size + line.len() as u64 + 1 > self.max_bytes && self.size > 0 {
+            self.rotate();
+        }
+        if let Some(f) = self.file.as_mut() {
+            if writeln!(f, "{line}").is_ok() {
+                self.size += line.len() as u64 + 1;
+            }
+        }
+    }
+}
+
+/// Last `max_lines` entries of one log file (reads at most the last 1 MB).
+pub fn tail_file(path: &Path, max_lines: usize) -> Vec<LogEntry> {
+    let Ok(mut f) = File::open(path) else { return vec![] };
+    let len = f.metadata().map(|m| m.len()).unwrap_or(0);
+    let start = len.saturating_sub(1024 * 1024);
+    if f.seek(SeekFrom::Start(start)).is_err() {
+        return vec![];
+    }
+    let mut buf = String::new();
+    let _ = f.read_to_string(&mut buf);
+    let mut lines: Vec<&str> = buf.lines().collect();
+    if start > 0 && !lines.is_empty() {
+        lines.remove(0); // probably a partial line
+    }
+    let from = lines.len().saturating_sub(max_lines);
+    lines[from..].iter().filter_map(|l| serde_json::from_str::<LogEntry>(l).ok()).collect()
+}
+
+/// Is this line about reconciliation? (Copied to reconciliation.log.)
+pub fn is_reconciliation(event: Option<&str>, message: &str) -> bool {
+    if matches!(event, Some("reconcile")) {
+        return true;
+    }
+    if let Ok(serde_json::Value::Object(map)) = serde_json::from_str::<serde_json::Value>(message.trim()) {
+        if map.contains_key("reconciled") || map.get("event").and_then(|v| v.as_str()).map(|e| e.contains("reconcil")).unwrap_or(false) {
+            return true;
+        }
+    }
+    message.to_ascii_lowercase().contains("reconcil")
+}
+
+/// UTC timestamp in RFC 3339 form, without a date/time crate.
+pub fn iso_now() -> String {
+    iso_from_ms(now_ms())
+}
+
+pub fn iso_from_ms(ms: u64) -> String {
+    let secs = ms / 1000;
+    let (days, rem) = ((secs / 86_400) as i64, secs % 86_400);
+    // civil_from_days (H. Hinnant)
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = yoe + era * 400 + if m <= 2 { 1 } else { 0 };
+    format!("{y:04}-{m:02}-{d:02}T{:02}:{:02}:{:02}.{:03}Z", rem / 3600, rem % 3600 / 60, rem % 60, ms % 1000)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, serde::Deserialize)]
 #[serde(rename_all = "UPPERCASE")]
 pub enum Level {
     Info,
@@ -27,7 +136,7 @@ pub enum Level {
     Execution,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, serde::Deserialize)]
 pub struct LogEntry {
     pub seq: u64,
     pub at_ms: u64,
@@ -58,7 +167,7 @@ pub struct LogStore {
 struct Inner {
     entries: VecDeque<LogEntry>,
     next_seq: u64,
-    file: Option<File>,
+    files: Vec<(&'static str, RotatingFile)>,
     loop_telemetry: LoopTelemetry,
 }
 
@@ -138,15 +247,25 @@ pub fn classify(line: &str, stderr: bool) -> (Level, Option<String>) {
 }
 
 impl LogStore {
-    pub fn new(file_path: Option<&Path>) -> Self {
-        let file = file_path.and_then(|p| {
-            if let Some(dir) = p.parent() {
-                let _ = std::fs::create_dir_all(dir);
-            }
-            OpenOptions::new().create(true).append(true).open(p).ok()
-        });
+    /// `logs_dir`: where the four rotating files go (None: memory only, tests).
+    pub fn new(logs_dir: Option<&Path>) -> Self {
+        Self::with_rotation(logs_dir, ROTATE_BYTES, ROTATE_KEEP)
+    }
+
+    pub fn with_rotation(logs_dir: Option<&Path>, max_bytes: u64, keep: usize) -> Self {
+        let files = logs_dir
+            .map(|d| LOG_FILES.iter().map(|name| (*name, RotatingFile::open(d.join(format!("{name}.log")), max_bytes, keep))).collect())
+            .unwrap_or_default();
         LogStore {
-            inner: Mutex::new(Inner { entries: VecDeque::with_capacity(CAPACITY), next_seq: 1, file, loop_telemetry: LoopTelemetry::default() }),
+            inner: Mutex::new(Inner { entries: VecDeque::with_capacity(CAPACITY), next_seq: 1, files, loop_telemetry: LoopTelemetry::default() }),
+        }
+    }
+
+    pub fn file_for_source(source: &str) -> &'static str {
+        match source {
+            "execution-service" => "execution-service",
+            "forward-loop" => "forward-loop",
+            _ => "desktop",
         }
     }
 
@@ -162,12 +281,22 @@ impl LogStore {
         self.push("app", level, None, message.into());
     }
 
+    /// A controller event with a name (e.g. "reconcile", "supervisor").
+    pub fn app_event(&self, level: Level, event: &str, message: impl Into<String>) {
+        self.push("app", level, Some(event.to_string()), message.into());
+    }
+
     fn push(&self, source: &str, level: Level, event: Option<String>, message: String) {
         let mut inner = self.inner.lock().unwrap();
         let entry = LogEntry { seq: inner.next_seq, at_ms: now_ms(), source: source.to_string(), level, event, message };
         inner.next_seq += 1;
-        if let Some(file) = inner.file.as_mut() {
-            let _ = writeln!(file, "{}", serde_json::to_string(&entry).unwrap_or_default());
+        let line = serde_json::to_string(&entry).unwrap_or_default();
+        let main = Self::file_for_source(source);
+        let reconciliation = is_reconciliation(entry.event.as_deref(), &entry.message);
+        for (name, file) in inner.files.iter_mut() {
+            if *name == main || (reconciliation && *name == "reconciliation") {
+                file.write_line(&line);
+            }
         }
         if inner.entries.len() == CAPACITY {
             inner.entries.pop_front();
@@ -261,6 +390,46 @@ mod tests {
         assert!(store.since(last, 100).is_empty());
         assert_eq!(store.since(last - 3, 100).len(), 3);
         assert_eq!(store.since(0, 10).len(), 10);
+    }
+
+    #[test]
+    fn writes_separate_files_and_copies_reconciliation() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = LogStore::new(Some(dir.path()));
+        store.app(Level::Info, "desktop starting");
+        store.push_line("execution-service", "INFO:     Uvicorn running", true);
+        store.push_line("forward-loop", r#"{"cycle":1,"outcome":"EXECUTED","reconciled":true}"#, false);
+        store.app_event(Level::Info, "reconcile", "RECONCILE NOW: reconciled");
+        let read = |n: &str| tail_file(&dir.path().join(format!("{n}.log")), 100);
+        assert_eq!(read("desktop").len(), 2);
+        assert_eq!(read("execution-service").len(), 1);
+        assert_eq!(read("forward-loop").len(), 1);
+        let rec = read("reconciliation");
+        assert_eq!(rec.len(), 2, "loop cycle + desktop reconcile");
+        assert_eq!(rec[0].source, "forward-loop");
+    }
+
+    #[test]
+    fn rotates_and_keeps_a_bounded_number_of_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = LogStore::with_rotation(Some(dir.path()), 2_000, 3);
+        for i in 0..205 {
+            store.app(Level::Info, format!("line {i} {}", "x".repeat(40)));
+        }
+        let p = |s: &str| dir.path().join(s);
+        assert!(p("desktop.log").is_file() && p("desktop.log.1").is_file() && p("desktop.log.3").is_file());
+        assert!(!p("desktop.log.4").exists());
+        assert!(std::fs::metadata(p("desktop.log")).unwrap().len() <= 2_000);
+        let tail = tail_file(&p("desktop.log"), 2);
+        assert_eq!(tail.len(), 2);
+        assert!(tail.last().unwrap().message.starts_with("line 204"));
+    }
+
+    #[test]
+    fn iso_timestamps() {
+        assert_eq!(iso_from_ms(0), "1970-01-01T00:00:00.000Z");
+        assert_eq!(iso_from_ms(1_790_486_400_123), "2026-09-27T05:20:00.123Z");
+        assert_eq!(iso_from_ms(951_782_400_000), "2000-02-29T00:00:00.000Z");
     }
 
     #[test]

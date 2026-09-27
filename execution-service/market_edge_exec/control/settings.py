@@ -156,12 +156,35 @@ class ControlStore:
     def entries_paused(self) -> bool:
         return bool(json.loads(self._get("entries_paused") or "false"))
 
-    def set_entries_paused(self, paused: bool, reason: Optional[str] = None) -> None:
+    def entries_paused_reason(self) -> Optional[str]:
+        return json.loads(self._get("entries_paused_reason") or "null") if self.entries_paused() else None
+
+    def set_entries_paused(self, paused: bool, reason: Optional[str] = None, only_if_reason: Optional[str] = None,
+                           only_if_unpaused: bool = False) -> bool:
+        """only_if_reason: change nothing unless the current pause carries this
+        reason. only_if_unpaused: pause only if not already paused (so an
+        operator's pause reason is never overwritten). Both are checked in the
+        same transaction. The desktop supervisor uses them so it can only lift
+        a pause it set itself, never an operator's. Returns whether it changed."""
         with closing(self._connect()) as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            if only_if_unpaused:
+                paused_now = conn.execute("SELECT value FROM control_settings WHERE key = 'entries_paused'").fetchone()
+                if paused_now and json.loads(paused_now["value"]):
+                    conn.rollback()
+                    return False
+            if only_if_reason is not None:
+                row = conn.execute("SELECT value FROM control_settings WHERE key = 'entries_paused_reason'").fetchone()
+                paused_now = conn.execute("SELECT value FROM control_settings WHERE key = 'entries_paused'").fetchone()
+                if not (paused_now and json.loads(paused_now["value"]) and row and json.loads(row["value"]) == only_if_reason):
+                    conn.rollback()
+                    return False
             self._set(conn, "entries_paused", bool(paused))
+            self._set(conn, "entries_paused_reason", reason if paused else None)
             conn.execute("INSERT INTO control_audit (action, payload, created_at) VALUES (?, ?, ?)",
                          ("PAUSE_NEW_ENTRIES" if paused else "RESUME_NEW_ENTRIES", json.dumps({"reason": reason}), time.time()))
             conn.commit()
+        return True
 
     # ---- reconciliation log -------------------------------------------
     def record_reconcile(self, result: dict) -> None:

@@ -17,6 +17,8 @@ from contextlib import closing
 
 from fastapi import Depends, FastAPI, Header, HTTPException
 
+from market_edge_exec import __version__
+from market_edge_exec.buildinfo import build_info
 from market_edge_exec.control.settings import BOUNDS as SETTINGS_BOUNDS, ControlStore, SettingsError
 from market_edge_exec.domain.contracts import ContractError, ExecutionIntent
 from market_edge_exec.hummingbot.factory import build_hummingbot_client
@@ -25,6 +27,7 @@ from market_edge_exec.paper.engine import PaperEngine
 from market_edge_exec.paper.ledger import PaperLedger
 from market_edge_exec.paper.performance import build_performance, position_view, signal_rows, trade_view
 from market_edge_exec.paper.report import build_report
+from market_edge_exec.persistence import migrations
 from market_edge_exec.persistence.store import Store
 from market_edge_exec.reconciliation.reconcile import reconcile
 from market_edge_exec.risk.engine import approve
@@ -61,13 +64,18 @@ def create_app(db_path: str = "market_edge_exec.sqlite3", hummingbot_mode: str =
     """hummingbot_mode: 'disabled' (default: no Hummingbot backend at all),
     'real' (bridge must be reachable at startup) or 'mock' (tests only).
     There is no runtime fallback between them."""
-    app = FastAPI(title="Market Edge Execution Service (paper-only)")
+    app = FastAPI(title="Market Edge Execution Service (paper-only)", version=__version__)
+    # Refuses a database from a newer build, and backs up an older one
+    # before anything (including the stores' CREATE TABLE IF NOT EXISTS)
+    # touches it. Raises MigrationError; never wipes.
+    migration = migrations.prepare(db_path)
     store = Store(db_path)
     portfolio = NautilusPortfolio(store)
     mode = hummingbot_mode or os.environ.get("HUMMINGBOT_MODE", "disabled")
     hummingbot = None if mode == "disabled" else build_hummingbot_client(mode)
     ledger = PaperLedger(db_path)
     control = ControlStore(db_path)
+    migration = migrations.apply(migration)
 
     # Account state is re-derived from the persistent ledger on every call.
     # It used to be one AccountState built at startup and never updated, so
@@ -88,6 +96,7 @@ def create_app(db_path: str = "market_edge_exec.sqlite3", hummingbot_mode: str =
                         max_mark_age_provider=control.stale_data_timeout_s)
     app.state.store, app.state.portfolio, app.state.hummingbot, app.state.router = store, portfolio, hummingbot, router
     app.state.ledger, app.state.paper, app.state.control = ledger, paper, control
+    app.state.migration = migration
     app.state.request_shutdown = None  # set by run_server.py when it owns the uvicorn server
     started_at = time.time()
 
@@ -98,7 +107,8 @@ def create_app(db_path: str = "market_edge_exec.sqlite3", hummingbot_mode: str =
 
     @app.get("/health")
     def health():
-        return {"status": "ok", "paper_only": PAPER_ONLY, "killed": router.killed, "hummingbot_mode": mode}
+        return {"status": "ok", "paper_only": PAPER_ONLY, "killed": router.killed, "hummingbot_mode": mode,
+                "version": __version__, "schema_version": migration.to_version, "build": build_info()}
 
     @app.post("/execution/intent", dependencies=[Depends(require_api_key)])
     def submit_intent(payload: dict):
@@ -322,13 +332,17 @@ def create_app(db_path: str = "market_edge_exec.sqlite3", hummingbot_mode: str =
     # ---- desktop app: controls ----------------------------------------
     @app.post("/control/pause", dependencies=[Depends(require_api_key)])
     def pause_entries(payload: dict = None):
-        control.set_entries_paused(True, (payload or {}).get("reason") or "OPERATOR_PAUSE")
-        return {"entries_paused": True}
+        payload = payload or {}
+        changed = control.set_entries_paused(True, payload.get("reason") or "OPERATOR_PAUSE",
+                                             only_if_unpaused=bool(payload.get("only_if_unpaused")))
+        return {"entries_paused": True, "paused": changed, "entries_paused_reason": control.entries_paused_reason()}
 
     @app.post("/control/resume", dependencies=[Depends(require_api_key)])
-    def resume_entries():
-        control.set_entries_paused(False)
-        return {"entries_paused": False, "halted": store.active_halt()}
+    def resume_entries(payload: dict = None):
+        only_if = (payload or {}).get("only_if_reason")
+        changed = control.set_entries_paused(False, (payload or {}).get("reason"), only_if_reason=only_if)
+        return {"entries_paused": control.entries_paused(), "entries_paused_reason": control.entries_paused_reason(),
+                "resumed": changed, "halted": store.active_halt()}
 
     @app.post("/control/clear-halt", dependencies=[Depends(require_api_key)])
     def clear_halt(payload: dict):
@@ -368,10 +382,12 @@ def create_app(db_path: str = "market_edge_exec.sqlite3", hummingbot_mode: str =
         return {
             "paper_only": PAPER_ONLY, "execution_mode": "PAPER", "uptime_s": time.time() - started_at,
             "halted": store.active_halt(), "entries_paused": control.entries_paused(),
+            "entries_paused_reason": control.entries_paused_reason(),
             "nautilus": nautilus, "sqlite": sqlite, "hummingbot": hb,
             "last_reconcile": control.last_reconcile(), "latest_signal": signals[0] if signals else None,
             "open_positions": len(ledger.trades("OPEN")), "segments": ledger.runtime_segments()[-5:],
             "control_audit": control.audit_log(20),
+            "version": __version__, "build": build_info(), "migration": migration.to_dict(),
         }
 
     @app.post("/system/shutdown", dependencies=[Depends(require_api_key)])

@@ -1,6 +1,12 @@
 name: Desktop app (Tauri, paper only)
 
-# Builds and tests the Market Edge desktop shell on Linux, macOS and Windows.
+# Builds, packages and tests the Market Edge desktop app.
+#   tests     all suites + the real app driven on Linux (developer layout, screenshots)
+#   package   per OS: freeze execution-service (PyInstaller, full nautilus_trader),
+#             stage the private Node runtime + unmodified forward-loop sources,
+#             real-process tests against that bundle, then .app/.dmg, .exe/.msi, .deb
+#   clean-*   install the produced package on a fresh runner with Python and Node
+#             REMOVED and no repository checkout, and prove the whole paper flow
 # Paper only: no exchange credentials are used anywhere in this workflow.
 on:
   push:
@@ -8,6 +14,10 @@ on:
       - 'desktop/**'
       - 'execution-service/**'
       - 'signal-bridge/**'
+      - 'backend/scan-core.mjs'
+      - 'quant-engine.js'
+      - 'ml-engine.js'
+      - 'invo-market-universe.js'
       - '.github/workflows/desktop-app.yml'
   workflow_dispatch:
 
@@ -18,8 +28,11 @@ defaults:
   run:
     shell: bash   # explicit bash => -eo pipefail, so `| tee` never hides a failure
 
+env:
+  PY_DEPS: nautilus_trader fastapi "uvicorn[standard]" pydantic httpx pytest pyinstaller
+
 jobs:
-  linux:
+  tests:
     name: Linux — all tests + real app run (screenshots)
     runs-on: ubuntu-22.04
     timeout-minutes: 60
@@ -43,10 +56,12 @@ jobs:
         working-directory: execution-service
         run: |
           python -m pip install --upgrade pip
-          pip install nautilus_trader fastapi "uvicorn[standard]" pydantic httpx pytest
+          pip install $PY_DEPS
           python -m pytest -q | tee ../pytest.log
       - name: forward-loop tests
         run: node --test signal-bridge/forward_loop.test.mjs | tee node-test.log
+      - name: repo test suite (production engines, unchanged)
+        run: npm test 2>&1 | tail -40 | tee repo-npm-test.log
       - name: frontend install, typecheck, tests, build
         working-directory: desktop
         run: |
@@ -57,12 +72,12 @@ jobs:
       - name: Rust unit tests
         working-directory: desktop/src-tauri
         run: cargo test --lib | tee ../../cargo-unit.log
-      - name: Rust real-process integration test (real service + real forward-loop cycle on live data)
+      - name: Rust real-process tests (developer layout, live data)
         working-directory: desktop/src-tauri
         env:
           MARKET_EDGE_INTEGRATION: '1'
           MARKET_EDGE_PYTHON: python
-        run: cargo test --test process_integration -- --nocapture 2>&1 | tee ../../cargo-integration.log
+        run: cargo test --test process_integration -- --nocapture --test-threads=1 2>&1 | tee ../../cargo-integration.log
       - name: Build the app binary (debug, embedded frontend)
         working-directory: desktop
         run: npx tauri build --debug --no-bundle
@@ -84,15 +99,24 @@ jobs:
             desktop-e2e.log
             pytest.log
             node-test.log
+            repo-npm-test.log
             vitest.log
             cargo-unit.log
             cargo-integration.log
           retention-days: 90
 
-  macos:
-    name: macOS — .app/.dmg build, Keychain, process management
-    runs-on: macos-latest
-    timeout-minutes: 75
+  package:
+    name: Package ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 100
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: macos-arm64, os: macos-latest, bundles: 'app,dmg' }
+          - { name: macos-x64, os: macos-15-intel, bundles: 'app,dmg' }
+          - { name: windows-x64, os: windows-latest, bundles: 'nsis,msi' }
+          - { name: linux-x64, os: ubuntu-22.04, bundles: 'deb' }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -105,99 +129,269 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: desktop/src-tauri
-      - name: execution-service deps
+          key: ${{ matrix.name }}
+      - name: Linux system packages
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libayatana-appindicator3-dev libssl-dev libdbus-1-dev
+      - name: Python deps + execution-service tests
         run: |
           python -m pip install --upgrade pip
-          pip install nautilus_trader fastapi "uvicorn[standard]" pydantic httpx pytest
-      - name: Frontend deps
-        working-directory: desktop
-        run: npm ci
-      - name: Rust tests incl. real macOS Keychain round trip
-        working-directory: desktop/src-tauri
-        env:
-          MARKET_EDGE_KEYRING_TEST: '1'
-        run: cargo test --lib -- --nocapture 2>&1 | tee ../../cargo-macos.log
-      - name: Real-process integration test on macOS
+          pip install $PY_DEPS
+          cd execution-service && python -m pytest -q | tail -3
+      - name: Freeze execution-service with PyInstaller (full nautilus_trader)
+        run: |
+          python -m PyInstaller --noconfirm --log-level WARN --distpath "$RUNNER_TEMP/pyi-dist" --workpath "$RUNNER_TEMP/pyi-work" desktop/packaging/market-edge-exec.spec
+      - name: Stage app resources (frozen service, Node runtime, unmodified sources, migrations, build info)
+        run: python desktop/packaging/stage_resources.py --exec-dist "$RUNNER_TEMP/pyi-dist/execution-service" | tee staging.json
+      - name: Real-process tests against the staged bundle (frozen service + bundled Node, live data)
         working-directory: desktop/src-tauri
         env:
           MARKET_EDGE_INTEGRATION: '1'
-          MARKET_EDGE_PYTHON: python
-        run: cargo test --test process_integration -- --nocapture 2>&1 | tee ../../cargo-integration-macos.log
-      - name: Build Market Edge.app + DMG (unsigned)
+          MARKET_EDGE_BUNDLE_DIR: ${{ github.workspace }}/desktop/src-tauri/bundle
+          MARKET_EDGE_KEYRING_TEST: ${{ runner.os != 'Linux' && '1' || '' }}
+        run: |
+          cargo test --lib -- --nocapture 2>&1 | tail -30 | tee ../../cargo-unit-${{ matrix.name }}.log
+          cargo test --test process_integration -- --nocapture --test-threads=1 2>&1 | tee ../../cargo-bundle-${{ matrix.name }}.log
+      - name: Frontend deps
         working-directory: desktop
-        run: npx tauri build --bundles app,dmg
-      - name: Launch the built .app and confirm it starts the execution-service
+        run: npm ci
+      - name: Code signing (macOS Developer ID + notarization)
+        if: runner.os == 'macOS'
         env:
-          APP: ${{ github.workspace }}/desktop/src-tauri/target/release/bundle/macos/Market Edge.app/Contents/MacOS/market-edge-desktop
-          MARKET_EDGE_HOME: ${{ github.workspace }}
-          MARKET_EDGE_PYTHON: python
-        run: bash desktop/scripts/launch_smoke.sh
-      - name: Upload macOS build
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        run: |
+          if [ -z "$APPLE_CERTIFICATE" ] || [ -z "$APPLE_SIGNING_IDENTITY" ]; then
+            echo "SIGNING: SKIPPED_NOT_CONFIGURED (no APPLE_CERTIFICATE / APPLE_SIGNING_IDENTITY secrets); building an unsigned (ad-hoc) app" | tee signing.txt
+            exit 0
+          fi
+          KC="$RUNNER_TEMP/signing.keychain-db"; KP=$(openssl rand -hex 16)
+          echo "$APPLE_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security create-keychain -p "$KP" "$KC"
+          security set-keychain-settings -lut 21600 "$KC"
+          security unlock-keychain -p "$KP" "$KC"
+          security import "$RUNNER_TEMP/cert.p12" -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KC"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KP" "$KC"
+          security list-keychains -d user -s "$KC" $(security list-keychains -d user | tr -d '"')
+          bash desktop/packaging/sign/macos_sign_resources.sh desktop/src-tauri/bundle
+          echo "APPLE_SIGNING_IDENTITY=$APPLE_SIGNING_IDENTITY" >> "$GITHUB_ENV"
+          echo "SIGNING: Developer ID ($APPLE_SIGNING_IDENTITY), hardened runtime" | tee signing.txt
+      - name: Code signing (Windows Authenticode)
+        if: runner.os == 'Windows'
+        env:
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        shell: pwsh
+        run: |
+          if (-not $env:WINDOWS_CERTIFICATE) {
+            "SIGNING: SKIPPED_NOT_CONFIGURED (no WINDOWS_CERTIFICATE secret); building unsigned installers" | Tee-Object signing.txt
+            exit 0
+          }
+          $pfx = Join-Path $env:RUNNER_TEMP cert.pfx
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE))
+          $cert = Import-PfxCertificate -FilePath $pfx -CertStoreLocation Cert:\CurrentUser\My -Password (ConvertTo-SecureString $env:WINDOWS_CERTIFICATE_PASSWORD -AsPlainText -Force)
+          ./desktop/packaging/sign/windows_sign_resources.ps1 -Dir desktop/src-tauri/bundle -Thumbprint $cert.Thumbprint
+          '{"bundle":{"windows":{"certificateThumbprint":"' + $cert.Thumbprint + '","digestAlgorithm":"sha256","timestampUrl":"http://timestamp.digicert.com"}}}' | Out-File -Encoding utf8NoBOM desktop/src-tauri/tauri.signing.conf.json
+          "SIGNING: Authenticode $($cert.Subject)" | Tee-Object signing.txt
+      - name: Build installers (${{ matrix.bundles }})
+        working-directory: desktop
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          [ -n "${APPLE_ID:-}" ] || unset APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID   # no notarization without credentials
+          EXTRA=""
+          [ -f src-tauri/tauri.signing.conf.json ] && EXTRA="--config src-tauri/tauri.signing.conf.json"
+          npx tauri build --bundles ${{ matrix.bundles }} --config src-tauri/tauri.bundle.conf.json $EXTRA
+      - name: Collect installers + clean-machine kit
+        run: |
+          mkdir -p dist-out/kit
+          B=desktop/src-tauri/target/release/bundle
+          case "${{ runner.os }}" in
+            macOS)
+              cp "$B"/dmg/*.dmg dist-out/
+              tar -C "$B/macos" -czf "dist-out/Market Edge.app.tar.gz" "Market Edge.app"
+              codesign -dv --verbose=2 "$B/macos/Market Edge.app" 2>&1 | tee dist-out/codesign.txt || true
+              lipo -archs "$B/macos/Market Edge.app/Contents/MacOS/"* | tee dist-out/archs.txt
+              file "$B/macos/Market Edge.app/Contents/Resources/execution-service/market-edge-exec" "$B/macos/Market Edge.app/Contents/Resources/runtime/node" | tee -a dist-out/archs.txt ;;
+            Windows)
+              cp "$B"/nsis/*.exe "$B"/msi/*.msi dist-out/ ;;
+            Linux)
+              cp "$B"/deb/*.deb dist-out/ ;;
+          esac
+          cp desktop/packaging/clean-machine/*.sh desktop/packaging/clean-machine/Dockerfile.linux dist-out/kit/
+          cp execution-service/tests/fixtures/legacy_v0.sqlite3 dist-out/kit/
+          cp staging.json signing.txt dist-out/ 2>/dev/null || true
+          ls -la dist-out
+      - name: Upload installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer-${{ matrix.name }}
+          path: dist-out/
+          retention-days: 30
+      - name: Upload build logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: market-edge-macos
+          name: package-logs-${{ matrix.name }}
           path: |
-            desktop/src-tauri/target/release/bundle/dmg/*.dmg
-            cargo-macos.log
-            cargo-integration-macos.log
-            app-smoke.log
-            smoke-health.json
+            staging.json
+            signing.txt
+            cargo-unit-${{ matrix.name }}.log
+            cargo-bundle-${{ matrix.name }}.log
           retention-days: 30
 
-  windows:
-    name: Windows — .exe/.msi installers, Credential Manager, process management
-    runs-on: windows-latest
+  clean-macos:
+    name: Clean machine ${{ matrix.name }} (no Python, no Node, no repo)
+    needs: package
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 75
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: macos-arm64, os: macos-latest }
+          - { name: macos-x64, os: macos-15-intel }
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      # deliberately NO actions/checkout: the repository never exists on this machine
+      - uses: actions/download-artifact@v4
         with:
-          python-version: '3.12'
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: desktop/src-tauri
-      - name: execution-service deps
+          name: installer-${{ matrix.name }}
+          path: pkg
+      - name: Remove every Python and Node from the machine
         run: |
-          python -m pip install --upgrade pip
-          pip install nautilus_trader fastapi "uvicorn[standard]" pydantic httpx pytest
-      - name: Frontend deps
-        working-directory: desktop
-        run: npm ci
-      - name: Rust tests incl. real Windows Credential Manager round trip
-        working-directory: desktop/src-tauri
-        env:
-          MARKET_EDGE_KEYRING_TEST: '1'
-        run: cargo test --lib -- --nocapture 2>&1 | tee ../../cargo-windows.log
-      - name: Real-process integration test on Windows
-        working-directory: desktop/src-tauri
-        env:
-          MARKET_EDGE_INTEGRATION: '1'
-          MARKET_EDGE_PYTHON: python
-        run: cargo test --test process_integration -- --nocapture 2>&1 | tee ../../cargo-integration-windows.log
-      - name: Build Market Edge .exe (NSIS) + .msi installers (unsigned)
-        working-directory: desktop
-        run: npx tauri build --bundles nsis,msi
-      - name: Launch the built exe and confirm it starts the execution-service
-        env:
-          APP: ${{ github.workspace }}/desktop/src-tauri/target/release/market-edge-desktop.exe
-          MARKET_EDGE_HOME: ${{ github.workspace }}
-          MARKET_EDGE_PYTHON: python
-        run: bash desktop/scripts/launch_smoke.sh
-      - name: Upload Windows installers
+          sudo rm -rf /Library/Frameworks/Python.framework /opt/hostedtoolcache/Python /opt/hostedtoolcache/node "$RUNNER_TOOL_CACHE/Python" "$RUNNER_TOOL_CACHE/node" || true
+          for d in /usr/local/bin /opt/homebrew/bin; do
+            sudo rm -f $d/python* $d/pip* $d/node $d/npm $d/npx $d/corepack 2>/dev/null || true
+          done
+          echo "left on PATH:"; for t in python python3 pip pip3 node npm; do command -v $t || true; done
+          uname -m
+      - name: Install from the DMG
+        run: |
+          MNT=$(hdiutil attach -nobrowse -readonly pkg/*.dmg | tail -1 | awk -F'\t' '{print $NF}')
+          cp -R "$MNT/Market Edge.app" /Applications/
+          hdiutil detach "$MNT"
+          ls "/Applications/Market Edge.app/Contents/Resources"
+      - name: Installed-app test (live data, paper trade, crash, restart, backup, migration)
+        run: |
+          APP="/Applications/Market Edge.app/Contents/MacOS/$(ls "/Applications/Market Edge.app/Contents/MacOS" | head -1)"
+          cd "$RUNNER_TEMP" && OUT="$GITHUB_WORKSPACE/evidence-dmg" FIXTURE="$GITHUB_WORKSPACE/pkg/kit/legacy_v0.sqlite3" \
+            bash "$GITHUB_WORKSPACE/pkg/kit/clean_machine_test.sh" macos "$APP" "/Applications/Market Edge.app" ${{ matrix.name }}-dmg
+      - name: Update in place from the .app artifact (state must survive)
+        if: always()
+        run: |
+          rm -rf "/Applications/Market Edge.app"
+          tar -C /Applications -xzf "pkg/Market Edge.app.tar.gz"
+          APP="/Applications/Market Edge.app/Contents/MacOS/$(ls "/Applications/Market Edge.app/Contents/MacOS" | head -1)"
+          cd "$RUNNER_TEMP" && OUT="$GITHUB_WORKSPACE/evidence-app" FIXTURE="" TRADE_WAIT_S=120 PREVIOUS_STATUS="$GITHUB_WORKSPACE/evidence-dmg/final-state.json" \
+            bash "$GITHUB_WORKSPACE/pkg/kit/clean_machine_test.sh" macos "$APP" "/Applications/Market Edge.app" ${{ matrix.name }}-app
+      - name: Upload evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: market-edge-windows
+          name: clean-evidence-${{ matrix.name }}
           path: |
-            desktop/src-tauri/target/release/bundle/nsis/*.exe
-            desktop/src-tauri/target/release/bundle/msi/*.msi
-            cargo-windows.log
-            cargo-integration-windows.log
-            app-smoke.log
-            smoke-health.json
-          retention-days: 30
+            evidence-dmg/
+            evidence-app/
+          retention-days: 90
+
+  clean-windows:
+    name: Clean machine windows-x64 (no Python, no Node, no repo)
+    needs: package
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      # deliberately NO actions/checkout
+      - uses: actions/download-artifact@v4
+        with:
+          name: installer-windows-x64
+          path: pkg
+      - name: Remove every Python and Node from the machine
+        shell: pwsh
+        run: |
+          $dirs = @("$env:RUNNER_TOOL_CACHE\Python", "$env:RUNNER_TOOL_CACHE\node", "C:\Program Files\nodejs", "C:\npm", "$env:APPDATA\npm")
+          foreach ($d in $dirs) { if (Test-Path $d) { Remove-Item -Recurse -Force $d -ErrorAction SilentlyContinue; if (Test-Path $d) { Rename-Item $d "$d.removed" -ErrorAction SilentlyContinue } } }
+          Get-ChildItem "C:\Python*" -Directory -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item "$env:LOCALAPPDATA\Microsoft\WindowsApps\python*.exe" -Force -ErrorAction SilentlyContinue
+          Get-ChildItem C:\ProgramData\chocolatey\bin -Filter "python*" -ErrorAction SilentlyContinue | Remove-Item -Force
+          $clean = ($env:PATH -split ';' | Where-Object { $_ -notmatch 'python|nodejs|\\node\\|npm|hostedtoolcache' }) -join ';'
+          "PATH=$clean" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "left:"; Get-Command python,python3,node,npm,pip -ErrorAction SilentlyContinue | Select-Object Source
+      - name: Install with the NSIS .exe (silent, current user)
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem pkg -Filter *-setup.exe | Select-Object -First 1
+          Start-Process -FilePath $exe.FullName -ArgumentList '/S' -Wait
+          Get-ChildItem "$env:LOCALAPPDATA\Market Edge" | Select-Object Name
+      - name: Installed-app test from the .exe install
+        run: |
+          ROOT="$(cygpath -u "$LOCALAPPDATA")/Market Edge"
+          APP=$(ls "$ROOT"/*.exe | grep -viE 'uninstall' | head -1)
+          cd "$RUNNER_TEMP" && OUT="$(cygpath -u "$GITHUB_WORKSPACE")/evidence-exe" FIXTURE="$(cygpath -u "$GITHUB_WORKSPACE")/pkg/kit/legacy_v0.sqlite3" \
+            bash "$(cygpath -u "$GITHUB_WORKSPACE")/pkg/kit/clean_machine_test.sh" windows "$APP" "$ROOT" windows-x64-exe
+      - name: Uninstall the .exe build (user data must stay), install the .msi
+        if: always()
+        shell: pwsh
+        run: |
+          $un = Get-ChildItem "$env:LOCALAPPDATA\Market Edge" -Filter "uninstall*.exe" | Select-Object -First 1
+          if ($un) { Start-Process -FilePath $un.FullName -ArgumentList '/S' -Wait }
+          Start-Sleep 5
+          "app data after uninstall:"; Get-ChildItem "$env:APPDATA\Market Edge" | Select-Object Name
+          $msi = Get-ChildItem pkg -Filter *.msi | Select-Object -First 1
+          $p = Start-Process msiexec.exe -ArgumentList "/i `"$($msi.FullName)`" /qn /l*v `"$env:GITHUB_WORKSPACE\msi-install.log`"" -Wait -PassThru
+          "msiexec exit $($p.ExitCode)"
+          Get-ChildItem "C:\Program Files\Market Edge" | Select-Object Name
+      - name: Installed-app test from the .msi install (existing user data must be kept)
+        if: always()
+        run: |
+          ROOT="/c/Program Files/Market Edge"
+          APP=$(ls "$ROOT"/*.exe | grep -viE 'uninstall' | head -1)
+          cd "$RUNNER_TEMP" && OUT="$(cygpath -u "$GITHUB_WORKSPACE")/evidence-msi" FIXTURE="" TRADE_WAIT_S=120 PREVIOUS_STATUS="$(cygpath -u "$GITHUB_WORKSPACE")/evidence-exe/final-state.json" \
+            bash "$(cygpath -u "$GITHUB_WORKSPACE")/pkg/kit/clean_machine_test.sh" windows "$APP" "$ROOT" windows-x64-msi
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: clean-evidence-windows-x64
+          path: |
+            evidence-exe/
+            evidence-msi/
+            msi-install.log
+          retention-days: 90
+
+  clean-linux:
+    name: Clean machine linux-x64 (container without Python/Node; then offline)
+    needs: package
+    runs-on: ubuntu-22.04
+    timeout-minutes: 75
+    steps:
+      # deliberately NO actions/checkout
+      - uses: actions/download-artifact@v4
+        with:
+          name: installer-linux-x64
+          path: pkg
+      - name: Build a clean Ubuntu image with only the .deb installed
+        run: |
+          cp pkg/*.deb pkg/kit/
+          docker build -t market-edge-clean -f pkg/kit/Dockerfile.linux pkg/kit
+      - name: Installed-app test inside the container (live data)
+        run: |
+          mkdir -p evidence
+          docker run --rm -v market-edge-home:/root -v "$PWD/evidence:/evidence" -v "$PWD/pkg/kit:/kit:ro" market-edge-clean \
+            bash -c 'xvfb-run -a -s "-screen 0 1440x900x24" env OUT=/evidence/online FIXTURE=/kit/legacy_v0.sqlite3 bash /kit/clean_machine_test.sh linux /usr/bin/market-edge-desktop "/usr/lib/Market Edge" linux-x64'
+      - name: Same installed app and data, started with NO network
+        if: always()
+        run: |
+          docker run --rm --network none -v market-edge-home:/root -v "$PWD/evidence:/evidence" -v "$PWD/pkg/kit:/kit:ro" market-edge-clean \
+            bash -c 'xvfb-run -a -s "-screen 0 1440x900x24" env OUT=/evidence/online bash /kit/offline_test.sh /usr/bin/market-edge-desktop linux-x64'
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: clean-evidence-linux-x64
+          path: evidence/
+          retention-days: 90

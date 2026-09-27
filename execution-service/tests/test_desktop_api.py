@@ -174,3 +174,28 @@ def test_system_status_reports_real_components(client):
 
 def test_shutdown_is_refused_unless_the_process_is_managed(client):
     assert client.post("/system/shutdown", headers=HEADERS).status_code == 409
+
+
+def test_conditional_resume_only_lifts_a_pause_with_the_matching_reason(client):
+    client.post("/control/pause", headers=HEADERS, json={"reason": "SUPERVISOR_RECOVERY"})
+    status = client.get("/system/status", headers=HEADERS).json()
+    assert status["entries_paused"] and status["entries_paused_reason"] == "SUPERVISOR_RECOVERY"
+    # an operator pause replaces the reason; the supervisor can no longer lift it
+    client.post("/control/pause", headers=HEADERS, json={"reason": "DESKTOP_PAUSE"})
+    r = client.post("/control/resume", headers=HEADERS, json={"only_if_reason": "SUPERVISOR_RECOVERY"}).json()
+    assert r["resumed"] is False and r["entries_paused"] and r["entries_paused_reason"] == "DESKTOP_PAUSE"
+    client.post("/control/pause", headers=HEADERS, json={"reason": "MARKET_DATA_OFFLINE"})
+    r = client.post("/control/resume", headers=HEADERS, json={"only_if_reason": "MARKET_DATA_OFFLINE"}).json()
+    assert r["resumed"] is True and r["entries_paused"] is False and r["entries_paused_reason"] is None
+    # nothing paused: a conditional resume is a no-op, a plain resume still works
+    assert client.post("/control/resume", headers=HEADERS, json={"only_if_reason": "X"}).json()["resumed"] is False
+    assert client.post("/control/resume", headers=HEADERS).json()["entries_paused"] is False
+
+
+def test_conditional_pause_never_overwrites_an_operator_pause(client):
+    client.post("/control/pause", headers=HEADERS, json={"reason": "DESKTOP_PAUSE"})
+    r = client.post("/control/pause", headers=HEADERS, json={"reason": "MARKET_DATA_OFFLINE", "only_if_unpaused": True}).json()
+    assert r["paused"] is False and r["entries_paused_reason"] == "DESKTOP_PAUSE"
+    client.post("/control/resume", headers=HEADERS)
+    r = client.post("/control/pause", headers=HEADERS, json={"reason": "MARKET_DATA_OFFLINE", "only_if_unpaused": True}).json()
+    assert r["paused"] is True and r["entries_paused_reason"] == "MARKET_DATA_OFFLINE"

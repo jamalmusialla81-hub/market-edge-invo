@@ -8,11 +8,26 @@ export type Level = 'INFO' | 'WARN' | 'ERROR' | 'RISK' | 'EXECUTION';
 export type ComponentStatus = 'OK' | 'WARN' | 'DOWN' | 'DISABLED' | 'STARTING';
 
 export interface ModeAvailability { mode: Mode; enabled: boolean; reason: string | null }
-export interface AppInfo {
-  mode: Mode; modes: ModeAvailability[]; live_trading_enabled: boolean; version: string;
-  config: { repo_root: string | null; python: string; node: string; port: number; db_path: string; cycle_interval_ms: number; hummingbot_mode: string };
+export interface AppConfigView {
+  layout: 'BUNDLED' | 'DEV_REPO'; resource_dir: string | null; repo_root: string | null; execution_service: string; node: string;
+  forward_loop: string; port: number; db_path: string; logs_dir: string; backups_dir: string; cycle_interval_ms: number; hummingbot_mode: string;
 }
-export interface ProcStatus { state: 'STOPPED' | 'STARTING' | 'RUNNING' | 'STOPPING' | 'ADOPTED' | 'FAILED'; pid: number | null; started_at_ms: number | null; last_exit: string | null }
+export interface AppInfo {
+  mode: Mode; modes: ModeAvailability[]; live_trading_enabled: boolean; version: string; git_sha: string; build_timestamp: string;
+  build_info: Record<string, unknown>; backend: { version: string | null; schema_version: number | null; build: Record<string, unknown> | null };
+  node_version: string | null; data_dir: string; fatal: string | null; user_config: { auto_start_paper: boolean; first_run_at: string | null; versions_seen: string[] };
+  config: AppConfigView | null;
+}
+export interface ProcStatus {
+  state: 'STOPPED' | 'STARTING' | 'RUNNING' | 'STOPPING' | 'ADOPTED' | 'FAILED'; pid: number | null; started_at_ms: number | null;
+  last_exit: string | null; exit_code?: number | null; program?: string | null; crashes?: number;
+}
+export interface MarketState { online: boolean | null; detail: string; checked_at_ms: number | null; offline_since_ms: number | null; last_fresh_at_ms: number | null; markets: number }
+export interface SupervisorView {
+  exec_restarts_in_window: number; loop_restarts_in_window: number; exec_gave_up: string | null; loop_gave_up: string | null;
+  last_action: string | null; recovering: boolean; market: MarketState;
+}
+export interface Startup { phase: 'INITIALIZING' | 'STARTING_SERVICE' | 'STARTING_LOOP' | 'READY' | 'ERROR'; message: string; first_run: { first_run: boolean; upgraded_from: string | null } | null }
 export interface LoopTelemetry {
   last_cycle_started_at: string | null; last_cycle_finished_at: string | null; last_outcome: string | null;
   last_reconciled: boolean | null; next_cycle_at: string | null; cycles_seen: number;
@@ -20,13 +35,14 @@ export interface LoopTelemetry {
 }
 export interface HealthComponent { name: string; status: ComponentStatus; detail: string }
 export interface SystemStatus {
-  paper_only: boolean; execution_mode: string; uptime_s: number; halted: string | null; entries_paused: boolean;
+  paper_only: boolean; execution_mode: string; uptime_s: number; halted: string | null; entries_paused: boolean; entries_paused_reason?: string | null;
   last_reconcile: ({ reconciled: boolean; at: number } & Record<string, unknown>) | null;
   latest_signal: SignalRow | null; open_positions: number;
 }
 export interface Health {
-  components: HealthComponent[]; execution_service: ProcStatus; forward_loop: ProcStatus; loop: LoopTelemetry;
-  status: SystemStatus | null; startup_error: string | null; mode: Mode;
+  components: HealthComponent[]; execution_service: ProcStatus | null; forward_loop: ProcStatus | null; loop: LoopTelemetry | null;
+  status: SystemStatus | null; startup_error: string | null; mode: Mode; market: MarketState | null; supervisor: SupervisorView | null;
+  startup: Startup; fatal: string | null;
 }
 export interface Account {
   starting_equity: number; equity: number; balance: number; realized_pnl: number; unrealized_pnl: number; fees: number;
@@ -68,9 +84,14 @@ export interface Performance {
 export interface RiskConfig { settings: Record<string, number>; bounds: Record<string, [number, number]>; starting_equity: number; starting_equity_editable: boolean }
 export interface RiskUsage { key: string; label: string; current: number | null; limit: number; unit: string; floor?: boolean }
 export interface LogEntry { seq: number; at_ms: number; source: string; level: Level; event: string | null; message: string }
+export type LogFile = 'desktop' | 'execution-service' | 'forward-loop' | 'reconciliation';
+export interface BackupManifest {
+  format: string; format_version: number; created_at: string; app_version: string; git_sha: string; schema_version: number;
+  db_sha256: string; db_bytes: number; counts: Record<string, number>; starting_equity: number | null; secrets_included: boolean; contents: string[];
+}
 export interface SecretsStatus {
   store: string; secrets: { name: string; configured: boolean; error: string | null }[];
-  service_api_key: { persisted: boolean; store: string; warning: string | null };
+  service_api_key: { persisted: boolean; created: boolean; store: string; warning: string | null } | null;
 }
 
 export const api = {
@@ -84,7 +105,7 @@ export const api = {
   riskConfig: () => invoke<RiskConfig>('get_risk_config'),
   riskUsage: () => invoke<{ usage: RiskUsage[] }>('get_risk_usage'),
   updateRiskConfig: (update: Record<string, number>) => invoke<RiskConfig>('update_risk_config', { update }),
-  logs: (afterSeq = 0, limit = 1000) => invoke<LogEntry[]>('get_logs', { afterSeq, limit }),
+  logs: (file: LogFile, limit = 1500) => invoke<{ file: LogFile; path: string; entries: LogEntry[] }>('get_logs', { file, limit }),
   startPaper: () => invoke<ProcStatus>('start_paper'),
   stopPaper: () => invoke<ProcStatus>('stop_paper'),
   reconcile: () => invoke<Record<string, unknown>>('reconcile_now'),
@@ -93,6 +114,9 @@ export const api = {
   killSwitch: (confirm: string) => invoke('kill_switch', { confirm }),
   clearHalt: (confirm: string) => invoke('clear_halt', { confirm }),
   restartServices: () => invoke<ProcStatus>('restart_services'),
+  exportBackup: () => invoke<{ cancelled?: boolean; path?: string; manifest?: BackupManifest }>('export_backup'),
+  inspectBackup: () => invoke<{ cancelled?: boolean; path?: string; manifest?: BackupManifest; validation?: Record<string, unknown> }>('inspect_backup'),
+  restoreBackup: (confirm: string) => invoke<{ restored: string; previous_database_kept_at: string | null; reconciled: boolean }>('restore_backup', { confirm }),
   setMode: (mode: Mode) => invoke<Mode>('set_mode', { mode }),
   secretsStatus: () => invoke<SecretsStatus>('secrets_status'),
   setSecret: (name: string, value: string) => invoke<SecretsStatus>('set_secret', { name, value }),

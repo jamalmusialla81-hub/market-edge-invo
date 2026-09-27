@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Hardened-runtime exceptions the bundled runtimes need when the app is
+     signed with a Developer ID:
+     - allow-jit / allow-unsigned-executable-memory: the bundled Node.js (V8 JIT)
+     - disable-library-validation: the frozen Python service loads its own
+       extension modules (nautilus_trader, pyarrow, ...) signed by the same
+       identity; kept explicit so a re-signed third-party wheel still loads.
+     No network-server, camera, microphone or file-system entitlements. -->
+<plist version="1.0">
+<dict>
+  <key>com.apple.security.cs.allow-jit</key>
+  <true/>
+  <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+  <true/>
+  <key>com.apple.security.cs.disable-library-validation</key>
+  <true/>
+</dict>
+</plist>

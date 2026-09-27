@@ -4,7 +4,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 const invoke = vi.fn();
 vi.mock('@tauri-apps/api/core', () => ({ invoke: (...args: unknown[]) => invoke(...args) }));
 
-import { Controls, ModeBar, Warnings } from '../App';
+import { Controls, ModeBar, StartupScreen, Warnings } from '../App';
+import { About } from '../screens/About';
+import { LogView } from '../screens/System';
 import { SignalTable } from '../screens/Signals';
 import { PositionTable } from '../screens/Positions';
 import { TradeTable } from '../screens/Trades';
@@ -107,5 +109,63 @@ describe('tables render backend rows as given', () => {
   it('risk usage marks a breached limit', () => {
     const { container } = render(<UsageRow u={{ key: 'drawdown_limit_pct', label: 'Drawdown', current: 16, limit: 15, unit: '%' }} />);
     expect(container.querySelector('.usage-breach')).not.toBeNull();
+  });
+});
+
+describe('offline, supervision and startup', () => {
+  it('market data offline: banner, no RESUME, no invented prices', () => {
+    const h = healthFixture({ offline: true, paused: true, pausedReason: 'MARKET_DATA_OFFLINE' });
+    render(<><Warnings health={h} healthError={null} /><Controls health={h} onDone={() => undefined} /></>);
+    expect(screen.getByText(/MARKET DATA OFFLINE: no new trades/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'RESUME' })).toBeDisabled();
+    expect(screen.queryByText(/New entries are PAUSED/)).toBeNull();
+  });
+  it('explains a supervisor pause and a service that will not be restarted', () => {
+    render(<Warnings health={healthFixture({ paused: true, pausedReason: 'SUPERVISOR_RECOVERY', gaveUp: 'crashed 4 times within 10 minutes; automatic restarts stopped' })} healthError={null} />);
+    expect(screen.getByText(/execution-service is DOWN: crashed 4 times/)).toBeInTheDocument();
+    expect(screen.getByText(/recovering from a crash/)).toBeInTheDocument();
+  });
+  it('startup screen shows progress, then the error if services cannot start', () => {
+    const { rerender } = render(<StartupScreen health={healthFixture({ phase: 'STARTING_SERVICE' })} info={appInfoFixture} error={null} />);
+    expect(screen.getByText(/Starting the execution-service/)).toBeInTheDocument();
+    const failed = { ...healthFixture({ phase: 'ERROR' }), fatal: 'installed app is incomplete; missing runtime/node' };
+    rerender(<StartupScreen health={failed} info={appInfoFixture} error={null} />);
+    expect(screen.getByText(/installed app is incomplete/)).toBeInTheDocument();
+  });
+});
+
+describe('about and backup', () => {
+  it('shows version, commit, build time, backend and schema versions', () => {
+    render(<About info={appInfoFixture} />);
+    expect(screen.getByText('0.1.0', { selector: 'b' })).toBeInTheDocument();
+    expect(screen.getByText('abc1234def')).toBeInTheDocument();
+    expect(screen.getByText('2026-09-27T06:00:00.000Z')).toBeInTheDocument();
+    expect(screen.getByText('v2')).toBeInTheDocument();
+    expect(screen.getByText(/Installed app/)).toBeInTheDocument();
+  });
+  it('import validates first and restores only after typing RESTORE', async () => {
+    invoke.mockImplementation(async (cmd: string) => {
+      if (cmd === 'inspect_backup') return { path: '/tmp/b.mebackup', manifest: { format: 'market-edge-backup', format_version: 1, created_at: '2026-09-27T06:00:00Z', app_version: '0.1.0', git_sha: 'x', schema_version: 2, db_sha256: 'h', db_bytes: 1, counts: { paper_trades: 3, paper_signals: 9 }, starting_equity: 10000, secrets_included: false, contents: [] } };
+      if (cmd === 'restore_backup') return { restored: '/tmp/b.mebackup', previous_database_kept_at: '/data/backups/pre-restore.sqlite3', reconciled: true };
+      return null;
+    });
+    render(<About info={appInfoFixture} />);
+    fireEvent.click(screen.getByRole('button', { name: 'IMPORT BACKUP' }));
+    const confirm = await screen.findByRole('button', { name: 'Restore backup' });
+    expect(screen.getByText(/3 trades, 9 signals/)).toBeInTheDocument();
+    expect(confirm).toBeDisabled();
+    expect(invoke).not.toHaveBeenCalledWith('restore_backup', expect.anything());
+    fireEvent.change(screen.getByLabelText('Type RESTORE to confirm'), { target: { value: 'RESTORE' } });
+    fireEvent.click(confirm);
+    expect(await screen.findByText(/Restored. Reconciliation clean/)).toBeInTheDocument();
+    expect(invoke).toHaveBeenCalledWith('restore_backup', { confirm: 'RESTORE' });
+  });
+  it('log view reads the selected log file', async () => {
+    invoke.mockImplementation(async (_cmd: string, args: { file: string }) => ({ file: args.file, path: `/data/logs/${args.file}.log`, entries: [{ seq: 1, at_ms: 1790488849670, source: 'app', level: 'INFO', event: 'reconcile', message: `line from ${args.file}` }] }));
+    render(<LogView />);
+    expect(await screen.findByText('line from desktop')).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Log file'), { target: { value: 'reconciliation' } });
+    expect(await screen.findByText('line from reconciliation')).toBeInTheDocument();
+    expect(invoke).toHaveBeenCalledWith('get_logs', { file: 'reconciliation', limit: 1500 });
   });
 });

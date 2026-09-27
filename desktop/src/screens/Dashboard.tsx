@@ -43,9 +43,9 @@ export function Dashboard({ health }: { health: Health | null }) {
             <dt>Kill switch</dt><dd>{s?.halted ? <Badge kind="neg">ENGAGED · {s.halted}</Badge> : <Badge kind="pos">OFF</Badge>}</dd>
             <dt>New entries</dt><dd>{s?.entries_paused ? <Badge kind="warn">PAUSED</Badge> : <Badge kind="pos">ALLOWED</Badge>}</dd>
             <dt>Reconciliation</dt><dd>{reconcile ? (reconcile.reconciled ? <Badge kind="pos">RECONCILED</Badge> : <Badge kind="neg">FAILED</Badge>) : <Badge>NOT RUN</Badge>} {reconcile && <span className="muted">{ago(reconcile.at * 1000)}</span>}</dd>
-            <dt>Forward loop</dt><dd>{health?.forward_loop.state ?? DASH} {loop?.last_outcome && <span className="muted">· last cycle {loop.last_outcome}</span>}</dd>
+            <dt>Forward loop</dt><dd>{health?.forward_loop?.state ?? DASH} {loop?.last_outcome && <span className="muted">· last cycle {loop.last_outcome}</span>}</dd>
             <dt>Last scan</dt><dd>{loop?.last_cycle_started_at ? <>{ts(isoMs(loop.last_cycle_started_at))} <span className="muted">({ago(isoMs(loop.last_cycle_started_at))})</span></> : latest ? <>{ts(latest.at_ms)} <span className="muted">(from ledger)</span></> : DASH}</dd>
-            <dt>Next scan</dt><dd>{loop?.next_cycle_at && health?.forward_loop.state === 'RUNNING' ? <>{ts(isoMs(loop.next_cycle_at))} <span className="muted">({ago(isoMs(loop.next_cycle_at))})</span></> : health?.forward_loop.state === 'RUNNING' ? 'cycle in progress' : 'loop not running'}</dd>
+            <dt>Next scan</dt><dd>{loop?.next_cycle_at && health?.forward_loop?.state === 'RUNNING' ? <>{ts(isoMs(loop.next_cycle_at))} <span className="muted">({ago(isoMs(loop.next_cycle_at))})</span></> : health?.forward_loop?.state === 'RUNNING' ? 'cycle in progress' : 'loop not running'}</dd>
           </dl>
         </Panel>
       </div>
