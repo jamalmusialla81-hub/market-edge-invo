@@ -346,11 +346,15 @@ jobs:
           $msi = Get-ChildItem pkg -Filter *.msi | Select-Object -First 1
           $p = Start-Process msiexec.exe -ArgumentList "/i `"$($msi.FullName)`" /qn /l*v `"$env:GITHUB_WORKSPACE\msi-install.log`"" -Wait -PassThru
           "msiexec exit $($p.ExitCode)"
-          Get-ChildItem "C:\Program Files\Market Edge" | Select-Object Name
+          Get-Content "$env:GITHUB_WORKSPACE\msi-install.log" -Tail 80
+          if (Test-Path "C:\Program Files\Market Edge") { Get-ChildItem "C:\Program Files\Market Edge" | Select-Object Name }
+          elseif (Test-Path "C:\Program Files (x86)\Market Edge") { "installed under (x86) instead:"; Get-ChildItem "C:\Program Files (x86)\Market Edge" | Select-Object Name }
+          else { throw "msiexec exit $($p.ExitCode) but Market Edge is not under either Program Files dir" }
       - name: Installed-app test from the .msi install (existing user data must be kept)
         if: always()
         run: |
           ROOT="/c/Program Files/Market Edge"
+          [ -d "$ROOT" ] || ROOT="/c/Program Files (x86)/Market Edge"
           APP=$(ls "$ROOT"/*.exe | grep -viE 'uninstall' | head -1)
           cd "$RUNNER_TEMP" && OUT="$(cygpath -u "$GITHUB_WORKSPACE")/evidence-msi" FIXTURE="" TRADE_WAIT_S=120 PREVIOUS_STATUS="$(cygpath -u "$GITHUB_WORKSPACE")/evidence-exe/final-state.json" \
             bash "$(cygpath -u "$GITHUB_WORKSPACE")/pkg/kit/clean_machine_test.sh" windows "$APP" "$ROOT" windows-x64-msi

@@ -280,5 +280,14 @@ cp -r "$DATA/logs" "$OUT/app-data-logs" 2>/dev/null
 cp "$DATA/config.json" "$OUT/app-data-config.json" 2>/dev/null
 echo
 echo "==== $LABEL: $(grep -c '^PASS' "$RESULTS") PASS, $(grep -c '^FAIL' "$RESULTS") FAIL"
-grep '^FAIL' "$RESULTS" && exit 1
+if grep -q '^FAIL' "$RESULTS"; then
+  grep '^FAIL' "$RESULTS"
+  # print the app's own logs into the CI job log itself: the evidence artifact
+  # is not always fetchable, and these are what explains a FAIL
+  for f in forward-loop execution-service desktop reconciliation; do
+    echo "---- tail of $f.log ----"
+    tail -n 60 "$DATA/logs/$f.log" 2>/dev/null || echo "(no $f.log)"
+  done
+  exit 1
+fi
 exit 0
