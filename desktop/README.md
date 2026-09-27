@@ -124,7 +124,9 @@ only), `MARKET_EDGE_EXEC_PORT` (default 8765), `MARKET_EDGE_DATA_DIR`,
   — launches the real (frozen or developer) execution-service and forward loop: live cycle,
   graceful stop/shutdown/restart, crash recovery with bounded restarts, the market-data gate,
   backup export/validate/restore and migration of a pre-versioning database.
-- `packaging/clean-machine/clean_machine_test.sh` — CI installs the .dmg/.app, .exe/.msi and
-  .deb on runners with Python and Node removed and no checkout, and runs the whole paper flow.
+- `packaging/clean-machine/clean_machine_test.sh` — CI installs the .dmg/.app (Apple Silicon)
+  and .exe/.msi (Windows x64) on runners with Python and Node removed and no checkout, and runs
+  the whole paper flow; `offline_test.sh` then restarts the installed Mac app with every exchange
+  API unreachable. Intel macOS and Linux installers are not built (out of scope).
 - `scripts/linux_app_e2e.sh` — drives the built app under a virtual display
   and captures every screen (CI: `.github/workflows/desktop-app.yml`).

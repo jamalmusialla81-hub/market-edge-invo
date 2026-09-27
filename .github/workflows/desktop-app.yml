@@ -4,9 +4,11 @@ name: Desktop app (Tauri, paper only)
 #   tests     all suites + the real app driven on Linux (developer layout, screenshots)
 #   package   per OS: freeze execution-service (PyInstaller, full nautilus_trader),
 #             stage the private Node runtime + unmodified forward-loop sources,
-#             real-process tests against that bundle, then .app/.dmg, .exe/.msi, .deb
+#             real-process tests against that bundle, then .app/.dmg (Apple Silicon), .exe/.msi (x64)
 #   clean-*   install the produced package on a fresh runner with Python and Node
 #             REMOVED and no repository checkout, and prove the whole paper flow
+# Targets: macOS Apple Silicon and Windows x64 only (Intel macOS and Linux
+# installers are out of scope by decision).
 # Paper only: no exchange credentials are used anywhere in this workflow.
 on:
   push:
@@ -29,7 +31,6 @@ defaults:
     shell: bash   # explicit bash => -eo pipefail, so `| tee` never hides a failure
 
 env:
-  NAUTILUS_VERSION: '1.231.0'
   PY_DEPS: nautilus_trader==1.231.0 fastapi uvicorn[standard] pydantic httpx pytest pyinstaller
 
 jobs:
@@ -109,18 +110,13 @@ jobs:
   package:
     name: Package ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: ${{ matrix.experimental && 300 || 100 }}
-    # Intel macOS is an attempt: NautilusTrader publishes no macOS x86_64 wheel, so it is
-    # compiled from the release tag there; a failure is reported, never hidden or faked.
-    continue-on-error: ${{ matrix.experimental }}
+    timeout-minutes: 100
     strategy:
       fail-fast: false
       matrix:
         include:
-          - { name: macos-arm64, os: macos-latest, bundles: 'app,dmg', experimental: false }
-          - { name: macos-x64, os: macos-15-intel, bundles: 'app,dmg', experimental: true }
-          - { name: windows-x64, os: windows-latest, bundles: 'nsis,msi', experimental: false }
-          - { name: linux-x64, os: ubuntu-22.04, bundles: 'deb', experimental: false }
+          - { name: macos-arm64, os: macos-latest, bundles: 'app,dmg' }
+          - { name: windows-x64, os: windows-latest, bundles: 'nsis,msi' }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -134,19 +130,9 @@ jobs:
         with:
           workspaces: desktop/src-tauri
           key: ${{ matrix.name }}
-      - name: Linux system packages
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libayatana-appindicator3-dev libssl-dev libdbus-1-dev
       - name: Python deps + execution-service tests
         run: |
           python -m pip install --upgrade pip
-          if [ "${{ matrix.name }}" = macos-x64 ]; then
-            # no x86_64 macOS wheel upstream and the sdist is incomplete: build the release tag
-            git clone --depth 1 --branch "v$NAUTILUS_VERSION" https://github.com/nautechsystems/nautilus_trader "$RUNNER_TEMP/nautilus_src"
-            pip install "$RUNNER_TEMP/nautilus_src"
-          fi
           pip install $PY_DEPS
           cd execution-service && python -m pytest -q | tail -3
       - name: Freeze execution-service with PyInstaller (full nautilus_trader)
@@ -159,7 +145,7 @@ jobs:
         env:
           MARKET_EDGE_INTEGRATION: '1'
           MARKET_EDGE_BUNDLE_DIR: ${{ github.workspace }}/desktop/src-tauri/bundle
-          MARKET_EDGE_KEYRING_TEST: ${{ runner.os != 'Linux' && '1' || '' }}
+          MARKET_EDGE_KEYRING_TEST: '1'
         run: |
           cargo test --lib -- --nocapture 2>&1 | tail -30 | tee ../../cargo-unit-${{ matrix.name }}.log
           cargo test --test process_integration -- --nocapture --test-threads=1 2>&1 | tee ../../cargo-bundle-${{ matrix.name }}.log
@@ -229,10 +215,8 @@ jobs:
               file "$B/macos/Market Edge.app/Contents/Resources/execution-service/market-edge-exec" "$B/macos/Market Edge.app/Contents/Resources/runtime/node" | tee -a dist-out/archs.txt ;;
             Windows)
               cp "$B"/nsis/*.exe "$B"/msi/*.msi dist-out/ ;;
-            Linux)
-              cp "$B"/deb/*.deb dist-out/ ;;
           esac
-          cp desktop/packaging/clean-machine/*.sh desktop/packaging/clean-machine/Dockerfile.linux dist-out/kit/
+          cp desktop/packaging/clean-machine/*.sh dist-out/kit/
           cp execution-service/tests/fixtures/legacy_v0.sqlite3 dist-out/kit/
           cp staging.json signing.txt dist-out/ 2>/dev/null || true
           ls -la dist-out
@@ -259,13 +243,11 @@ jobs:
     needs: package
     runs-on: ${{ matrix.os }}
     timeout-minutes: 75
-    continue-on-error: ${{ matrix.experimental }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - { name: macos-arm64, os: macos-latest, experimental: false }
-          - { name: macos-x64, os: macos-15-intel, experimental: true }
+          - { name: macos-arm64, os: macos-latest }
     steps:
       # deliberately NO actions/checkout: the repository never exists on this machine
       - uses: actions/download-artifact@v4
@@ -299,6 +281,16 @@ jobs:
           APP="/Applications/Market Edge.app/Contents/MacOS/$(ls "/Applications/Market Edge.app/Contents/MacOS" | head -1)"
           cd "$RUNNER_TEMP" && OUT="$GITHUB_WORKSPACE/evidence-app" FIXTURE="" TRADE_WAIT_S=120 PREVIOUS_STATUS="$GITHUB_WORKSPACE/evidence-dmg/final-state.json" \
             bash "$GITHUB_WORKSPACE/pkg/kit/clean_machine_test.sh" macos "$APP" "/Applications/Market Edge.app" ${{ matrix.name }}-app
+      - name: Same installed app and data with market data unreachable (offline start)
+        if: always()
+        run: |
+          # every exchange host the bundled code talks to resolves to a dead local address
+          for h in api.hyperliquid.xyz api.exchange.coinbase.com api.binance.com; do
+            printf '127.0.0.1 %s\n::1 %s\n' "$h" "$h" | sudo tee -a /etc/hosts >/dev/null
+          done
+          sudo dscacheutil -flushcache; sudo killall -HUP mDNSResponder || true
+          APP="/Applications/Market Edge.app/Contents/MacOS/$(ls "/Applications/Market Edge.app/Contents/MacOS" | head -1)"
+          cd "$RUNNER_TEMP" && OUT="$GITHUB_WORKSPACE/evidence-app" bash "$GITHUB_WORKSPACE/pkg/kit/offline_test.sh" "$APP" ${{ matrix.name }}
       - name: Upload evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -371,37 +363,4 @@ jobs:
             evidence-exe/
             evidence-msi/
             msi-install.log
-          retention-days: 90
-
-  clean-linux:
-    name: Clean machine linux-x64 (container without Python/Node; then offline)
-    needs: package
-    runs-on: ubuntu-22.04
-    timeout-minutes: 75
-    steps:
-      # deliberately NO actions/checkout
-      - uses: actions/download-artifact@v4
-        with:
-          name: installer-linux-x64
-          path: pkg
-      - name: Build a clean Ubuntu image with only the .deb installed
-        run: |
-          cp pkg/*.deb pkg/kit/
-          docker build -t market-edge-clean -f pkg/kit/Dockerfile.linux pkg/kit
-      - name: Installed-app test inside the container (live data)
-        run: |
-          mkdir -p evidence
-          docker run --rm -v market-edge-home:/root -v "$PWD/evidence:/evidence" -v "$PWD/pkg/kit:/kit:ro" market-edge-clean \
-            bash -c 'xvfb-run -a -s "-screen 0 1440x900x24" env OUT=/evidence/online FIXTURE=/kit/legacy_v0.sqlite3 bash /kit/clean_machine_test.sh linux /usr/bin/market-edge-desktop "/usr/lib/Market Edge" linux-x64'
-      - name: Same installed app and data, started with NO network
-        if: always()
-        run: |
-          docker run --rm --network none -v market-edge-home:/root -v "$PWD/evidence:/evidence" -v "$PWD/pkg/kit:/kit:ro" market-edge-clean \
-            bash -c 'xvfb-run -a -s "-screen 0 1440x900x24" env OUT=/evidence/online bash /kit/offline_test.sh /usr/bin/market-edge-desktop linux-x64'
-      - name: Upload evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: clean-evidence-linux-x64
-          path: evidence/
           retention-days: 90

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Offline start of the INSTALLED app (run inside `docker run --network none`
-# on the app-data volume left by clean_machine_test.sh): the app must still
+# Offline start of the INSTALLED app, on the app data left by
+# clean_machine_test.sh, with every exchange API unreachable: the app must still
 # launch, show MARKET DATA OFFLINE, keep existing state visible, place no new
 # trades and invent no prices.
 # usage: offline_test.sh <app executable> <label>   (expects $OUT/final-state.json from the online run)
@@ -19,7 +19,8 @@ check() { local name=$1 detail=$2; shift 2; if "$@"; then pass "$name" "$detail"
 st() { jq -r "$1" "$STATUS" 2>/dev/null; }
 wait_for() { local d=$((SECONDS + $1)); while [ $SECONDS -lt $d ]; do [ -f "$STATUS" ] && jq -e "$2" "$STATUS" >/dev/null 2>&1 && return 0; sleep 3; done; return 1; }
 
-check NO_NETWORK "outbound HTTPS fails" bash -c "! timeout 5 bash -c 'exec 3<>/dev/tcp/1.1.1.1/443' 2>/dev/null"
+check NO_MARKET_NETWORK "Hyperliquid, Coinbase and Binance APIs unreachable" \
+  bash -c "! curl -s --max-time 8 -o /dev/null https://api.hyperliquid.xyz/info && ! curl -s --max-time 8 -o /dev/null https://api.exchange.coinbase.com/products && ! curl -s --max-time 8 -o /dev/null https://api.binance.com/api/v3/ping"
 BEFORE="$OUT/final-state.json"
 "$APP" > "$OUT/app-offline.stdout.log" 2>&1 &
 PID=$!
@@ -37,7 +38,7 @@ check NO_TRADES_WHILE_OFFLINE "trades $(st .trades_count) after $(st .loop.cycle
 check NO_FAKE_PRICES "$(st '[.positions[]? | "\(.asset) mark \(.current_price) via \(.mark_source)"] | join(", ")')" \
   jq -e --slurpfile b "$BEFORE" '[.positions[]?.current_price] == [$b[0].positions[]?.current_price]' "$STATUS"
 check SQLITE_INTACT "$(st .status.sqlite.quick_check)" test "$(st .status.sqlite.quick_check)" = ok
-import -window root "$OUT/offline.png" 2>/dev/null
+if command -v screencapture >/dev/null; then screencapture -x "$OUT/offline.png" 2>/dev/null; else import -window root "$OUT/offline.png" 2>/dev/null; fi
 kill -TERM $PID
 for i in $(seq 1 90); do kill -0 $PID 2>/dev/null || break; sleep 1; done
 check OFFLINE_GRACEFUL_EXIT "" bash -c "! kill -0 $PID 2>/dev/null"
