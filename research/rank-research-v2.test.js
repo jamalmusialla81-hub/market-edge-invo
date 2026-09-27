@@ -45,6 +45,14 @@ assert.equal(V2.parseRows(staleRows).rows.length, 0);
 assert.equal(V2.parseRows(staleRows).droppedStaleInputs, staleRows.length);
 assert.equal(V2.parseRows(staleRows, {includeStale: true}).rows.length, staleRows.length);
 
+// V2-CLEAN rows carry a compact sequence in feature_json and no sequence row.
+const Clean = require('./historical-rank-v2-clean.js');
+const cleanRow = (() => { const base = synthetic(1)[0], seq = JSON.parse(base.sequence_json), features = JSON.parse(base.feature_json); features.sequence_compact = Clean.compactSequence({signal_timestamp: base.scan_timestamp, timeframes: seq.timeframes}); return {...base, sequence_json: null, feature_json: JSON.stringify(features)}; })();
+const parsedClean = V2.parseRows([cleanRow]);
+assert.equal(parsedClean.rows.length, 1);
+assert.equal(parsedClean.rows[0].sequence.timeframes.h1.rows.length, 64);
+assert.ok(Number.isFinite(V2.extractFeatures(parsedClean.rows[0]).MOMENTUM.h1Ret24Dir));
+
 // Leakage guard rejects any outcome-derived feature name.
 assert.throws(() => V2.assertPreEntryFeatureNames({BASE: {finalR: 1}}), /LEAKAGE_REJECTED/);
 assert.throws(() => V2.assertPreEntryFeatureNames({BASE: {mfeRatio: 1}}), /LEAKAGE_REJECTED/);

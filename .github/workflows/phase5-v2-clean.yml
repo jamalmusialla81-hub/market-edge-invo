@@ -2,8 +2,9 @@ name: Phase 5 — V2-CLEAN rebuild (research only)
 
 # Rebuilds the historical rank dataset as a NEW immutable version from
 # genuine Coinbase spot 5m candles.  HISTORICAL-RANK-V1 is never modified.
-# Triggered only by editing research/v2-clean/RUN_REQUEST on the research
-# branch (or manually once merged).  No production path is touched.
+# Triggered by editing research/v2-clean/RUN_REQUEST on the research branch.
+# RUN_REQUEST keys:  stage: candles | generate | audit | all
+#                    archive_run_id: <run that produced the archive>, blank = this run
 on:
   workflow_dispatch:
   push:
@@ -14,10 +15,31 @@ concurrency:
   group: historical-rank-v2-clean-write
   cancel-in-progress: false
 
+env:
+  CLOUDFLARE_ACCOUNT_ID: 8ea7796a8fb13ffb612245e8a08a55d6
+  MARKET_EDGE_D1_DATABASE_ID: 39a4082e-41a4-45e9-9b76-99cf10eaca01
+  CANDLE_ARCHIVE_DIR: candle-archive
+
 jobs:
-  candles:
+  config:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    outputs:
+      stage: ${{ steps.read.outputs.stage }}
+      archive_run_id: ${{ steps.read.outputs.archive_run_id }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: read
+        run: |
+          stage=$(sed -n 's/^stage: *//p' research/v2-clean/RUN_REQUEST | head -1)
+          archive=$(sed -n 's/^archive_run_id: *//p' research/v2-clean/RUN_REQUEST | head -1)
+          echo "stage=${stage:-candles}" >> "$GITHUB_OUTPUT"
+          echo "archive_run_id=${archive:-${{ github.run_id }}}" >> "$GITHUB_OUTPUT"
+
+  candles:
+    needs: config
+    if: ${{ needs.config.outputs.stage == 'candles' || needs.config.outputs.stage == 'all' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
     permissions:
       contents: write
     steps:
@@ -25,16 +47,14 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Archive-module tests
-        run: node research/candle-archive.test.js
+      - run: node research/candle-archive.test.js
       - name: Fetch and validate Coinbase spot 5m candles (no fill, no substitution)
         env:
-          CANDLE_ARCHIVE_DIR: candle-archive
           CANDLE_MANIFEST_OUT: research/data/v2-clean/candle-manifest.json
         run: node research/fetch-coinbase-candles.mjs
       - uses: actions/upload-artifact@v4
         with:
-          name: coinbase-5m-archive-${{ github.run_id }}
+          name: coinbase-5m-archive
           path: candle-archive/
           retention-days: 90
       - name: Commit the provenance manifest to the research branch
@@ -44,5 +64,87 @@ jobs:
           git config user.email "research-bot@users.noreply.github.com"
           git add research/data/v2-clean/candle-manifest.json
           git commit -m "data: Coinbase spot 5m candle manifest (run ${{ github.run_id }})" || exit 0
+          git pull --rebase origin ${{ github.ref_name }}
+          git push origin HEAD:${{ github.ref_name }}
+
+  generate:
+    needs: [config, candles]
+    if: ${{ always() && (needs.candles.result == 'success' || needs.candles.result == 'skipped') && (needs.config.outputs.stage == 'generate' || needs.config.outputs.stage == 'all') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    permissions:
+      contents: write
+      actions: read
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      MARKET_EDGE_RESEARCH_TOKEN: ${{ secrets.MARKET_EDGE_RESEARCH_TOKEN }}
+      V2_CLEAN_REPORT: research/data/v2-clean/generation-report.json
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: coinbase-5m-archive*
+          merge-multiple: true
+          path: candle-archive
+          run-id: ${{ needs.config.outputs.archive_run_id }}
+          github-token: ${{ github.token }}
+      - name: Integrity tests
+        run: node research/historical-rank-v2-clean.test.js && node research/candle-archive.test.js
+      - name: Verify the archive against the committed manifest (fail closed)
+        run: node research/verify-candle-archive.mjs
+      - name: Record HISTORICAL-RANK-V1 as INVALID (append-only; rows untouched)
+        run: node research/invalidate-dataset.mjs
+      - name: Generate and freeze HISTORICAL-RANK-V2-CLEAN
+        run: node research/run-v2-clean-dataset.mjs
+      - name: Commit the generation report to the research branch
+        if: always() && github.ref_name == 'claude/clever-faraday-y12d11'
+        run: |
+          git config user.name "market-edge-research-bot"
+          git config user.email "research-bot@users.noreply.github.com"
+          git add research/data/v2-clean/generation-report.json || exit 0
+          git commit -m "data: V2-CLEAN generation report (run ${{ github.run_id }})" || exit 0
+          git pull --rebase origin ${{ github.ref_name }}
+          git push origin HEAD:${{ github.ref_name }}
+
+  audit:
+    needs: [config, generate]
+    if: ${{ always() && (needs.generate.result == 'success' || needs.generate.result == 'skipped') && (needs.config.outputs.stage == 'audit' || needs.config.outputs.stage == 'generate' || needs.config.outputs.stage == 'all') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: write
+      actions: read
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      V2_CLEAN_AUDIT_REPORT: research/data/v2-clean/audit-report.json
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: coinbase-5m-archive*
+          merge-multiple: true
+          path: candle-archive
+          run-id: ${{ needs.config.outputs.archive_run_id }}
+          github-token: ${{ github.token }}
+      - run: node research/verify-candle-archive.mjs
+      - name: Independent price and label audit (development rows only)
+        run: node research/audit-v2-clean.mjs
+      - name: Commit the audit report to the research branch
+        if: always() && github.ref_name == 'claude/clever-faraday-y12d11'
+        run: |
+          git config user.name "market-edge-research-bot"
+          git config user.email "research-bot@users.noreply.github.com"
+          git add research/data/v2-clean/audit-report.json || exit 0
+          git commit -m "data: V2-CLEAN independent audit report (run ${{ github.run_id }})" || exit 0
           git pull --rebase origin ${{ github.ref_name }}
           git push origin HEAD:${{ github.ref_name }}

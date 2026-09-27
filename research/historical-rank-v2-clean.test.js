@@ -7,7 +7,7 @@ function series(start, count, seed = 1, drift = 0) {
   let state = seed, price = 100; const random = () => { state = (state * 1103515245 + 12345) % 2147483648; return state / 2147483648; };
   return Array.from({length: count}, (_, i) => { const open = price, move = (random() - .5) * .004 + drift + .002 * Math.sin(i / 400); price = Math.max(1, open * (1 + move)); const high = Math.max(open, price) * (1 + random() * .001), low = Math.min(open, price) * (1 - random() * .001); return {time: start + i * B, open, high, low, close: price, volume: 10 + random() * 10}; });
 }
-const history = C.HISTORY_BARS + 400, start = scan - (C.HISTORY_BARS + 100) * B;
+const history = C.HISTORY_BARS + 3 * 288 + 400, start = scan - (C.HISTORY_BARS + 3 * 288 + 100) * B;
 const full = series(start, history, 7, .00002);
 const prepared = C.prepareAsset('BTC', full, {now: scan + 10 * DAY});
 
@@ -17,12 +17,15 @@ assert.equal(ok.ok, true); assert.equal(ok.freshness_status, 'FRESH_EXACT'); ass
 // Missing latest candle => stale => fail closed.
 const noLatest = C.prepareAsset('BTC', full.filter(row => row.time !== scan - B), {now: scan + 10 * DAY});
 assert.equal(C.historyCheck(noLatest, scan).ok, false); assert.equal(C.historyCheck(noLatest, scan).reason, 'LATEST_5M_CANDLE_MISSING');
-// One missing candle anywhere in the trailing 256h => fail closed.
-const gap = C.prepareAsset('BTC', full.filter(row => row.time !== scan - 100 * 3_600_000), {now: scan + 10 * DAY});
-assert.equal(C.historyCheck(gap, scan).reason, 'GAP_IN_STRICT_LOOKBACK');
-// Coverage below 99.5% over the 61-day window => fail closed.
-const sparse = C.prepareAsset('BTC', full.filter((row, i) => row.time >= scan - 256 * 3_600_000 || i % 50), {now: scan + 10 * DAY});
-assert.equal(C.historyCheck(sparse, scan).reason, 'HISTORY_WINDOW_COVERAGE_BELOW_99_5');
+// Production bar counts are fed exactly, and every window ends at the scan.
+for (const [name, count] of Object.entries(C.PRODUCTION_BARS)) { assert.equal(ok.timeframes[name].length, count); assert.equal(ok.timeframes[name].at(-1).time + C.TF_MS[name], scan); }
+// One missing 5m candle 100 days back removes that day's d1 bar => fail closed.
+const gap = C.prepareAsset('BTC', full.filter(row => row.time !== scan - 100 * DAY + 7 * B), {now: scan + 10 * DAY});
+assert.equal(C.historyCheck(gap, scan).reason, 'GAP_IN_D1_WINDOW');
+// A missing candle 2h back breaks m5 contiguity first.
+assert.equal(C.historyCheck(C.prepareAsset('BTC', full.filter(row => row.time !== scan - 24 * B), {now: scan + 10 * DAY}), scan).reason, 'GAP_IN_M5_WINDOW');
+// Too little history => fail closed.
+assert.equal(C.historyCheck(C.prepareAsset('BTC', full.filter(row => row.time >= scan - 100 * DAY), {now: scan + 10 * DAY}), scan).reason, 'INSUFFICIENT_D1_HISTORY');
 // Archive preparation rejects conflicting duplicates and drops future rows.
 assert.throws(() => C.prepareAsset('BTC', [...full.slice(0, 10), {...full[5], volume: full[5].volume + 1}]), /conflicting duplicate/);
 assert.equal(C.prepareAsset('BTC', full, {now: scan}).rows.at(-1).time, scan - B);

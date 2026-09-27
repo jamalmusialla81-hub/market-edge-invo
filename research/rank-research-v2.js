@@ -16,6 +16,7 @@
 // - Confidence intervals use a moving-block bootstrap over scan groups.
 // - Every engineered feature is pre-entry and direction-aware.
 
+const Clean = require('./historical-rank-v2-clean.js');
 const VERSION = 'rank-research-v2';
 const HOUR_MS = 3_600_000;
 const DAY_MS = 24 * HOUR_MS;
@@ -56,12 +57,14 @@ function hashString(text) { let h = 0x811c9dc5; for (let i = 0; i < text.length;
 // ---------------------------------------------------------------- dataset --
 function sequenceSafe(row) {
   const frames = row.sequence?.timeframes || {};
-  return ['m5', 'm15', 'h1'].every(name => { const frame = frames[name]; return frame?.available === true && Array.isArray(frame.rows) && frame.rows.length >= 128 && Number.isFinite(Number(frame.window_end)) && Number(frame.window_end) <= row.timestamp; });
+  return ['m5', 'm15', 'h1'].every(name => { const frame = frames[name]; return frame?.available === true && Array.isArray(frame.rows) && frame.rows.length >= 64 && Number.isFinite(Number(frame.window_end)) && Number(frame.window_end) <= row.timestamp; });
 }
 // Development rows only.  Holdout rows are rejected here even if a loader
 // accidentally returned them, so no downstream code can see them.
 function parseRows(rows, {cutoffMs = HOLDOUT.devCutoffMs, includeStale = false} = {}) {
-  const parsed = rows.map(row => ({...row, timestamp: Number(row.scan_timestamp ?? row.timestamp), entry: finite(row.entry), stop: finite(row.stop), quant_score: finite(row.quant_score) ?? 0, candidate_rank: finite(row.candidate_rank), rr: finite(row.rr) ?? 0, targets: parse(row.targets_json ?? row.targets), sequence: parse(row.sequence_json ?? row.sequence), features: parse(row.feature_json ?? row.features)}));
+  // V2-CLEAN stores a compact pre-entry sequence inside feature_json instead
+  // of a full historical_candidate_sequences row.
+  const parsed = rows.map(row => { const features = parse(row.feature_json ?? row.features), stored = parse(row.sequence_json ?? row.sequence); return {...row, timestamp: Number(row.scan_timestamp ?? row.timestamp), entry: finite(row.entry), stop: finite(row.stop), quant_score: finite(row.quant_score) ?? 0, candidate_rank: finite(row.candidate_rank), rr: finite(row.rr) ?? 0, targets: parse(row.targets_json ?? row.targets), sequence: stored?.timeframes ? stored : (Clean.expandSequence(features.sequence_compact) || {}), features}; });
   const leaked = parsed.filter(row => row.timestamp >= cutoffMs), stale = parsed.filter(row => row.timestamp < cutoffMs && !freshInputs(row));
   const kept = parsed.filter(row => row.timestamp < cutoffMs && (includeStale || freshInputs(row)) && Number(row.valid_current_geometry) === 1 && row.targets.status === 'RESOLVED' && Number.isFinite(finite(row.targets.FINAL_R)) && row.entry > 0 && row.stop > 0 && sequenceSafe(row))
     .sort((a, b) => a.timestamp - b.timestamp || String(a.candidate_id).localeCompare(String(b.candidate_id)));

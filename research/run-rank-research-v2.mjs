@@ -32,7 +32,7 @@ async function d1(sql, params = []) {
 }
 
 async function loadCandidates() {
-  return d1(`SELECT c.candidate_id,c.scan_id,c.asset,c.direction,c.strategy,c.entry,c.stop,c.rr,c.quant_score,c.candidate_rank,c.regime,c.feature_json,c.targets_json,c.valid_current_geometry,s.scan_timestamp,seq.sequence_json FROM historical_scan_candidates c JOIN historical_scan_snapshots s ON s.scan_id=c.scan_id JOIN historical_candidate_sequences seq ON seq.candidate_id=c.candidate_id WHERE c.valid_current_geometry=1 AND json_extract(c.targets_json,'$.status')='RESOLVED' AND s.engine_version=? AND s.scan_timestamp<? ORDER BY s.scan_timestamp,c.candidate_id`, [ENGINE, V2.HOLDOUT.devCutoffMs]);
+  return d1(`SELECT c.candidate_id,c.scan_id,c.asset,c.direction,c.strategy,c.entry,c.stop,c.rr,c.quant_score,c.candidate_rank,c.regime,c.feature_json,c.targets_json,c.valid_current_geometry,s.scan_timestamp,seq.sequence_json FROM historical_scan_candidates c JOIN historical_scan_snapshots s ON s.scan_id=c.scan_id LEFT JOIN historical_candidate_sequences seq ON seq.candidate_id=c.candidate_id WHERE c.valid_current_geometry=1 AND json_extract(c.targets_json,'$.status')='RESOLVED' AND s.engine_version=? AND s.scan_timestamp<? ORDER BY s.scan_timestamp,c.candidate_id`, [ENGINE, V2.HOLDOUT.devCutoffMs]);
 }
 async function loadAllCandidateMeta() {
   return d1(`SELECT c.candidate_id,c.asset,c.valid_current_geometry,json_extract(c.targets_json,'$.status') AS status FROM historical_scan_candidates c JOIN historical_scan_snapshots s ON s.scan_id=c.scan_id WHERE s.engine_version=? AND s.scan_timestamp<?`, [ENGINE, V2.HOLDOUT.devCutoffMs]).then(rows => rows.map(row => ({...row, targets_json: JSON.stringify({status: row.status})})));

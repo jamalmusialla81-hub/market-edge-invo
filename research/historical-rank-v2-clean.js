@@ -23,10 +23,12 @@ const VERSION = 'HISTORICAL-RANK-V2-CLEAN';
 const LABEL_VERSION = 'outcome-strict-v1';
 const SEQUENCE_COMPACT_VERSION = 'candle-sequence-compact-v1';
 const B = Archive.BASE_MS, HOUR = 3_600_000, DAY = 86_400_000;
-const HISTORY_BARS = 17568;                    // fixed 61-day window, identical for every scan
-const HISTORY_MS = HISTORY_BARS * B;
-const STRICT_LOOKBACK_MS = 256 * HOUR;         // longest frozen sequence lookback (h1 x 256)
-const MIN_WINDOW_COVERAGE = .995;
+// Exactly the bar counts the production scanner feeds Quant
+// (backend/scan-core.mjs: 5m x500, 15m x320, 1h x420, 4h x500, 1d x260).
+const PRODUCTION_BARS = Object.freeze({m5: 500, m15: 320, h1: 420, h4: 500, d1: 260});
+const TF_MS = Object.freeze({m5: B, m15: 3 * B, h1: HOUR, h4: 4 * HOUR, d1: DAY});
+const HISTORY_MS = PRODUCTION_BARS.d1 * DAY;   // deepest window actually fed (260 daily bars)
+const HISTORY_BARS = HISTORY_MS / B;
 const OUTCOME_BARS = Rank.OUTCOME_BARS;        // 24h
 const COMPACT_ROWS = 64;
 const COMPACT_FIELDS = Object.freeze(['close_to_close', 'open_close', 'high_low', 'upper_wick', 'lower_wick', 'relative_volume', 'atr_normalized_move', 'rolling_volatility', 'distance_recent_high', 'distance_recent_low']);
@@ -43,20 +45,32 @@ function prepareAsset(asset, rawRows, {now = Date.now()} = {}) {
   const rows = validated.rows, index = Archive.presenceIndex(rows), dayHash = new Map();
   let cursor = 0;
   while (cursor < rows.length) { const day = Math.floor(rows[cursor].time / DAY) * DAY; let end = cursor; while (end < rows.length && rows[end].time < day + DAY) end++; dayHash.set(day, sha(candleText(rows.slice(cursor, end)))); cursor = end; }
-  return {asset, product: Archive.PRODUCTS[asset], rows, index, dayHash, issues: validated.issues, gaps: validated.gaps.length};
+  // Higher timeframes are aggregated once, only from complete, contiguous 5m
+  // buckets (Replay.derived); a bucket with any missing 5m candle is absent.
+  const frames = Replay.derived(rows.map(({time, open, high, low, close, volume}) => ({time, open, high, low, close, volume})));
+  return {asset, product: Archive.PRODUCTS[asset], rows, index, dayHash, frames, issues: validated.issues, gaps: validated.gaps.length};
 }
 function lowerBound(rows, time) { let low = 0, high = rows.length; while (low < high) { const middle = (low + high) >> 1; if (rows[middle].time < time) low = middle + 1; else high = middle; } return low; }
 function windowRows(prepared, from, to) { return prepared.rows.slice(lowerBound(prepared.rows, from), lowerBound(prepared.rows, to)); }
 function windowHash(prepared, from, to) { const days = []; for (let day = Math.floor(from / DAY) * DAY; day < to; day += DAY) days.push(prepared.dayHash.get(day) || 'MISSING_DAY'); return sha(`${prepared.asset}|${from}|${to}|${days.join('|')}`); }
 
-// Pre-generation integrity gate for one asset at one scan timestamp.
+// Pre-generation integrity gate for one asset at one scan timestamp.  It
+// selects exactly the production bar counts for every timeframe and requires
+// each to be complete, strictly consecutive, and to end exactly at the scan.
 function historyCheck(prepared, timestamp) {
-  const latest = prepared.index.byTime.get(timestamp - B), missingStrict = prepared.index.missing(timestamp - STRICT_LOOKBACK_MS, timestamp), missingWindow = prepared.index.missing(timestamp - HISTORY_MS, timestamp), coverage = 1 - missingWindow / HISTORY_BARS;
-  const base = {latest_feature_candle_timestamp: latest ? latest.time : null, latest_feature_candle_close: latest ? latest.time + B : null, missing_last_256h: missingStrict, missing_history_window: missingWindow, history_window_coverage: coverage};
+  const latest = prepared.index.byTime.get(timestamp - B), timeframes = {}, frames = {};
+  const base = {latest_feature_candle_timestamp: latest ? latest.time : null, latest_feature_candle_close: latest ? latest.time + B : null};
   if (!latest) return {...base, ok: false, freshness_status: 'STALE_OR_MISSING_LATEST_CANDLE', reason: 'LATEST_5M_CANDLE_MISSING'};
-  if (missingStrict > 0) return {...base, ok: false, freshness_status: 'FRESH_EXACT', reason: 'GAP_IN_STRICT_LOOKBACK'};
-  if (coverage < MIN_WINDOW_COVERAGE) return {...base, ok: false, freshness_status: 'FRESH_EXACT', reason: 'HISTORY_WINDOW_COVERAGE_BELOW_99_5'};
-  return {...base, ok: true, freshness_status: 'FRESH_EXACT', reason: null};
+  for (const [name, count] of Object.entries(PRODUCTION_BARS)) {
+    const interval = TF_MS[name], all = prepared.frames[name], end = lowerBound(all, timestamp - interval + 1), bars = all.slice(Math.max(0, end - count), end);
+    const lastClose = bars.length ? bars.at(-1).time + interval : null, contiguous = bars.every((bar, i) => !i || bar.time - bars[i - 1].time === interval);
+    frames[name] = {bars: bars.length, first: bars[0]?.time ?? null, last_close: lastClose, contiguous};
+    if (bars.length < count) return {...base, frames, ok: false, freshness_status: 'FRESH_EXACT', reason: `INSUFFICIENT_${name.toUpperCase()}_HISTORY`};
+    if (lastClose !== timestamp) return {...base, frames, ok: false, freshness_status: 'FRESH_EXACT', reason: `${name.toUpperCase()}_NOT_FRESH`};
+    if (!contiguous) return {...base, frames, ok: false, freshness_status: 'FRESH_EXACT', reason: `GAP_IN_${name.toUpperCase()}_WINDOW`};
+    timeframes[name] = bars;
+  }
+  return {...base, frames, timeframes, ok: true, freshness_status: 'FRESH_EXACT', reason: null};
 }
 // Independent re-check of the exact rows handed to the evaluator.
 function assertWindowIntegrity(rows, timestamp) {
@@ -103,19 +117,19 @@ function expandSequence(compact) {
   return {version: compact.version, signal_timestamp: compact.signal_timestamp, timeframes: Object.fromEntries(Object.entries(compact.timeframes).map(([name, frame]) => [name, {interval_ms: frame.interval_ms, window_end: frame.window_end, available: frame.rows.length === compact.rows_per_frame, rows: frame.rows.map(values => Object.fromEntries(compact.fields.map((key, i) => [key, values[i]])))}]))};
 }
 function assetCandidates({scanId, timestamp, prepared, check}) {
-  const rows = windowRows(prepared, timestamp - HISTORY_MS, timestamp);
-  assertWindowIntegrity(rows, timestamp);
-  const snapshot = Replay.cachedSnapshot(Replay.derived(rows.map(({time, open, high, low, close, volume}) => ({time, open, high, low, close, volume}))), timestamp);
-  const ready = Replay.readiness(snapshot);
+  const timeframes = check.timeframes;
+  assertWindowIntegrity(timeframes.m5, timestamp);
+  Replay.assertNoLookahead(timeframes, timestamp);
+  const ready = Replay.readiness({counts: Object.fromEntries(Object.entries(timeframes).map(([name, rows]) => [name, rows.length]))});
   if (!ready.ready) return {candidates: [], excluded: {asset: prepared.asset, reason: 'REPLAY_READINESS_FAILED', detail: ready.missing}, diagnostics: null};
-  const timeframes = snapshot.timeframes, sequence = Sequences.build(timeframes, timestamp);
+  const sequence = Sequences.build(timeframes, timestamp);
   Sequences.assertNoFuture(sequence, timestamp); Rank.assertFresh(sequence, timestamp);
   const evaluated = Quant.evaluateSetupCandidates({timeframes, settings: Rank.SETTINGS}), diagnostics = gateDiagnostics(Quant.evaluateSetup({timeframes, settings: Rank.SETTINGS}).timeframes);
   const historySha = windowHash(prepared, timestamp - HISTORY_MS, timestamp), compact = compactSequence(sequence);
   const candidates = evaluated.map((candidate, index) => {
     const divider = String(candidate.candidateKey || '').lastIndexOf(':'), strategy = candidate.strategy || (divider > 0 ? candidate.candidateKey.slice(0, divider) : null), direction = candidate.direction || (divider > 0 ? candidate.candidateKey.slice(divider + 1) : null), identified = {...candidate, strategy, direction};
     const plan = Rank.geometry(identified), quant = Number.isFinite(Number(candidate.setupQuality ?? candidate.quality)) ? Number(candidate.setupQuality ?? candidate.quality) : null;
-    const provenance = {dataset_version: VERSION, label_version: LABEL_VERSION, scan_id: scanId, scan_timestamp: timestamp, asset: prepared.asset, product: prepared.product, entry_source: ENTRY.source, entry_venue: ENTRY.venue, entry_instrument_type: ENTRY.instrument_type, decision_price_definition: 'close of the latest completed 5m candle at the scan timestamp', latest_feature_candle_timestamp: check.latest_feature_candle_timestamp, latest_feature_candle_close: check.latest_feature_candle_close, freshness_status: check.freshness_status, history_window: {bars: HISTORY_BARS, from: timestamp - HISTORY_MS, to: timestamp, missing: check.missing_history_window, coverage: check.history_window_coverage, missing_last_256h: check.missing_last_256h, sha256: historySha}, archive_version: Archive.ARCHIVE_VERSION};
+    const provenance = {dataset_version: VERSION, label_version: LABEL_VERSION, scan_id: scanId, scan_timestamp: timestamp, asset: prepared.asset, product: prepared.product, entry_source: ENTRY.source, entry_venue: ENTRY.venue, entry_instrument_type: ENTRY.instrument_type, decision_price_definition: 'close of the latest completed 5m candle at the scan timestamp', latest_feature_candle_timestamp: check.latest_feature_candle_timestamp, latest_feature_candle_close: check.latest_feature_candle_close, freshness_status: check.freshness_status, history_window: {policy: 'production bar counts; every timeframe complete, consecutive, closing at the scan', bars: PRODUCTION_BARS, frames: check.frames, from: timestamp - HISTORY_MS, to: timestamp, sha256: historySha}, archive_version: Archive.ARCHIVE_VERSION};
     const features = {...Rank.preEntryFeatures(timeframes, timestamp, identified), provenance, sequence_compact: compact};
     return {candidate_id: `v2c-${Rank.hash([scanId, prepared.asset, index, strategy, direction, plan.entry, plan.stop])}`, timestamp, asset: prepared.asset, invo_instrument: prepared.product, direction: direction || null, strategy: strategy || null, reference_price: Number.isFinite(Number(candidate.entry)) ? Number(candidate.entry) : null, entry: plan.entry, stop: plan.stop, tp1: plan.tp1, tp2: plan.tp2, rr: plan.rr, setup_quality: quant, entry_quality: candidate.entryQuality || null, quant_score: quant, ml_applicability: 'ML_NOT_AVAILABLE_FOR_HISTORICAL_TIMESTAMP', ml_raw_score: null, combined_score: quant, regime: candidate.regime || 'UNCLASSIFIED', feature_json: features, feature_hash: Rank.hash(features), valid_current_geometry: plan.valid, invalidation_reason: plan.valid ? null : (candidate.reason || 'Candidate did not supply valid current geometry'), candidate_rank: null, candidate_count: 0, targets: {status: 'PENDING_OUTCOME'}, candidate_hash: null};
   });
@@ -129,7 +143,7 @@ function buildScan({timestamp, assets}) {
   const scanId = `hrp-${VERSION}-${DAY}-${timestamp}`, universe = [], excluded = [], diagnostics = {}, all = [], hashes = [];
   for (const prepared of assets) {
     const check = historyCheck(prepared, timestamp);
-    if (!check.ok) { excluded.push({asset: prepared.asset, reason: check.reason, freshness_status: check.freshness_status, missing_last_256h: check.missing_last_256h, history_window_coverage: check.history_window_coverage}); continue; }
+    if (!check.ok) { excluded.push({asset: prepared.asset, reason: check.reason, freshness_status: check.freshness_status}); continue; }
     const result = assetCandidates({scanId, timestamp, prepared, check});
     if (result.excluded) { excluded.push(result.excluded); continue; }
     universe.push(prepared.asset); diagnostics[prepared.asset] = result.diagnostics; hashes.push([prepared.asset, result.historySha]); all.push(...result.candidates);
@@ -172,4 +186,4 @@ function resolveStrict(candidate, prepared) {
   return {status: 'RESOLVED', TP1_BEFORE_SL: tp1Hit, FINAL_R: finalR - costR, MFE: mfe, MAE: mae, STOP_HIT: stopHit, TP2_HIT: tp2Hit, duration_bars: bars, exit_reason: exit, entry_timestamp: timestamp, entry_price: rawEntry, fill_price: entry, entry_source: ENTRY.source, entry_venue: ENTRY.venue, entry_instrument_type: ENTRY.instrument_type, outcome_source: ENTRY.source, outcome_venue: ENTRY.venue, outcome_instrument_type: ENTRY.instrument_type, outcome_window_sha256: sha(candleText(used)), same_candle_policy: 'STOP_FIRST; breakeven assumed after TP1 on the TP1 candle', cost_round_trip: .0016, label_version: LABEL_VERSION, dataset_version: VERSION};
 }
 
-module.exports = {VERSION, LABEL_VERSION, SEQUENCE_COMPACT_VERSION, HISTORY_BARS, HISTORY_MS, STRICT_LOOKBACK_MS, MIN_WINDOW_COVERAGE, ENTRY, prepareAsset, historyCheck, assertWindowIntegrity, windowRows, windowHash, gateDiagnostics, compactSequence, expandSequence, assetCandidates, buildScan, snapshotRecord, resolveStrict};
+module.exports = {VERSION, LABEL_VERSION, SEQUENCE_COMPACT_VERSION, PRODUCTION_BARS, TF_MS, HISTORY_BARS, HISTORY_MS, ENTRY, prepareAsset, historyCheck, assertWindowIntegrity, windowRows, windowHash, gateDiagnostics, compactSequence, expandSequence, assetCandidates, buildScan, snapshotRecord, resolveStrict};
