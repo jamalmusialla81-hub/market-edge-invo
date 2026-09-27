@@ -29,7 +29,8 @@ defaults:
     shell: bash   # explicit bash => -eo pipefail, so `| tee` never hides a failure
 
 env:
-  PY_DEPS: nautilus_trader fastapi uvicorn[standard] pydantic httpx pytest pyinstaller
+  NAUTILUS_VERSION: '1.231.0'
+  PY_DEPS: nautilus_trader==1.231.0 fastapi uvicorn[standard] pydantic httpx pytest pyinstaller
 
 jobs:
   tests:
@@ -108,15 +109,18 @@ jobs:
   package:
     name: Package ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 100
+    timeout-minutes: ${{ matrix.experimental && 300 || 100 }}
+    # Intel macOS is an attempt: NautilusTrader publishes no macOS x86_64 wheel, so it is
+    # compiled from the release tag there; a failure is reported, never hidden or faked.
+    continue-on-error: ${{ matrix.experimental }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - { name: macos-arm64, os: macos-latest, bundles: 'app,dmg' }
-          - { name: macos-x64, os: macos-15-intel, bundles: 'app,dmg' }
-          - { name: windows-x64, os: windows-latest, bundles: 'nsis,msi' }
-          - { name: linux-x64, os: ubuntu-22.04, bundles: 'deb' }
+          - { name: macos-arm64, os: macos-latest, bundles: 'app,dmg', experimental: false }
+          - { name: macos-x64, os: macos-15-intel, bundles: 'app,dmg', experimental: true }
+          - { name: windows-x64, os: windows-latest, bundles: 'nsis,msi', experimental: false }
+          - { name: linux-x64, os: ubuntu-22.04, bundles: 'deb', experimental: false }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -138,6 +142,11 @@ jobs:
       - name: Python deps + execution-service tests
         run: |
           python -m pip install --upgrade pip
+          if [ "${{ matrix.name }}" = macos-x64 ]; then
+            # no x86_64 macOS wheel upstream and the sdist is incomplete: build the release tag
+            git clone --depth 1 --branch "v$NAUTILUS_VERSION" https://github.com/nautechsystems/nautilus_trader "$RUNNER_TEMP/nautilus_src"
+            pip install "$RUNNER_TEMP/nautilus_src"
+          fi
           pip install $PY_DEPS
           cd execution-service && python -m pytest -q | tail -3
       - name: Freeze execution-service with PyInstaller (full nautilus_trader)
@@ -250,12 +259,13 @@ jobs:
     needs: package
     runs-on: ${{ matrix.os }}
     timeout-minutes: 75
+    continue-on-error: ${{ matrix.experimental }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - { name: macos-arm64, os: macos-latest }
-          - { name: macos-x64, os: macos-15-intel }
+          - { name: macos-arm64, os: macos-latest, experimental: false }
+          - { name: macos-x64, os: macos-15-intel, experimental: true }
     steps:
       # deliberately NO actions/checkout: the repository never exists on this machine
       - uses: actions/download-artifact@v4
