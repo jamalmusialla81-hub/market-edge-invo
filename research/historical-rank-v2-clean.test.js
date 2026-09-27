@@ -76,3 +76,15 @@ assert.equal(C.resolveStrict(long, withOutcome(stoppedEarly)).status, 'RESOLVED'
 const flat = C.resolveStrict(long, withOutcome(outcomeCandles(288, () => ({open: 100, high: 100.2, low: 99.8, close: 100, volume: 1}))));
 assert.equal(flat.exit_reason, 'TIMEOUT'); assert.equal(flat.duration_bars, 288); assert.equal(flat.outcome_venue, 'COINBASE'); assert.equal(flat.label_version, 'outcome-strict-v1'); assert.equal(flat.entry_price, 100);
 console.log('V2-CLEAN generator integrity tests passed');
+
+// Native-HTF policy: 4h from contiguous native 1h, 1d native; carries its own version and cannot be mixed.
+{
+  const H = 3_600_000, h1 = Array.from({length: 9}, (_, i) => ({time: i * H, open: 1, high: 2, low: .5, close: 1 + i, volume: 1}));
+  const h4 = C.aggregateNative(h1.filter((_, i) => i !== 5), H, 4 * H);
+  assert.deepEqual(h4.map(bar => bar.time), [0]);
+  const native = {h1: full.filter(row => row.time % H === 0).map(row => ({...row})), d1: full.filter(row => row.time % DAY === 0).map(row => ({...row}))};
+  const nat = C.prepareAsset('BTC', full, {now: scan + 10 * DAY, native});
+  assert.equal(nat.htfSource, 'COINBASE_NATIVE_1H_1D');
+  assert.throws(() => C.buildScan({timestamp: scan, assets: [nat, assets[1]]}), /POLICY_MIXING_REJECTED/);
+}
+console.log('V2-CLEAN native-HTF policy tests passed');

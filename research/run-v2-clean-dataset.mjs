@@ -14,6 +14,8 @@ import Registry from './dataset-registry.js';
 
 const API = (process.env.MARKET_EDGE_API || 'https://market-edge-ai.jakob-market-edge.workers.dev').replace(/\/$/, ''), TOKEN = process.env.MARKET_EDGE_RESEARCH_TOKEN || '', CF = process.env.CLOUDFLARE_API_TOKEN || '', ACCOUNT = process.env.CLOUDFLARE_ACCOUNT_ID || '8ea7796a8fb13ffb612245e8a08a55d6', DB = process.env.MARKET_EDGE_D1_DATABASE_ID || '39a4082e-41a4-45e9-9b76-99cf10eaca01';
 const DIR = process.env.CANDLE_ARCHIVE_DIR || 'candle-archive', REPORT = process.env.V2_CLEAN_REPORT || 'v2-clean-generation-report.json', DRY = process.argv.includes('--dry-run') || process.env.V2_CLEAN_DRY_RUN === '1';
+const HTF = process.env.V2_CLEAN_HTF_SOURCE || 'aggregated';
+if (HTF === 'native' && !DRY) throw new Error('The native-HTF policy is a proposal: dry-run only until approved');
 const ASSETS = ['BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'LTC'], DAY = 86_400_000, B = 300_000, MAX_SCANS = Number(process.env.V2_CLEAN_MAX_SCANS) || Infinity;
 Registry.assertTrainable(Clean.VERSION);
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -33,10 +35,10 @@ async function ingest(payload) {
   }
   throw new Error(`Ingest ${payload.operation} failed after retries`);
 }
+function readCsv(path) { if (!existsSync(path)) throw new Error(`ARCHIVE_MISSING: ${path}`); return gunzipSync(readFileSync(path)).toString().trim().split('\n').filter(Boolean).map(line => { const [time, open, high, low, close, volume] = line.split(',').map(Number); return {time, open, high, low, close, volume}; }); }
 function loadAsset(asset) {
-  const path = join(DIR, `${asset}.csv.gz`); if (!existsSync(path)) throw new Error(`ARCHIVE_MISSING: ${path}`);
-  const rows = gunzipSync(readFileSync(path)).toString().trim().split('\n').filter(Boolean).map(line => { const [time, open, high, low, close, volume] = line.split(',').map(Number); return {time, open, high, low, close, volume}; });
-  return Clean.prepareAsset(asset, rows);
+  const native = HTF === 'native' ? {h1: readCsv(join(DIR, `${asset}-1h.csv.gz`)), d1: readCsv(join(DIR, `${asset}-1d.csv.gz`))} : null;
+  return Clean.prepareAsset(asset, readCsv(join(DIR, `${asset}.csv.gz`)), {native});
 }
 const inc = (object, key, by = 1) => { object[key] = (object[key] || 0) + by; };
 
@@ -45,7 +47,7 @@ async function run() {
   const assets = ASSETS.map(loadAsset), archiveStart = Math.max(...assets.map(a => a.rows[0].time)), archiveEnd = Math.min(...assets.map(a => a.rows.at(-1).time + B));
   const firstScan = Math.ceil((archiveStart + Clean.HISTORY_MS + DAY) / DAY) * DAY, lastScan = Math.floor((archiveEnd - Rank.OUTCOME_BARS * B - B) / DAY) * DAY;
   const existing = DRY ? new Map() : new Map((await d1(`SELECT s.scan_id AS scan_id,SUM(CASE WHEN c.valid_current_geometry=1 AND c.targets_json LIKE '%PENDING_OUTCOME%' THEN 1 ELSE 0 END) AS pending FROM historical_scan_snapshots s LEFT JOIN historical_scan_candidates c ON c.scan_id=s.scan_id WHERE s.engine_version=? GROUP BY s.scan_id`, [Clean.VERSION])).map(row => [row.scan_id, Number(row.pending) || 0]));
-  const report = {dataset_version: Clean.VERSION, label_version: Clean.LABEL_VERSION, generated_at: new Date().toISOString(), dry_run: DRY, archive: {start: new Date(archiveStart).toISOString(), end: new Date(archiveEnd).toISOString(), issues: Object.fromEntries(assets.map(a => [a.asset, a.issues])), gaps: Object.fromEntries(assets.map(a => [a.asset, a.gaps]))}, production_bars: Clean.PRODUCTION_BARS, scan_window: {first: new Date(firstScan).toISOString(), last: new Date(lastScan).toISOString()}, holdout: V2.HOLDOUT,
+  const report = {dataset_version: HTF === 'native' ? Clean.NATIVE_HTF_VERSION : Clean.VERSION, htf_source: HTF, label_version: Clean.LABEL_VERSION, generated_at: new Date().toISOString(), dry_run: DRY, archive: {start: new Date(archiveStart).toISOString(), end: new Date(archiveEnd).toISOString(), issues: Object.fromEntries(assets.map(a => [a.asset, a.issues])), gaps: Object.fromEntries(assets.map(a => [a.asset, a.gaps]))}, production_bars: Clean.PRODUCTION_BARS, scan_window: {first: new Date(firstScan).toISOString(), last: new Date(lastScan).toISOString()}, holdout: V2.HOLDOUT,
     development: {scans: 0, skippedNoEligibleAsset: 0, candidates: 0, rankable: 0, resolved: 0, unresolved: {}, choiceScans: 0, assets: {}, strategies: {}, directions: {}, strategyDirection: {}, exclusions: {}, exclusionsByAsset: {}, labelSources: {}, exits: {}, perScanCandidates: {}},
     holdout_counts_only: {scans: 0, candidates: 0, rankable: 0, resolvedOrUnresolved: 0},
     diversity: {evaluations: {}, emitted: {}, regimes: {}, trendState: {}, gates: {}},

@@ -38,7 +38,17 @@ const candleText = rows => rows.map(row => [row.time, row.open, row.high, row.lo
 const precise = value => Number.isFinite(value) ? Number(value.toPrecision(5)) : null;
 
 // ------------------------------------------------------------- archive ----
-function prepareAsset(asset, rawRows, {now = Date.now()} = {}) {
+// Optional same-venue context policy: 4h from the venue's native 1h candles
+// and 1d from the venue's native daily candles, instead of re-aggregating 5m.
+// It changes the dataset definition, so it carries its own dataset version.
+const NATIVE_HTF_VERSION = `${VERSION}-NATIVE-HTF`;
+function aggregateNative(rows, from, to) {
+  const out = []; let bucket = null;
+  const flush = () => { if (bucket && bucket.count === to / from) out.push({time: bucket.time, open: bucket.open, high: bucket.high, low: bucket.low, close: bucket.close, volume: bucket.volume}); };
+  for (const row of rows) { const start = Math.floor(row.time / to) * to; if (!bucket || bucket.time !== start) { flush(); bucket = {time: start, next: start, count: 0, open: row.open, high: row.high, low: row.low, close: row.close, volume: 0}; } if (row.time !== bucket.next) { bucket.count = -Infinity; } bucket.high = Math.max(bucket.high, row.high); bucket.low = Math.min(bucket.low, row.low); bucket.close = row.close; bucket.volume += row.volume; bucket.next += from; bucket.count++; }
+  flush(); return out;
+}
+function prepareAsset(asset, rawRows, {now = Date.now(), native = null} = {}) {
   const validated = Archive.validateSeries(rawRows, {now});
   const fatal = validated.issues.conflictingDuplicates;
   if (fatal) throw new Error(`ARCHIVE_REJECTED: ${asset} has ${fatal} conflicting duplicate candles`);
@@ -48,7 +58,12 @@ function prepareAsset(asset, rawRows, {now = Date.now()} = {}) {
   // Higher timeframes are aggregated once, only from complete, contiguous 5m
   // buckets (Replay.derived); a bucket with any missing 5m candle is absent.
   const frames = Replay.derived(rows.map(({time, open, high, low, close, volume}) => ({time, open, high, low, close, volume})));
-  return {asset, product: Archive.PRODUCTS[asset], rows, index, dayHash, frames, issues: validated.issues, gaps: validated.gaps.length};
+  let htfSource = 'AGGREGATED_FROM_COINBASE_5M';
+  if (native) {
+    const h1 = Archive.validateSeries(native.h1, {now, interval: HOUR}).rows, d1 = Archive.validateSeries(native.d1, {now, interval: DAY}).rows;
+    frames.h4 = aggregateNative(h1, HOUR, 4 * HOUR); frames.d1 = d1; htfSource = 'COINBASE_NATIVE_1H_1D';
+  }
+  return {asset, product: Archive.PRODUCTS[asset], rows, index, dayHash, frames, htfSource, issues: validated.issues, gaps: validated.gaps.length};
 }
 function lowerBound(rows, time) { let low = 0, high = rows.length; while (low < high) { const middle = (low + high) >> 1; if (rows[middle].time < time) low = middle + 1; else high = middle; } return low; }
 function windowRows(prepared, from, to) { return prepared.rows.slice(lowerBound(prepared.rows, from), lowerBound(prepared.rows, to)); }
@@ -129,18 +144,20 @@ function assetCandidates({scanId, timestamp, prepared, check}) {
   const candidates = evaluated.map((candidate, index) => {
     const divider = String(candidate.candidateKey || '').lastIndexOf(':'), strategy = candidate.strategy || (divider > 0 ? candidate.candidateKey.slice(0, divider) : null), direction = candidate.direction || (divider > 0 ? candidate.candidateKey.slice(divider + 1) : null), identified = {...candidate, strategy, direction};
     const plan = Rank.geometry(identified), quant = Number.isFinite(Number(candidate.setupQuality ?? candidate.quality)) ? Number(candidate.setupQuality ?? candidate.quality) : null;
-    const provenance = {dataset_version: VERSION, label_version: LABEL_VERSION, scan_id: scanId, scan_timestamp: timestamp, asset: prepared.asset, product: prepared.product, entry_source: ENTRY.source, entry_venue: ENTRY.venue, entry_instrument_type: ENTRY.instrument_type, decision_price_definition: 'close of the latest completed 5m candle at the scan timestamp', latest_feature_candle_timestamp: check.latest_feature_candle_timestamp, latest_feature_candle_close: check.latest_feature_candle_close, freshness_status: check.freshness_status, history_window: {policy: 'production bar counts; every timeframe complete, consecutive, closing at the scan', bars: PRODUCTION_BARS, frames: check.frames, from: timestamp - HISTORY_MS, to: timestamp, sha256: historySha}, archive_version: Archive.ARCHIVE_VERSION};
+    const provenance = {dataset_version: VERSION, label_version: LABEL_VERSION, scan_id: scanId, scan_timestamp: timestamp, asset: prepared.asset, product: prepared.product, entry_source: ENTRY.source, entry_venue: ENTRY.venue, entry_instrument_type: ENTRY.instrument_type, decision_price_definition: 'close of the latest completed 5m candle at the scan timestamp', latest_feature_candle_timestamp: check.latest_feature_candle_timestamp, latest_feature_candle_close: check.latest_feature_candle_close, freshness_status: check.freshness_status, history_window: {policy: 'production bar counts; every timeframe complete, consecutive, closing at the scan', htf_source: prepared.htfSource, bars: PRODUCTION_BARS, frames: check.frames, from: timestamp - HISTORY_MS, to: timestamp, sha256: historySha}, archive_version: Archive.ARCHIVE_VERSION};
     const features = {...Rank.preEntryFeatures(timeframes, timestamp, identified), provenance, sequence_compact: compact};
     return {candidate_id: `v2c-${Rank.hash([scanId, prepared.asset, index, strategy, direction, plan.entry, plan.stop])}`, timestamp, asset: prepared.asset, invo_instrument: prepared.product, direction: direction || null, strategy: strategy || null, reference_price: Number.isFinite(Number(candidate.entry)) ? Number(candidate.entry) : null, entry: plan.entry, stop: plan.stop, tp1: plan.tp1, tp2: plan.tp2, rr: plan.rr, setup_quality: quant, entry_quality: candidate.entryQuality || null, quant_score: quant, ml_applicability: 'ML_NOT_AVAILABLE_FOR_HISTORICAL_TIMESTAMP', ml_raw_score: null, combined_score: quant, regime: candidate.regime || 'UNCLASSIFIED', feature_json: features, feature_hash: Rank.hash(features), valid_current_geometry: plan.valid, invalidation_reason: plan.valid ? null : (candidate.reason || 'Candidate did not supply valid current geometry'), candidate_rank: null, candidate_count: 0, targets: {status: 'PENDING_OUTCOME'}, candidate_hash: null};
   });
   return {candidates, excluded: null, diagnostics, historySha};
 }
-function snapshotRecord({scanId, timestamp, universe, sourceHash, candidates}) {
-  const value = {scan_id: scanId, scan_timestamp: timestamp, data_timestamp: timestamp, universe_mode: 'HISTORICAL_DATA_UNIVERSE_PROXY', eligible_universe: universe, engine_version: VERSION, strategy_version: 'quant-engine-shared', quant_version: 'quant-engine-shared', ml_version: 'ML_NOT_AVAILABLE_FOR_HISTORICAL_TIMESTAMP', feature_version: `objective-feature-v1+${SEQUENCE_COMPACT_VERSION}`, source_dataset_hash: sourceHash, scan_cadence_ms: DAY, candidate_count: candidates.length};
+function snapshotRecord({scanId, timestamp, universe, sourceHash, candidates, version = VERSION}) {
+  const value = {scan_id: scanId, scan_timestamp: timestamp, data_timestamp: timestamp, universe_mode: 'HISTORICAL_DATA_UNIVERSE_PROXY', eligible_universe: universe, engine_version: version, strategy_version: 'quant-engine-shared', quant_version: 'quant-engine-shared', ml_version: 'ML_NOT_AVAILABLE_FOR_HISTORICAL_TIMESTAMP', feature_version: `objective-feature-v1+${SEQUENCE_COMPACT_VERSION}`, source_dataset_hash: sourceHash, scan_cadence_ms: DAY, candidate_count: candidates.length};
   return {...value, snapshot_hash: Rank.hash(value)};
 }
 function buildScan({timestamp, assets}) {
-  const scanId = `hrp-${VERSION}-${DAY}-${timestamp}`, universe = [], excluded = [], diagnostics = {}, all = [], hashes = [];
+  const version = assets.some(a => a.htfSource === 'COINBASE_NATIVE_1H_1D') ? NATIVE_HTF_VERSION : VERSION;
+  if (assets.some(a => (a.htfSource === 'COINBASE_NATIVE_1H_1D') !== (version === NATIVE_HTF_VERSION))) throw new Error('POLICY_MIXING_REJECTED: all assets in a scan must share one context policy');
+  const scanId = `hrp-${version}-${DAY}-${timestamp}`, universe = [], excluded = [], diagnostics = {}, all = [], hashes = [];
   for (const prepared of assets) {
     const check = historyCheck(prepared, timestamp);
     if (!check.ok) { excluded.push({asset: prepared.asset, reason: check.reason, freshness_status: check.freshness_status}); continue; }
@@ -149,7 +166,7 @@ function buildScan({timestamp, assets}) {
     universe.push(prepared.asset); diagnostics[prepared.asset] = result.diagnostics; hashes.push([prepared.asset, result.historySha]); all.push(...result.candidates);
   }
   if (!universe.length) return {scanId, timestamp, skipped: true, excluded};
-  const candidates = Rank.finalizeCandidates(all), snapshot = snapshotRecord({scanId, timestamp, universe, sourceHash: Rank.hash(hashes), candidates});
+  const candidates = Rank.finalizeCandidates(all), snapshot = snapshotRecord({scanId, timestamp, universe, sourceHash: Rank.hash(hashes), candidates, version});
   return {scanId, timestamp, snapshot, candidates, excluded, diagnostics};
 }
 
@@ -186,4 +203,4 @@ function resolveStrict(candidate, prepared) {
   return {status: 'RESOLVED', TP1_BEFORE_SL: tp1Hit, FINAL_R: finalR - costR, MFE: mfe, MAE: mae, STOP_HIT: stopHit, TP2_HIT: tp2Hit, duration_bars: bars, exit_reason: exit, entry_timestamp: timestamp, entry_price: rawEntry, fill_price: entry, entry_source: ENTRY.source, entry_venue: ENTRY.venue, entry_instrument_type: ENTRY.instrument_type, outcome_source: ENTRY.source, outcome_venue: ENTRY.venue, outcome_instrument_type: ENTRY.instrument_type, outcome_window_sha256: sha(candleText(used)), same_candle_policy: 'STOP_FIRST; breakeven assumed after TP1 on the TP1 candle', cost_round_trip: .0016, label_version: LABEL_VERSION, dataset_version: VERSION};
 }
 
-module.exports = {VERSION, LABEL_VERSION, SEQUENCE_COMPACT_VERSION, PRODUCTION_BARS, TF_MS, HISTORY_BARS, HISTORY_MS, ENTRY, prepareAsset, historyCheck, assertWindowIntegrity, windowRows, windowHash, gateDiagnostics, compactSequence, expandSequence, assetCandidates, buildScan, snapshotRecord, resolveStrict};
+module.exports = {VERSION, NATIVE_HTF_VERSION, aggregateNative, LABEL_VERSION, SEQUENCE_COMPACT_VERSION, PRODUCTION_BARS, TF_MS, HISTORY_BARS, HISTORY_MS, ENTRY, prepareAsset, historyCheck, assertWindowIntegrity, windowRows, windowHash, gateDiagnostics, compactSequence, expandSequence, assetCandidates, buildScan, snapshotRecord, resolveStrict};
