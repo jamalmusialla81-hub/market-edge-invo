@@ -137,3 +137,80 @@ About 22% of asset-evaluations emit a candidate, which averages 1.3 per scan;
 native-HTF proposal gives 172, below the ~300 needed before rank evidence
 is meaningful. None of the earlier model, ablation, or walk-forward numbers
 are evidence about alpha; the cross-market result is only a hypothesis to retest.
+
+---
+
+## Update — native-HTF generated (approved 2026-09-27, CI run 36309065656)
+
+`research-outcome-recovery.yml` is now **disabled** (`disabled_manually`). The
+workflow is preserved, and it no longer relabels legacy data or redeploys the
+Worker.
+
+`HISTORICAL-RANK-V2-CLEAN-NATIVE-HTF` is a separate version with separate
+scan IDs. It is never merged with strict `HISTORICAL-RANK-V2-CLEAN`.
+- 5m, 15m and 1h are strict: aggregated from Coinbase spot 5m, no fill, fail closed on gaps.
+- 4h is aggregated from native Coinbase spot 1h candles.
+- 1d uses native Coinbase spot daily candles.
+- Only bars that have closed at or before the scan are used.
+- Each row records every frame's source and the sha256 of the exact bars fed.
+
+| | Strict V2-CLEAN | Native-HTF |
+|---|---|---|
+| Dev scans with >= 1 eligible asset | 166 | 538 |
+| **Choice scan groups** | **15** | **172** |
+| Candidates (rankable) / resolved | 69 / 69 | 697 / 695 (2 missing-candle unresolved) |
+| Assets | BTC 27, XRP 17, DOGE 16, SOL 9 | BTC 97, ETH 113, SOL 106, XRP 111, DOGE 126, LTC 144 |
+| Strategy mix | TC 67%, SWEEP 13%, BRK 10%, MR 7%, MOM 3% | TC 61%, SWEEP 14%, BRK 13%, MOM 6%, MR 5% |
+| Long / short | 40 / 29 | 364 / 333 |
+| Entry error p50 / p95 / max | 3.3 / 7.9 / 10.1 bps | 2.8 / 9.1 / 27.2 bps |
+| Label reproduction | 69/69 | 150/150 |
+| Stop / TP1 agreement (Binance spot) | 97.1% / 100% | 90.7% / 98.7% |
+| Stale / cross-venue / missing provenance / version mismatch | 0/0/0/– | 0/0/0/0 |
+| Label audit | PASS | PASS |
+| Holdout (counts only) | 0 | 150 scans, 188 candidates |
+
+### Does native HTF change the feature definition? (`htf-policy-comparison.json`)
+
+There are 379 development (scan, asset) pairs where **both** policies pass.
+Across them, disagreement was **0%** on:
+- 4h/1d structure trend and EMA bias
+- 4h regime and daily macro regime
+- the set of qualifying setups (63 pairs with setups)
+- candidate scores (69 common candidates)
+- the scan's top pick (15 scans)
+
+The latest 4h and 1d closes are identical in every pair. Native bars fill
+coverage: 2,764 native-only pairs against 0 strict-only pairs. On this
+overlap they do not change the feature definition. Caveat: the overlap is
+small (69 candidates, 15 multi-candidate scans), and 10% of 4h windows and
+28% of 1d windows differ in some older bar without changing any output.
+
+### Sanity baselines only (`sanity-baselines-native-htf.json`; development choice scans; no tuning or selection)
+
+Covers 171 choice scans and 543 candidates. #1 pick, mean R at 0.08 / 0.16 / 0.25 / 0.40% cost:
+
+| | 0.08% | 0.16% | 0.25% | 0.40% | 95% CI @0.16% |
+|---|---|---|---|---|---|
+| Random (exact expectation) | -0.133 | -0.197 | -0.270 | -0.391 | -0.318 … -0.074 |
+| Current Quant | -0.153 | -0.216 | -0.287 | -0.405 | -0.386 … -0.048 |
+
+- Quant minus Random at 0.16% is -0.019R (CI -0.136 … +0.090).
+- Quant rank buckets: #1 -0.210R, #2-5 -0.069R, #6-10 -0.499R. There is no monotonicity; #1 is worse than #2-5.
+- Weighted pair accuracy is 0.56; mean within-scan Spearman is 0.02.
+
+These are sanity checks, not alpha claims. Current Quant does not beat a
+random same-scan pick on clean development data, and the average candidate is
+negative after costs.
+
+### Forward collection
+
+`phase5-v2-clean.yml` has a daily `forward` stage (cron 01:41 UTC). It
+activates once the workflow is on the default branch.
+- It fetches the trailing 280 complete UTC days from Coinbase spot.
+- It verifies them against the manifest written in the same job.
+- It appends only scans whose 24h outcome window has closed.
+- It skips scans already frozen and never pushes to `main`.
+- Its reports go to a workflow artifact.
+
+Every forward scan is dated after 2025-12-01, so it lands in the sealed
+holdout and does **not** grow the development choice-scan count.
