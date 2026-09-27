@@ -29,7 +29,7 @@ defaults:
     shell: bash   # explicit bash => -eo pipefail, so `| tee` never hides a failure
 
 env:
-  PY_DEPS: nautilus_trader fastapi "uvicorn[standard]" pydantic httpx pytest pyinstaller
+  PY_DEPS: nautilus_trader fastapi uvicorn[standard] pydantic httpx pytest pyinstaller
 
 jobs:
   tests:
