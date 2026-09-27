@@ -1,0 +1,3490 @@
+{
+ "dataset_version": "HISTORICAL-RANK-V2-CLEAN-NATIVE-HTF",
+ "audited_at": "2026-09-27T10:23:50.777Z",
+ "scope": "development rows only (scan_timestamp < holdout dev cutoff)",
+ "audit_source": "Binance SPOT 1m public archive (USDT quote); never used to construct entries or labels",
+ "rows": 697,
+ "sampled": 150,
+ "decision_price_error_abs": {
+  "n": 150,
+  "p50_bps": 2.4401079750535626,
+  "p95_bps": 9.226361256333854,
+  "max_bps": 27.151211361737815
+ },
+ "entry_price_error_abs": {
+  "n": 150,
+  "p50_bps": 2.7565021314868154,
+  "p95_bps": 9.119528464944347,
+  "max_bps": 27.151211361737815
+ },
+ "provenance_missing": 0,
+ "stale_rows": 0,
+ "cross_venue_constructed_rows": 0,
+ "dataset_version_mismatch": 0,
+ "label_reproducibility": {
+  "checked": 150,
+  "identical": 150,
+  "mismatches": []
+ },
+ "independent_label_agreement": {
+  "checked": 150,
+  "stopAgree": 136,
+  "tp1Agree": 148,
+  "noBinanceData": 0,
+  "stopAgreement": 0.9066666666666666,
+  "tp1Agreement": 0.9866666666666667
+ },
+ "label_audit": "PASS",
+ "inspected": [
+  {
+   "candidate_id": "v2c-3d6340f5",
+   "asset": "SOL",
+   "date": "2024-05-28T00:00",
+   "direction": "long",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 170.02,
+   "entry_price": 170.02,
+   "status": "RESOLVED",
+   "binance_decision_close": 170.15,
+   "decision_error_bps": -7.640317367029192,
+   "binance_entry_open": 170.15,
+   "entry_error_bps": -7.640317367029192,
+   "stored": {
+    "stop": true,
+    "tp1": false,
+    "exit": "STOP"
+   },
+   "independent": {
+    "stop": true,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-59e6baf3",
+   "asset": "BTC",
+   "date": "2025-04-02T00:00",
+   "direction": "short",
+   "strategy": "LIQUIDITY-SWEEP REVERSAL",
+   "decision_price": 85170.37,
+   "entry_price": 85166.92,
+   "status": "RESOLVED",
+   "binance_decision_close": 85158.34,
+   "decision_error_bps": 1.412662576560919,
+   "binance_entry_open": 85158.35,
+   "entry_error_bps": 1.006360503696957,
+   "stored": {
+    "stop": true,
+    "tp1": true,
+    "exit": "BREAKEVEN_AFTER_TP1"
+   },
+   "independent": {
+    "stop": true,
+    "tp1": true
+   }
+  },
+  {
+   "candidate_id": "v2c-9b42432e",
+   "asset": "BTC",
+   "date": "2025-02-18T00:00",
+   "direction": "short",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 95781.8,
+   "entry_price": 95781.8,
+   "status": "RESOLVED",
+   "binance_decision_close": 95780,
+   "decision_error_bps": 0.18793067446232214,
+   "binance_entry_open": 95780.01,
+   "entry_error_bps": 0.18688659564780608,
+   "stored": {
+    "stop": false,
+    "tp1": false,
+    "exit": "TIMEOUT"
+   },
+   "independent": {
+    "stop": false,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-9045d167",
+   "asset": "ETH",
+   "date": "2025-01-22T00:00",
+   "direction": "long",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 3327.57,
+   "entry_price": 3327.56,
+   "status": "RESOLVED",
+   "binance_decision_close": 3327.54,
+   "decision_error_bps": 0.09015669233169987,
+   "binance_entry_open": 3327.55,
+   "entry_error_bps": 0.030052140462810684,
+   "stored": {
+    "stop": true,
+    "tp1": false,
+    "exit": "STOP"
+   },
+   "independent": {
+    "stop": true,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-7428dca9",
+   "asset": "ETH",
+   "date": "2025-03-18T00:00",
+   "direction": "long",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 1926.28,
+   "entry_price": 1926.2,
+   "status": "RESOLVED",
+   "binance_decision_close": 1926.31,
+   "decision_error_bps": -0.15573817298331072,
+   "binance_entry_open": 1926.3,
+   "entry_error_bps": -0.5191299382234504,
+   "stored": {
+    "stop": true,
+    "tp1": false,
+    "exit": "STOP"
+   },
+   "independent": {
+    "stop": true,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-af96b22c",
+   "asset": "XRP",
+   "date": "2025-02-09T00:00",
+   "direction": "long",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 2.4195,
+   "entry_price": 2.4195,
+   "status": "RESOLVED",
+   "binance_decision_close": 2.419,
+   "decision_error_bps": 2.0669698222408606,
+   "binance_entry_open": 2.419,
+   "entry_error_bps": 2.0669698222408606,
+   "stored": {
+    "stop": true,
+    "tp1": true,
+    "exit": "BREAKEVEN_AFTER_TP1"
+   },
+   "independent": {
+    "stop": true,
+    "tp1": true
+   }
+  },
+  {
+   "candidate_id": "v2c-07c4df55",
+   "asset": "SOL",
+   "date": "2025-03-08T00:00",
+   "direction": "short",
+   "strategy": "BREAKOUT + RETEST",
+   "decision_price": 139.33,
+   "entry_price": 139.31,
+   "status": "RESOLVED",
+   "binance_decision_close": 139.39,
+   "decision_error_bps": -4.304469474135653,
+   "binance_entry_open": 139.39,
+   "entry_error_bps": -5.73929263218198,
+   "stored": {
+    "stop": false,
+    "tp1": false,
+    "exit": "TIMEOUT"
+   },
+   "independent": {
+    "stop": false,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-8cf0514f",
+   "asset": "XRP",
+   "date": "2025-02-19T00:00",
+   "direction": "short",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 2.561,
+   "entry_price": 2.5615,
+   "status": "RESOLVED",
+   "binance_decision_close": 2.5628,
+   "decision_error_bps": -7.023567972530564,
+   "binance_entry_open": 2.5629,
+   "entry_error_bps": -5.462561941550481,
+   "stored": {
+    "stop": true,
+    "tp1": false,
+    "exit": "STOP"
+   },
+   "independent": {
+    "stop": true,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-01bdebec",
+   "asset": "ETH",
+   "date": "2025-03-08T00:00",
+   "direction": "long",
+   "strategy": "LIQUIDITY-SWEEP REVERSAL",
+   "decision_price": 2140.81,
+   "entry_price": 2140.81,
+   "status": "RESOLVED",
+   "binance_decision_close": 2141.6,
+   "decision_error_bps": -3.6888307807247944,
+   "binance_entry_open": 2141.6,
+   "entry_error_bps": -3.6888307807247944,
+   "stored": {
+    "stop": true,
+    "tp1": false,
+    "exit": "STOP"
+   },
+   "independent": {
+    "stop": true,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-8f852667",
+   "asset": "DOGE",
+   "date": "2025-01-20T00:00",
+   "direction": "short",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 0.35791,
+   "entry_price": 0.35791,
+   "status": "RESOLVED",
+   "binance_decision_close": 0.3584,
+   "decision_error_bps": -13.671874999999778,
+   "binance_entry_open": 0.35839,
+   "entry_error_bps": -13.393230837913661,
+   "stored": {
+    "stop": false,
+    "tp1": false,
+    "exit": "TIMEOUT"
+   },
+   "independent": {
+    "stop": false,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-07dd68a5",
+   "asset": "XRP",
+   "date": "2025-01-22T00:00",
+   "direction": "long",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 3.1748,
+   "entry_price": 3.1748,
+   "status": "RESOLVED",
+   "binance_decision_close": 3.1738,
+   "decision_error_bps": 3.1507971516786526,
+   "binance_entry_open": 3.1739,
+   "entry_error_bps": 2.8356280916219667,
+   "stored": {
+    "stop": false,
+    "tp1": false,
+    "exit": "TIMEOUT"
+   },
+   "independent": {
+    "stop": false,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-5fa8d60e",
+   "asset": "LTC",
+   "date": "2025-03-21T00:00",
+   "direction": "long",
+   "strategy": "BREAKOUT + RETEST",
+   "decision_price": 93.25,
+   "entry_price": 93.23,
+   "status": "RESOLVED",
+   "binance_decision_close": 93.29,
+   "decision_error_bps": -4.2877050058964805,
+   "binance_entry_open": 93.29,
+   "entry_error_bps": -6.4315575088436105,
+   "stored": {
+    "stop": true,
+    "tp1": false,
+    "exit": "STOP"
+   },
+   "independent": {
+    "stop": false,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-a18dcebd",
+   "asset": "DOGE",
+   "date": "2025-01-20T00:00",
+   "direction": "short",
+   "strategy": "MOMENTUM CONTINUATION",
+   "decision_price": 0.35791,
+   "entry_price": 0.35791,
+   "status": "RESOLVED",
+   "binance_decision_close": 0.3584,
+   "decision_error_bps": -13.671874999999778,
+   "binance_entry_open": 0.35839,
+   "entry_error_bps": -13.393230837913661,
+   "stored": {
+    "stop": true,
+    "tp1": false,
+    "exit": "STOP"
+   },
+   "independent": {
+    "stop": true,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-3505e78f",
+   "asset": "SOL",
+   "date": "2025-04-27T00:00",
+   "direction": "short",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 149.27,
+   "entry_price": 149.29,
+   "status": "RESOLVED",
+   "binance_decision_close": 149.21,
+   "decision_error_bps": 4.021178205213527,
+   "binance_entry_open": 149.22,
+   "entry_error_bps": 4.691060179600193,
+   "stored": {
+    "stop": true,
+    "tp1": false,
+    "exit": "STOP"
+   },
+   "independent": {
+    "stop": true,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-46b7d2cc",
+   "asset": "SOL",
+   "date": "2025-08-29T00:00",
+   "direction": "long",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 214.43,
+   "entry_price": 214.44,
+   "status": "RESOLVED",
+   "binance_decision_close": 214.43,
+   "decision_error_bps": 0,
+   "binance_entry_open": 214.43,
+   "entry_error_bps": 0.46635265587902097,
+   "stored": {
+    "stop": true,
+    "tp1": false,
+    "exit": "STOP"
+   },
+   "independent": {
+    "stop": true,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-252a10f9",
+   "asset": "DOGE",
+   "date": "2025-06-20T00:00",
+   "direction": "short",
+   "strategy": "LIQUIDITY-SWEEP REVERSAL",
+   "decision_price": 0.17098,
+   "entry_price": 0.17098,
+   "status": "RESOLVED",
+   "binance_decision_close": 0.17092,
+   "decision_error_bps": 3.5104142288799878,
+   "binance_entry_open": 0.17091,
+   "entry_error_bps": 4.0957228950899705,
+   "stored": {
+    "stop": true,
+    "tp1": false,
+    "exit": "STOP"
+   },
+   "independent": {
+    "stop": true,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-c76e7476",
+   "asset": "LTC",
+   "date": "2025-06-15T00:00",
+   "direction": "short",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 85.22,
+   "entry_price": 85.21,
+   "status": "RESOLVED",
+   "binance_decision_close": 85.18,
+   "decision_error_bps": 4.695938013616896,
+   "binance_entry_open": 85.18,
+   "entry_error_bps": 3.521953510212672,
+   "stored": {
+    "stop": false,
+    "tp1": false,
+    "exit": "TIMEOUT"
+   },
+   "independent": {
+    "stop": false,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-19c68965",
+   "asset": "SOL",
+   "date": "2025-02-24T00:00",
+   "direction": "short",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 167.95,
+   "entry_price": 167.95,
+   "status": "RESOLVED",
+   "binance_decision_close": 167.94,
+   "decision_error_bps": 0.5954507562222489,
+   "binance_entry_open": 167.94,
+   "entry_error_bps": 0.5954507562222489,
+   "stored": {
+    "stop": false,
+    "tp1": true,
+    "exit": "TP2"
+   },
+   "independent": {
+    "stop": false,
+    "tp1": true
+   }
+  },
+  {
+   "candidate_id": "v2c-b2465dd3",
+   "asset": "SOL",
+   "date": "2025-05-05T00:00",
+   "direction": "short",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 143.97,
+   "entry_price": 143.96,
+   "status": "RESOLVED",
+   "binance_decision_close": 143.95,
+   "decision_error_bps": 1.389371309483689,
+   "binance_entry_open": 143.94,
+   "entry_error_bps": 1.3894678338211008,
+   "stored": {
+    "stop": false,
+    "tp1": false,
+    "exit": "TIMEOUT"
+   },
+   "independent": {
+    "stop": false,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-8b17bf39",
+   "asset": "SOL",
+   "date": "2025-07-03T00:00",
+   "direction": "long",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 152.32,
+   "entry_price": 152.35,
+   "status": "RESOLVED",
+   "binance_decision_close": 152.27,
+   "decision_error_bps": 3.2836409010306156,
+   "binance_entry_open": 152.28,
+   "entry_error_bps": 4.59679537693658,
+   "stored": {
+    "stop": false,
+    "tp1": false,
+    "exit": "TIMEOUT"
+   },
+   "independent": {
+    "stop": false,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-358aa18c",
+   "asset": "SOL",
+   "date": "2025-03-24T00:00",
+   "direction": "long",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 132.85,
+   "entry_price": 132.85,
+   "status": "RESOLVED",
+   "binance_decision_close": 132.84,
+   "decision_error_bps": 0.7527853056310541,
+   "binance_entry_open": 132.85,
+   "entry_error_bps": 0,
+   "stored": {
+    "stop": false,
+    "tp1": true,
+    "exit": "TIMEOUT"
+   },
+   "independent": {
+    "stop": false,
+    "tp1": true
+   }
+  },
+  {
+   "candidate_id": "v2c-66ee93e9",
+   "asset": "BTC",
+   "date": "2025-04-29T00:00",
+   "direction": "long",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 95042.57,
+   "entry_price": 95042.56,
+   "status": "RESOLVED",
+   "binance_decision_close": 95011.18,
+   "decision_error_bps": 3.30382171866761,
+   "binance_entry_open": 95011.18,
+   "entry_error_bps": 3.302769210951073,
+   "stored": {
+    "stop": false,
+    "tp1": false,
+    "exit": "TIMEOUT"
+   },
+   "independent": {
+    "stop": false,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-81310d15",
+   "asset": "DOGE",
+   "date": "2025-06-13T00:00",
+   "direction": "short",
+   "strategy": "MOMENTUM CONTINUATION",
+   "decision_price": 0.18123,
+   "entry_price": 0.18121,
+   "status": "RESOLVED",
+   "binance_decision_close": 0.1811,
+   "decision_error_bps": 7.178354500274597,
+   "binance_entry_open": 0.18111,
+   "entry_error_bps": 5.521506266910059,
+   "stored": {
+    "stop": false,
+    "tp1": true,
+    "exit": "TIMEOUT"
+   },
+   "independent": {
+    "stop": false,
+    "tp1": true
+   }
+  },
+  {
+   "candidate_id": "v2c-eb7018d6",
+   "asset": "LTC",
+   "date": "2025-05-31T00:00",
+   "direction": "short",
+   "strategy": "BREAKOUT + RETEST",
+   "decision_price": 85.68,
+   "entry_price": 85.7,
+   "status": "RESOLVED",
+   "binance_decision_close": 85.64,
+   "decision_error_bps": 4.670714619336991,
+   "binance_entry_open": 85.64,
+   "entry_error_bps": 7.006071929005486,
+   "stored": {
+    "stop": true,
+    "tp1": false,
+    "exit": "STOP"
+   },
+   "independent": {
+    "stop": true,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-60a55b13",
+   "asset": "LTC",
+   "date": "2025-03-15T00:00",
+   "direction": "long",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 91.31,
+   "entry_price": 91.33,
+   "status": "RESOLVED",
+   "binance_decision_close": 91.31,
+   "decision_error_bps": 0,
+   "binance_entry_open": 91.32,
+   "entry_error_bps": 1.0950503723172744,
+   "stored": {
+    "stop": false,
+    "tp1": false,
+    "exit": "TIMEOUT"
+   },
+   "independent": {
+    "stop": false,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-558606ca",
+   "asset": "DOGE",
+   "date": "2024-07-29T00:00",
+   "direction": "short",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 0.13005,
+   "entry_price": 0.13003,
+   "status": "RESOLVED",
+   "binance_decision_close": 0.13004,
+   "decision_error_bps": 0.7689941556443536,
+   "binance_entry_open": 0.13005,
+   "entry_error_bps": -1.5378700499801834,
+   "stored": {
+    "stop": true,
+    "tp1": false,
+    "exit": "STOP"
+   },
+   "independent": {
+    "stop": true,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-0cb679d3",
+   "asset": "LTC",
+   "date": "2025-06-29T00:00",
+   "direction": "long",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 86.36,
+   "entry_price": 86.36,
+   "status": "RESOLVED",
+   "binance_decision_close": 86.31,
+   "decision_error_bps": 5.793071486501766,
+   "binance_entry_open": 86.3,
+   "entry_error_bps": 6.952491309386577,
+   "stored": {
+    "stop": false,
+    "tp1": false,
+    "exit": "TIMEOUT"
+   },
+   "independent": {
+    "stop": false,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-b772796e",
+   "asset": "LTC",
+   "date": "2025-02-23T00:00",
+   "direction": "short",
+   "strategy": "BREAKOUT + RETEST",
+   "decision_price": 125.94,
+   "entry_price": 125.94,
+   "status": "RESOLVED",
+   "binance_decision_close": 125.9,
+   "decision_error_bps": 3.1771247021428195,
+   "binance_entry_open": 125.91,
+   "entry_error_bps": 2.382654276864571,
+   "stored": {
+    "stop": true,
+    "tp1": false,
+    "exit": "STOP"
+   },
+   "independent": {
+    "stop": true,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-df506dd7",
+   "asset": "BTC",
+   "date": "2025-01-25T00:00",
+   "direction": "long",
+   "strategy": "LIQUIDITY-SWEEP REVERSAL",
+   "decision_price": 104850.27,
+   "entry_price": 104866.13,
+   "status": "RESOLVED",
+   "binance_decision_close": 104870.5,
+   "decision_error_bps": -1.929045823181319,
+   "binance_entry_open": 104870.51,
+   "entry_error_bps": -0.4176579288106552,
+   "stored": {
+    "stop": true,
+    "tp1": false,
+    "exit": "STOP"
+   },
+   "independent": {
+    "stop": true,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-78d065fd",
+   "asset": "XRP",
+   "date": "2025-06-30T00:00",
+   "direction": "long",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 2.2067,
+   "entry_price": 2.2067,
+   "status": "RESOLVED",
+   "binance_decision_close": 2.2061,
+   "decision_error_bps": 2.719731653142432,
+   "binance_entry_open": 2.2062,
+   "entry_error_bps": 2.2663403136613525,
+   "stored": {
+    "stop": true,
+    "tp1": false,
+    "exit": "STOP"
+   },
+   "independent": {
+    "stop": true,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-a259e87c",
+   "asset": "XRP",
+   "date": "2025-05-06T00:00",
+   "direction": "short",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 2.1303,
+   "entry_price": 2.1302,
+   "status": "RESOLVED",
+   "binance_decision_close": 2.1306,
+   "decision_error_bps": -1.408054069275133,
+   "binance_entry_open": 2.1306,
+   "entry_error_bps": -1.8774054257020278,
+   "stored": {
+    "stop": false,
+    "tp1": false,
+    "exit": "TIMEOUT"
+   },
+   "independent": {
+    "stop": false,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-86fb39da",
+   "asset": "LTC",
+   "date": "2024-08-20T00:00",
+   "direction": "long",
+   "strategy": "LIQUIDITY-SWEEP REVERSAL",
+   "decision_price": 66.33,
+   "entry_price": 66.34,
+   "status": "RESOLVED",
+   "binance_decision_close": 66.32,
+   "decision_error_bps": 1.5078407720148235,
+   "binance_entry_open": 66.32,
+   "entry_error_bps": 3.015681544029647,
+   "stored": {
+    "stop": true,
+    "tp1": true,
+    "exit": "BREAKEVEN_AFTER_TP1"
+   },
+   "independent": {
+    "stop": true,
+    "tp1": true
+   }
+  },
+  {
+   "candidate_id": "v2c-608abb56",
+   "asset": "SOL",
+   "date": "2024-04-18T00:00",
+   "direction": "short",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 131.84,
+   "entry_price": 131.83,
+   "status": "RESOLVED",
+   "binance_decision_close": 131.84,
+   "decision_error_bps": 0,
+   "binance_entry_open": 131.84,
+   "entry_error_bps": -0.7584951456307554,
+   "stored": {
+    "stop": true,
+    "tp1": false,
+    "exit": "STOP"
+   },
+   "independent": {
+    "stop": true,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-d55fdc0d",
+   "asset": "LTC",
+   "date": "2024-07-03T00:00",
+   "direction": "long",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 75.93,
+   "entry_price": 75.94,
+   "status": "RESOLVED",
+   "binance_decision_close": 76.04,
+   "decision_error_bps": -14.466070489216332,
+   "binance_entry_open": 76.04,
+   "entry_error_bps": -13.150973172015856,
+   "stored": {
+    "stop": true,
+    "tp1": false,
+    "exit": "STOP"
+   },
+   "independent": {
+    "stop": false,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-d2ff0600",
+   "asset": "XRP",
+   "date": "2025-01-20T00:00",
+   "direction": "short",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 2.9565,
+   "entry_price": 2.9566,
+   "status": "RESOLVED",
+   "binance_decision_close": 2.9587,
+   "decision_error_bps": -7.4356981106560305,
+   "binance_entry_open": 2.9586,
+   "entry_error_bps": -6.759954032313775,
+   "stored": {
+    "stop": true,
+    "tp1": false,
+    "exit": "STOP"
+   },
+   "independent": {
+    "stop": true,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-bd55f8f8",
+   "asset": "DOGE",
+   "date": "2024-04-14T00:00",
+   "direction": "short",
+   "strategy": "MOMENTUM CONTINUATION",
+   "decision_price": 0.15273,
+   "entry_price": 0.15269,
+   "status": "RESOLVED",
+   "binance_decision_close": 0.15254,
+   "decision_error_bps": 12.455749311655051,
+   "binance_entry_open": 0.15254,
+   "entry_error_bps": 9.833486298673755,
+   "stored": {
+    "stop": true,
+    "tp1": false,
+    "exit": "STOP"
+   },
+   "independent": {
+    "stop": true,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-1ccb885c",
+   "asset": "ETH",
+   "date": "2025-06-13T00:00",
+   "direction": "short",
+   "strategy": "MOMENTUM CONTINUATION",
+   "decision_price": 2643.8,
+   "entry_price": 2643.81,
+   "status": "RESOLVED",
+   "binance_decision_close": 2642.65,
+   "decision_error_bps": 4.3516924299469295,
+   "binance_entry_open": 2642.66,
+   "entry_error_bps": 4.351675962857016,
+   "stored": {
+    "stop": false,
+    "tp1": true,
+    "exit": "TIMEOUT"
+   },
+   "independent": {
+    "stop": false,
+    "tp1": true
+   }
+  },
+  {
+   "candidate_id": "v2c-94057d23",
+   "asset": "XRP",
+   "date": "2024-07-10T00:00",
+   "direction": "short",
+   "strategy": "LIQUIDITY-SWEEP REVERSAL",
+   "decision_price": 0.4357,
+   "entry_price": 0.4358,
+   "status": "RESOLVED",
+   "binance_decision_close": 0.4356,
+   "decision_error_bps": 2.295684113866603,
+   "binance_entry_open": 0.4357,
+   "entry_error_bps": 2.2951572182705604,
+   "stored": {
+    "stop": true,
+    "tp1": true,
+    "exit": "BREAKEVEN_AFTER_TP1"
+   },
+   "independent": {
+    "stop": false,
+    "tp1": true
+   }
+  },
+  {
+   "candidate_id": "v2c-0277015f",
+   "asset": "LTC",
+   "date": "2025-06-07T00:00",
+   "direction": "long",
+   "strategy": "BREAKOUT + RETEST",
+   "decision_price": 87.35,
+   "entry_price": 87.33,
+   "status": "RESOLVED",
+   "binance_decision_close": 87.25,
+   "decision_error_bps": 11.461318051575464,
+   "binance_entry_open": 87.25,
+   "entry_error_bps": 9.169054441260371,
+   "stored": {
+    "stop": true,
+    "tp1": false,
+    "exit": "STOP"
+   },
+   "independent": {
+    "stop": true,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-c52f747d",
+   "asset": "XRP",
+   "date": "2025-05-31T00:00",
+   "direction": "short",
+   "strategy": "MOMENTUM CONTINUATION",
+   "decision_price": 2.1408,
+   "entry_price": 2.1408,
+   "status": "RESOLVED",
+   "binance_decision_close": 2.1398,
+   "decision_error_bps": 4.673333956444203,
+   "binance_entry_open": 2.1397,
+   "entry_error_bps": 5.140907603871092,
+   "stored": {
+    "stop": true,
+    "tp1": false,
+    "exit": "STOP"
+   },
+   "independent": {
+    "stop": false,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-81b92b68",
+   "asset": "ETH",
+   "date": "2025-09-02T00:00",
+   "direction": "short",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 4314.76,
+   "entry_price": 4314.87,
+   "status": "RESOLVED",
+   "binance_decision_close": 4314.5,
+   "decision_error_bps": 0.6026190752117522,
+   "binance_entry_open": 4314.5,
+   "entry_error_bps": 0.8575732993398866,
+   "stored": {
+    "stop": false,
+    "tp1": false,
+    "exit": "TIMEOUT"
+   },
+   "independent": {
+    "stop": false,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-85b95b2a",
+   "asset": "SOL",
+   "date": "2025-02-06T00:00",
+   "direction": "short",
+   "strategy": "BREAKOUT + RETEST",
+   "decision_price": 196.13,
+   "entry_price": 196.13,
+   "status": "RESOLVED",
+   "binance_decision_close": 196.12,
+   "decision_error_bps": 0.5098919029156157,
+   "binance_entry_open": 196.12,
+   "entry_error_bps": 0.5098919029156157,
+   "stored": {
+    "stop": true,
+    "tp1": false,
+    "exit": "STOP"
+   },
+   "independent": {
+    "stop": true,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-7bae0bcc",
+   "asset": "ETH",
+   "date": "2024-04-07T00:00",
+   "direction": "long",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 3352.66,
+   "entry_price": 3352.87,
+   "status": "RESOLVED",
+   "binance_decision_close": 3351.59,
+   "decision_error_bps": 3.1925145975475466,
+   "binance_entry_open": 3351.59,
+   "entry_error_bps": 3.8190828830497736,
+   "stored": {
+    "stop": false,
+    "tp1": true,
+    "exit": "TIMEOUT"
+   },
+   "independent": {
+    "stop": false,
+    "tp1": true
+   }
+  },
+  {
+   "candidate_id": "v2c-767eba82",
+   "asset": "ETH",
+   "date": "2024-07-22T00:00",
+   "direction": "long",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 3536.2,
+   "entry_price": 3536.21,
+   "status": "RESOLVED",
+   "binance_decision_close": 3535.92,
+   "decision_error_bps": 0.7918731193012896,
+   "binance_entry_open": 3535.93,
+   "entry_error_bps": 0.7918708797971519,
+   "stored": {
+    "stop": false,
+    "tp1": false,
+    "exit": "TIMEOUT"
+   },
+   "independent": {
+    "stop": false,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-4c9e7719",
+   "asset": "DOGE",
+   "date": "2024-04-07T00:00",
+   "direction": "long",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 0.18581,
+   "entry_price": 0.18577,
+   "status": "RESOLVED",
+   "binance_decision_close": 0.18577,
+   "decision_error_bps": 2.153200193788507,
+   "binance_entry_open": 0.18576,
+   "entry_error_bps": 0.5383290267002572,
+   "stored": {
+    "stop": false,
+    "tp1": true,
+    "exit": "TP2"
+   },
+   "independent": {
+    "stop": false,
+    "tp1": true
+   }
+  },
+  {
+   "candidate_id": "v2c-d36f1070",
+   "asset": "ETH",
+   "date": "2024-07-14T00:00",
+   "direction": "long",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 3176.71,
+   "entry_price": 3176.61,
+   "status": "RESOLVED",
+   "binance_decision_close": 3175.93,
+   "decision_error_bps": 2.4559735258655735,
+   "binance_entry_open": 3175.93,
+   "entry_error_bps": 2.1411051251130075,
+   "stored": {
+    "stop": false,
+    "tp1": true,
+    "exit": "TIMEOUT"
+   },
+   "independent": {
+    "stop": false,
+    "tp1": true
+   }
+  },
+  {
+   "candidate_id": "v2c-a64af7c0",
+   "asset": "SOL",
+   "date": "2025-09-01T00:00",
+   "direction": "short",
+   "strategy": "MOMENTUM CONTINUATION",
+   "decision_price": 200.63,
+   "entry_price": 200.62,
+   "status": "RESOLVED",
+   "binance_decision_close": 200.62,
+   "decision_error_bps": 0.4984547901498715,
+   "binance_entry_open": 200.62,
+   "entry_error_bps": 0,
+   "stored": {
+    "stop": true,
+    "tp1": false,
+    "exit": "STOP"
+   },
+   "independent": {
+    "stop": true,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-691d6ee0",
+   "asset": "XRP",
+   "date": "2025-05-31T00:00",
+   "direction": "short",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 2.1408,
+   "entry_price": 2.1408,
+   "status": "RESOLVED",
+   "binance_decision_close": 2.1398,
+   "decision_error_bps": 4.673333956444203,
+   "binance_entry_open": 2.1397,
+   "entry_error_bps": 5.140907603871092,
+   "stored": {
+    "stop": false,
+    "tp1": false,
+    "exit": "TIMEOUT"
+   },
+   "independent": {
+    "stop": false,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-efa4a3f8",
+   "asset": "DOGE",
+   "date": "2024-04-23T00:00",
+   "direction": "long",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 0.16128,
+   "entry_price": 0.16126,
+   "status": "RESOLVED",
+   "binance_decision_close": 0.1612,
+   "decision_error_bps": 4.962779156327812,
+   "binance_entry_open": 0.16121,
+   "entry_error_bps": 3.1015445691950916,
+   "stored": {
+    "stop": true,
+    "tp1": false,
+    "exit": "STOP"
+   },
+   "independent": {
+    "stop": true,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-030c74fe",
+   "asset": "DOGE",
+   "date": "2024-05-22T00:00",
+   "direction": "long",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 0.17021,
+   "entry_price": 0.17019,
+   "status": "RESOLVED",
+   "binance_decision_close": 0.17024,
+   "decision_error_bps": -1.7622180451126734,
+   "binance_entry_open": 0.17023,
+   "entry_error_bps": -2.349762086587548,
+   "stored": {
+    "stop": false,
+    "tp1": false,
+    "exit": "TIMEOUT"
+   },
+   "independent": {
+    "stop": false,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-5ca24ac1",
+   "asset": "XRP",
+   "date": "2025-09-10T00:00",
+   "direction": "long",
+   "strategy": "MEAN REVERSION",
+   "decision_price": 2.947,
+   "entry_price": 2.9471,
+   "status": "RESOLVED",
+   "binance_decision_close": 2.9474,
+   "decision_error_bps": -1.3571283164826031,
+   "binance_entry_open": 2.9474,
+   "entry_error_bps": -1.01784623736223,
+   "stored": {
+    "stop": false,
+    "tp1": true,
+    "exit": "TP2"
+   },
+   "independent": {
+    "stop": false,
+    "tp1": true
+   }
+  },
+  {
+   "candidate_id": "v2c-26a9ff15",
+   "asset": "XRP",
+   "date": "2025-09-01T00:00",
+   "direction": "short",
+   "strategy": "BREAKOUT + RETEST",
+   "decision_price": 2.7757,
+   "entry_price": 2.7757,
+   "status": "RESOLVED",
+   "binance_decision_close": 2.7757,
+   "decision_error_bps": 0,
+   "binance_entry_open": 2.7757,
+   "entry_error_bps": 0,
+   "stored": {
+    "stop": true,
+    "tp1": true,
+    "exit": "BREAKEVEN_AFTER_TP1"
+   },
+   "independent": {
+    "stop": true,
+    "tp1": true
+   }
+  },
+  {
+   "candidate_id": "v2c-cd6c1955",
+   "asset": "ETH",
+   "date": "2025-04-20T00:00",
+   "direction": "long",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 1612.87,
+   "entry_price": 1612.97,
+   "status": "RESOLVED",
+   "binance_decision_close": 1613.27,
+   "decision_error_bps": -2.479436176213712,
+   "binance_entry_open": 1613.26,
+   "entry_error_bps": -1.7976023703558663,
+   "stored": {
+    "stop": true,
+    "tp1": false,
+    "exit": "STOP"
+   },
+   "independent": {
+    "stop": true,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-d34ad226",
+   "asset": "XRP",
+   "date": "2024-08-11T00:00",
+   "direction": "short",
+   "strategy": "BREAKOUT + RETEST",
+   "decision_price": 0.5842,
+   "entry_price": 0.5842,
+   "status": "RESOLVED",
+   "binance_decision_close": 0.5841,
+   "decision_error_bps": 1.7120356103417222,
+   "binance_entry_open": 0.5841,
+   "entry_error_bps": 1.7120356103417222,
+   "stored": {
+    "stop": true,
+    "tp1": false,
+    "exit": "STOP"
+   },
+   "independent": {
+    "stop": false,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-f59a8e0e",
+   "asset": "SOL",
+   "date": "2025-05-22T00:00",
+   "direction": "long",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 173.61,
+   "entry_price": 173.65,
+   "status": "RESOLVED",
+   "binance_decision_close": 173.53,
+   "decision_error_bps": 4.610153863886524,
+   "binance_entry_open": 173.54,
+   "entry_error_bps": 6.338596289041654,
+   "stored": {
+    "stop": false,
+    "tp1": false,
+    "exit": "TIMEOUT"
+   },
+   "independent": {
+    "stop": false,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-67f12ea2",
+   "asset": "ETH",
+   "date": "2024-09-02T00:00",
+   "direction": "short",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 2425.9,
+   "entry_price": 2425.78,
+   "status": "RESOLVED",
+   "binance_decision_close": 2425.72,
+   "decision_error_bps": 0.7420477219155508,
+   "binance_entry_open": 2425.71,
+   "entry_error_bps": 0.2885753037262795,
+   "stored": {
+    "stop": true,
+    "tp1": false,
+    "exit": "STOP"
+   },
+   "independent": {
+    "stop": true,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-56c1a8a4",
+   "asset": "BTC",
+   "date": "2024-07-08T00:00",
+   "direction": "short",
+   "strategy": "BREAKOUT + RETEST",
+   "decision_price": 55854.09,
+   "entry_price": 55852.61,
+   "status": "RESOLVED",
+   "binance_decision_close": 55857.81,
+   "decision_error_bps": -0.6659767004835171,
+   "binance_entry_open": 55857.81,
+   "entry_error_bps": -0.93093517271714,
+   "stored": {
+    "stop": true,
+    "tp1": false,
+    "exit": "STOP"
+   },
+   "independent": {
+    "stop": true,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-79cc3d6a",
+   "asset": "LTC",
+   "date": "2024-05-05T00:00",
+   "direction": "short",
+   "strategy": "BREAKOUT + RETEST",
+   "decision_price": 81.69,
+   "entry_price": 81.69,
+   "status": "RESOLVED",
+   "binance_decision_close": 81.66,
+   "decision_error_bps": 3.6737692872890193,
+   "binance_entry_open": 81.66,
+   "entry_error_bps": 3.6737692872890193,
+   "stored": {
+    "stop": true,
+    "tp1": true,
+    "exit": "BREAKEVEN_AFTER_TP1"
+   },
+   "independent": {
+    "stop": true,
+    "tp1": true
+   }
+  },
+  {
+   "candidate_id": "v2c-171b42dd",
+   "asset": "SOL",
+   "date": "2024-07-21T00:00",
+   "direction": "long",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 173.68,
+   "entry_price": 173.68,
+   "status": "RESOLVED",
+   "binance_decision_close": 173.6,
+   "decision_error_bps": 4.608294930876777,
+   "binance_entry_open": 173.6,
+   "entry_error_bps": 4.608294930876777,
+   "stored": {
+    "stop": false,
+    "tp1": false,
+    "exit": "TIMEOUT"
+   },
+   "independent": {
+    "stop": false,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-f004ebe3",
+   "asset": "DOGE",
+   "date": "2025-09-04T00:00",
+   "direction": "long",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 0.22037,
+   "entry_price": 0.22037,
+   "status": "RESOLVED",
+   "binance_decision_close": 0.2203,
+   "decision_error_bps": 3.1774852473898108,
+   "binance_entry_open": 0.2203,
+   "entry_error_bps": 3.1774852473898108,
+   "stored": {
+    "stop": true,
+    "tp1": false,
+    "exit": "STOP"
+   },
+   "independent": {
+    "stop": true,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-ccc33db6",
+   "asset": "SOL",
+   "date": "2025-09-22T00:00",
+   "direction": "short",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 236.31,
+   "entry_price": 236.28,
+   "status": "RESOLVED",
+   "binance_decision_close": 236.16,
+   "decision_error_bps": 6.351626016261047,
+   "binance_entry_open": 236.16,
+   "entry_error_bps": 5.08130081300795,
+   "stored": {
+    "stop": false,
+    "tp1": true,
+    "exit": "TP2"
+   },
+   "independent": {
+    "stop": false,
+    "tp1": true
+   }
+  },
+  {
+   "candidate_id": "v2c-66b4406c",
+   "asset": "ETH",
+   "date": "2024-07-14T00:00",
+   "direction": "long",
+   "strategy": "BREAKOUT + RETEST",
+   "decision_price": 3176.71,
+   "entry_price": 3176.61,
+   "status": "RESOLVED",
+   "binance_decision_close": 3175.93,
+   "decision_error_bps": 2.4559735258655735,
+   "binance_entry_open": 3175.93,
+   "entry_error_bps": 2.1411051251130075,
+   "stored": {
+    "stop": false,
+    "tp1": true,
+    "exit": "TP2"
+   },
+   "independent": {
+    "stop": true,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-77d313ac",
+   "asset": "LTC",
+   "date": "2024-04-30T00:00",
+   "direction": "short",
+   "strategy": "LIQUIDITY-SWEEP REVERSAL",
+   "decision_price": 83.48,
+   "entry_price": 83.48,
+   "status": "RESOLVED",
+   "binance_decision_close": 83.51,
+   "decision_error_bps": -3.5923841456109162,
+   "binance_entry_open": 83.52,
+   "entry_error_bps": -4.789272030650826,
+   "stored": {
+    "stop": true,
+    "tp1": false,
+    "exit": "STOP"
+   },
+   "independent": {
+    "stop": true,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-2b66afdb",
+   "asset": "DOGE",
+   "date": "2024-06-24T00:00",
+   "direction": "short",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 0.12212,
+   "entry_price": 0.12209,
+   "status": "RESOLVED",
+   "binance_decision_close": 0.12222,
+   "decision_error_bps": -8.181966944852404,
+   "binance_entry_open": 0.12222,
+   "entry_error_bps": -10.636557028308458,
+   "stored": {
+    "stop": false,
+    "tp1": true,
+    "exit": "TIMEOUT"
+   },
+   "independent": {
+    "stop": false,
+    "tp1": true
+   }
+  },
+  {
+   "candidate_id": "v2c-69102030",
+   "asset": "ETH",
+   "date": "2024-07-22T00:00",
+   "direction": "long",
+   "strategy": "BREAKOUT + RETEST",
+   "decision_price": 3536.2,
+   "entry_price": 3536.21,
+   "status": "RESOLVED",
+   "binance_decision_close": 3535.92,
+   "decision_error_bps": 0.7918731193012896,
+   "binance_entry_open": 3535.93,
+   "entry_error_bps": 0.7918708797971519,
+   "stored": {
+    "stop": true,
+    "tp1": false,
+    "exit": "STOP"
+   },
+   "independent": {
+    "stop": true,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-f05a6f8a",
+   "asset": "DOGE",
+   "date": "2024-04-25T00:00",
+   "direction": "long",
+   "strategy": "LIQUIDITY-SWEEP REVERSAL",
+   "decision_price": 0.1513,
+   "entry_price": 0.15131,
+   "status": "RESOLVED",
+   "binance_decision_close": 0.15139,
+   "decision_error_bps": -5.94491049607071,
+   "binance_entry_open": 0.15139,
+   "entry_error_bps": -5.284364885395076,
+   "stored": {
+    "stop": true,
+    "tp1": false,
+    "exit": "STOP"
+   },
+   "independent": {
+    "stop": true,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-20320874",
+   "asset": "ETH",
+   "date": "2025-04-16T00:00",
+   "direction": "short",
+   "strategy": "BREAKOUT + RETEST",
+   "decision_price": 1588.64,
+   "entry_price": 1588.48,
+   "status": "RESOLVED",
+   "binance_decision_close": 1588.78,
+   "decision_error_bps": -0.8811792696272747,
+   "binance_entry_open": 1588.77,
+   "entry_error_bps": -1.8253114044197716,
+   "stored": {
+    "stop": true,
+    "tp1": false,
+    "exit": "STOP"
+   },
+   "independent": {
+    "stop": true,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-dc74a894",
+   "asset": "DOGE",
+   "date": "2024-04-07T00:00",
+   "direction": "short",
+   "strategy": "LIQUIDITY-SWEEP REVERSAL",
+   "decision_price": 0.18581,
+   "entry_price": 0.18577,
+   "status": "RESOLVED",
+   "binance_decision_close": 0.18577,
+   "decision_error_bps": 2.153200193788507,
+   "binance_entry_open": 0.18576,
+   "entry_error_bps": 0.5383290267002572,
+   "stored": {
+    "stop": true,
+    "tp1": false,
+    "exit": "STOP"
+   },
+   "independent": {
+    "stop": false,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-e6629f68",
+   "asset": "XRP",
+   "date": "2024-08-14T00:00",
+   "direction": "long",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 0.5772,
+   "entry_price": 0.5772,
+   "status": "RESOLVED",
+   "binance_decision_close": 0.577,
+   "decision_error_bps": 3.466204506068493,
+   "binance_entry_open": 0.577,
+   "entry_error_bps": 3.466204506068493,
+   "stored": {
+    "stop": true,
+    "tp1": false,
+    "exit": "STOP"
+   },
+   "independent": {
+    "stop": true,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-618c72c7",
+   "asset": "DOGE",
+   "date": "2024-04-08T00:00",
+   "direction": "long",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 0.19884,
+   "entry_price": 0.19884,
+   "status": "RESOLVED",
+   "binance_decision_close": 0.19887,
+   "decision_error_bps": -1.508523155830943,
+   "binance_entry_open": 0.19887,
+   "entry_error_bps": -1.508523155830943,
+   "stored": {
+    "stop": false,
+    "tp1": false,
+    "exit": "TIMEOUT"
+   },
+   "independent": {
+    "stop": false,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-f71d8cf0",
+   "asset": "XRP",
+   "date": "2025-03-25T00:00",
+   "direction": "long",
+   "strategy": "LIQUIDITY-SWEEP REVERSAL",
+   "decision_price": 2.4501,
+   "entry_price": 2.4504,
+   "status": "RESOLVED",
+   "binance_decision_close": 2.4501,
+   "decision_error_bps": 0,
+   "binance_entry_open": 2.4501,
+   "entry_error_bps": 1.224439818783285,
+   "stored": {
+    "stop": true,
+    "tp1": false,
+    "exit": "STOP"
+   },
+   "independent": {
+    "stop": true,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-b6f22356",
+   "asset": "BTC",
+   "date": "2024-05-06T00:00",
+   "direction": "long",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 64023.45,
+   "entry_price": 64023.45,
+   "status": "RESOLVED",
+   "binance_decision_close": 64012,
+   "decision_error_bps": 1.7887271136651783,
+   "binance_entry_open": 64012,
+   "entry_error_bps": 1.7887271136651783,
+   "stored": {
+    "stop": true,
+    "tp1": false,
+    "exit": "STOP"
+   },
+   "independent": {
+    "stop": true,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-42892a06",
+   "asset": "XRP",
+   "date": "2025-07-06T00:00",
+   "direction": "short",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 2.2184,
+   "entry_price": 2.2184,
+   "status": "RESOLVED",
+   "binance_decision_close": 2.2178,
+   "decision_error_bps": 2.7053837135904146,
+   "binance_entry_open": 2.2177,
+   "entry_error_bps": 3.1564233214598225,
+   "stored": {
+    "stop": true,
+    "tp1": false,
+    "exit": "STOP"
+   },
+   "independent": {
+    "stop": true,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-761509e4",
+   "asset": "DOGE",
+   "date": "2024-05-17T00:00",
+   "direction": "long",
+   "strategy": "LIQUIDITY-SWEEP REVERSAL",
+   "decision_price": 0.14975,
+   "entry_price": 0.14975,
+   "status": "RESOLVED",
+   "binance_decision_close": 0.14972,
+   "decision_error_bps": 2.003740315255076,
+   "binance_entry_open": 0.14971,
+   "entry_error_bps": 2.6718322089358537,
+   "stored": {
+    "stop": false,
+    "tp1": true,
+    "exit": "TP2"
+   },
+   "independent": {
+    "stop": false,
+    "tp1": true
+   }
+  },
+  {
+   "candidate_id": "v2c-11c94a6d",
+   "asset": "SOL",
+   "date": "2024-08-16T00:00",
+   "direction": "short",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 142.57,
+   "entry_price": 142.57,
+   "status": "RESOLVED",
+   "binance_decision_close": 142.58,
+   "decision_error_bps": -0.7013606396422123,
+   "binance_entry_open": 142.58,
+   "entry_error_bps": -0.7013606396422123,
+   "stored": {
+    "stop": false,
+    "tp1": false,
+    "exit": "TIMEOUT"
+   },
+   "independent": {
+    "stop": false,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-9b4c64c3",
+   "asset": "BTC",
+   "date": "2025-09-25T00:00",
+   "direction": "long",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 113348.17,
+   "entry_price": 113348.16,
+   "status": "RESOLVED",
+   "binance_decision_close": 113307,
+   "decision_error_bps": 3.633491311216819,
+   "binance_entry_open": 113307.01,
+   "entry_error_bps": 3.6317258746842995,
+   "stored": {
+    "stop": true,
+    "tp1": false,
+    "exit": "STOP"
+   },
+   "independent": {
+    "stop": true,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-2d67d235",
+   "asset": "DOGE",
+   "date": "2025-05-16T00:00",
+   "direction": "long",
+   "strategy": "LIQUIDITY-SWEEP REVERSAL",
+   "decision_price": 0.21939,
+   "entry_price": 0.21948,
+   "status": "RESOLVED",
+   "binance_decision_close": 0.21939,
+   "decision_error_bps": 0,
+   "binance_entry_open": 0.2194,
+   "entry_error_bps": 3.6463081130344577,
+   "stored": {
+    "stop": false,
+    "tp1": true,
+    "exit": "TIMEOUT"
+   },
+   "independent": {
+    "stop": false,
+    "tp1": true
+   }
+  },
+  {
+   "candidate_id": "v2c-42f43e8f",
+   "asset": "XRP",
+   "date": "2024-09-02T00:00",
+   "direction": "short",
+   "strategy": "MOMENTUM CONTINUATION",
+   "decision_price": 0.5473,
+   "entry_price": 0.5471,
+   "status": "RESOLVED",
+   "binance_decision_close": 0.5472,
+   "decision_error_bps": 1.827485380117011,
+   "binance_entry_open": 0.5471,
+   "entry_error_bps": 0,
+   "stored": {
+    "stop": true,
+    "tp1": false,
+    "exit": "STOP"
+   },
+   "independent": {
+    "stop": true,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-99aad373",
+   "asset": "XRP",
+   "date": "2024-07-16T00:00",
+   "direction": "long",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 0.5375,
+   "entry_price": 0.5374,
+   "status": "RESOLVED",
+   "binance_decision_close": 0.5372,
+   "decision_error_bps": 5.584512285925491,
+   "binance_entry_open": 0.5372,
+   "entry_error_bps": 3.7230081906169943,
+   "stored": {
+    "stop": true,
+    "tp1": true,
+    "exit": "BREAKEVEN_AFTER_TP1"
+   },
+   "independent": {
+    "stop": true,
+    "tp1": true
+   }
+  },
+  {
+   "candidate_id": "v2c-9907be72",
+   "asset": "LTC",
+   "date": "2025-03-09T00:00",
+   "direction": "short",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 102.28,
+   "entry_price": 102.3,
+   "status": "RESOLVED",
+   "binance_decision_close": 102.34,
+   "decision_error_bps": -5.862810240375715,
+   "binance_entry_open": 102.34,
+   "entry_error_bps": -3.908540160251217,
+   "stored": {
+    "stop": false,
+    "tp1": true,
+    "exit": "TP2"
+   },
+   "independent": {
+    "stop": false,
+    "tp1": true
+   }
+  },
+  {
+   "candidate_id": "v2c-0c6cc388",
+   "asset": "ETH",
+   "date": "2024-09-01T00:00",
+   "direction": "short",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 2512.62,
+   "entry_price": 2512.49,
+   "status": "RESOLVED",
+   "binance_decision_close": 2513.01,
+   "decision_error_bps": -1.5519237886052473,
+   "binance_entry_open": 2513,
+   "entry_error_bps": -2.029446876244956,
+   "stored": {
+    "stop": false,
+    "tp1": true,
+    "exit": "TP2"
+   },
+   "independent": {
+    "stop": false,
+    "tp1": true
+   }
+  },
+  {
+   "candidate_id": "v2c-127420e1",
+   "asset": "SOL",
+   "date": "2025-02-21T00:00",
+   "direction": "long",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 176.05,
+   "entry_price": 176.05,
+   "status": "RESOLVED",
+   "binance_decision_close": 176,
+   "decision_error_bps": 2.8409090909087276,
+   "binance_entry_open": 176,
+   "entry_error_bps": 2.8409090909087276,
+   "stored": {
+    "stop": true,
+    "tp1": false,
+    "exit": "STOP"
+   },
+   "independent": {
+    "stop": true,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-7096d9b4",
+   "asset": "XRP",
+   "date": "2024-04-06T00:00",
+   "direction": "short",
+   "strategy": "LIQUIDITY-SWEEP REVERSAL",
+   "decision_price": 0.5872,
+   "entry_price": 0.5873,
+   "status": "RESOLVED",
+   "binance_decision_close": 0.5871,
+   "decision_error_bps": 1.7032873445765873,
+   "binance_entry_open": 0.587,
+   "entry_error_bps": 5.110732538331497,
+   "stored": {
+    "stop": true,
+    "tp1": false,
+    "exit": "STOP"
+   },
+   "independent": {
+    "stop": true,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-d769dd05",
+   "asset": "LTC",
+   "date": "2025-03-17T00:00",
+   "direction": "short",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 90.21,
+   "entry_price": 90.21,
+   "status": "RESOLVED",
+   "binance_decision_close": 90.22,
+   "decision_error_bps": -1.1084016847706657,
+   "binance_entry_open": 90.22,
+   "entry_error_bps": -1.1084016847706657,
+   "stored": {
+    "stop": true,
+    "tp1": false,
+    "exit": "STOP"
+   },
+   "independent": {
+    "stop": true,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-18a7ddb4",
+   "asset": "LTC",
+   "date": "2024-06-21T00:00",
+   "direction": "long",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 74.68,
+   "entry_price": 74.68,
+   "status": "RESOLVED",
+   "binance_decision_close": 74.69,
+   "decision_error_bps": -1.3388673182479494,
+   "binance_entry_open": 74.7,
+   "entry_error_bps": -2.677376171351664,
+   "stored": {
+    "stop": true,
+    "tp1": false,
+    "exit": "STOP"
+   },
+   "independent": {
+    "stop": true,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-d732e73a",
+   "asset": "SOL",
+   "date": "2024-07-13T00:00",
+   "direction": "short",
+   "strategy": "MEAN REVERSION",
+   "decision_price": 139.55,
+   "entry_price": 139.55,
+   "status": "RESOLVED",
+   "binance_decision_close": 139.46,
+   "decision_error_bps": 6.4534633586688095,
+   "binance_entry_open": 139.47,
+   "entry_error_bps": 5.736000573601796,
+   "stored": {
+    "stop": true,
+    "tp1": false,
+    "exit": "STOP"
+   },
+   "independent": {
+    "stop": false,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-b664eda9",
+   "asset": "ETH",
+   "date": "2024-08-04T00:00",
+   "direction": "short",
+   "strategy": "BREAKOUT + RETEST",
+   "decision_price": 2901.72,
+   "entry_price": 2901.98,
+   "status": "RESOLVED",
+   "binance_decision_close": 2903.64,
+   "decision_error_bps": -6.612389965698906,
+   "binance_entry_open": 2903.65,
+   "entry_error_bps": -5.751381881425877,
+   "stored": {
+    "stop": true,
+    "tp1": false,
+    "exit": "STOP"
+   },
+   "independent": {
+    "stop": true,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-d8a8e088",
+   "asset": "BTC",
+   "date": "2024-08-19T00:00",
+   "direction": "short",
+   "strategy": "BREAKOUT + RETEST",
+   "decision_price": 58437.9,
+   "entry_price": 58436.2,
+   "status": "RESOLVED",
+   "binance_decision_close": 58427.35,
+   "decision_error_bps": 1.80566121859016,
+   "binance_entry_open": 58427.35,
+   "entry_error_bps": 1.5147015909500183,
+   "stored": {
+    "stop": true,
+    "tp1": false,
+    "exit": "STOP"
+   },
+   "independent": {
+    "stop": false,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-b1177c09",
+   "asset": "ETH",
+   "date": "2025-09-19T00:00",
+   "direction": "long",
+   "strategy": "LIQUIDITY-SWEEP REVERSAL",
+   "decision_price": 4589.4,
+   "entry_price": 4589.4,
+   "status": "RESOLVED",
+   "binance_decision_close": 4587.66,
+   "decision_error_bps": 3.7927832489770275,
+   "binance_entry_open": 4587.66,
+   "entry_error_bps": 3.7927832489770275,
+   "stored": {
+    "stop": true,
+    "tp1": false,
+    "exit": "STOP"
+   },
+   "independent": {
+    "stop": true,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-c5bd0b7b",
+   "asset": "XRP",
+   "date": "2024-04-20T00:00",
+   "direction": "long",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 0.5033,
+   "entry_price": 0.5031,
+   "status": "RESOLVED",
+   "binance_decision_close": 0.503,
+   "decision_error_bps": 5.964214711728921,
+   "binance_entry_open": 0.503,
+   "entry_error_bps": 1.988071570575567,
+   "stored": {
+    "stop": false,
+    "tp1": true,
+    "exit": "TIMEOUT"
+   },
+   "independent": {
+    "stop": false,
+    "tp1": true
+   }
+  },
+  {
+   "candidate_id": "v2c-efee9d65",
+   "asset": "DOGE",
+   "date": "2025-05-29T00:00",
+   "direction": "short",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 0.22096,
+   "entry_price": 0.22095,
+   "status": "RESOLVED",
+   "binance_decision_close": 0.22096,
+   "decision_error_bps": 0,
+   "binance_entry_open": 0.22096,
+   "entry_error_bps": -0.45257060101278057,
+   "stored": {
+    "stop": true,
+    "tp1": false,
+    "exit": "STOP"
+   },
+   "independent": {
+    "stop": false,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-3e0247d6",
+   "asset": "LTC",
+   "date": "2024-08-15T00:00",
+   "direction": "long",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 64.08,
+   "entry_price": 64.07,
+   "status": "RESOLVED",
+   "binance_decision_close": 64.06,
+   "decision_error_bps": 3.122073056509578,
+   "binance_entry_open": 64.05,
+   "entry_error_bps": 3.1225604996087952,
+   "stored": {
+    "stop": false,
+    "tp1": false,
+    "exit": "TIMEOUT"
+   },
+   "independent": {
+    "stop": false,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-755aa5bc",
+   "asset": "ETH",
+   "date": "2024-07-22T00:00",
+   "direction": "long",
+   "strategy": "MOMENTUM CONTINUATION",
+   "decision_price": 3536.2,
+   "entry_price": 3536.21,
+   "status": "RESOLVED",
+   "binance_decision_close": 3535.92,
+   "decision_error_bps": 0.7918731193012896,
+   "binance_entry_open": 3535.93,
+   "entry_error_bps": 0.7918708797971519,
+   "stored": {
+    "stop": true,
+    "tp1": false,
+    "exit": "STOP"
+   },
+   "independent": {
+    "stop": true,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-c121b076",
+   "asset": "SOL",
+   "date": "2024-04-23T00:00",
+   "direction": "long",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 157.02,
+   "entry_price": 157.02,
+   "status": "RESOLVED",
+   "binance_decision_close": 156.95,
+   "decision_error_bps": 4.460019114369551,
+   "binance_entry_open": 156.94,
+   "entry_error_bps": 5.09748948642974,
+   "stored": {
+    "stop": false,
+    "tp1": false,
+    "exit": "TIMEOUT"
+   },
+   "independent": {
+    "stop": false,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-56ae68ae",
+   "asset": "DOGE",
+   "date": "2024-07-03T00:00",
+   "direction": "long",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 0.12511,
+   "entry_price": 0.12511,
+   "status": "RESOLVED",
+   "binance_decision_close": 0.1253,
+   "decision_error_bps": -15.16360734237776,
+   "binance_entry_open": 0.1253,
+   "entry_error_bps": -15.16360734237776,
+   "stored": {
+    "stop": true,
+    "tp1": false,
+    "exit": "STOP"
+   },
+   "independent": {
+    "stop": true,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-1a8db50c",
+   "asset": "XRP",
+   "date": "2024-05-28T00:00",
+   "direction": "long",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 0.5335,
+   "entry_price": 0.5336,
+   "status": "RESOLVED",
+   "binance_decision_close": 0.534,
+   "decision_error_bps": -9.36329588015039,
+   "binance_entry_open": 0.5339,
+   "entry_error_bps": -5.619029780858931,
+   "stored": {
+    "stop": true,
+    "tp1": false,
+    "exit": "STOP"
+   },
+   "independent": {
+    "stop": false,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-935b2030",
+   "asset": "DOGE",
+   "date": "2024-04-30T00:00",
+   "direction": "short",
+   "strategy": "LIQUIDITY-SWEEP REVERSAL",
+   "decision_price": 0.14335,
+   "entry_price": 0.14337,
+   "status": "RESOLVED",
+   "binance_decision_close": 0.14342,
+   "decision_error_bps": -4.880769767117155,
+   "binance_entry_open": 0.14343,
+   "entry_error_bps": -4.18322526668069,
+   "stored": {
+    "stop": true,
+    "tp1": false,
+    "exit": "STOP"
+   },
+   "independent": {
+    "stop": true,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-759f8e6f",
+   "asset": "SOL",
+   "date": "2025-09-19T00:00",
+   "direction": "long",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 247.56,
+   "entry_price": 247.59,
+   "status": "RESOLVED",
+   "binance_decision_close": 247.5,
+   "decision_error_bps": 2.4242424242415517,
+   "binance_entry_open": 247.5,
+   "entry_error_bps": 3.6363636363634377,
+   "stored": {
+    "stop": true,
+    "tp1": false,
+    "exit": "STOP"
+   },
+   "independent": {
+    "stop": true,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-be61a359",
+   "asset": "BTC",
+   "date": "2024-08-11T00:00",
+   "direction": "long",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 60935.02,
+   "entry_price": 60935.01,
+   "status": "RESOLVED",
+   "binance_decision_close": 60923.51,
+   "decision_error_bps": 1.8892542468407214,
+   "binance_entry_open": 60923.51,
+   "entry_error_bps": 1.8876128443690021,
+   "stored": {
+    "stop": true,
+    "tp1": false,
+    "exit": "STOP"
+   },
+   "independent": {
+    "stop": true,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-c739c903",
+   "asset": "DOGE",
+   "date": "2025-09-25T00:00",
+   "direction": "short",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 0.2412,
+   "entry_price": 0.24119,
+   "status": "RESOLVED",
+   "binance_decision_close": 0.24107,
+   "decision_error_bps": 5.392624548885561,
+   "binance_entry_open": 0.24107,
+   "entry_error_bps": 4.977807275894364,
+   "stored": {
+    "stop": false,
+    "tp1": true,
+    "exit": "TIMEOUT"
+   },
+   "independent": {
+    "stop": false,
+    "tp1": true
+   }
+  },
+  {
+   "candidate_id": "v2c-58f33a61",
+   "asset": "LTC",
+   "date": "2024-08-10T00:00",
+   "direction": "long",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 60.73,
+   "entry_price": 60.74,
+   "status": "RESOLVED",
+   "binance_decision_close": 60.72,
+   "decision_error_bps": 1.6469038208155595,
+   "binance_entry_open": 60.72,
+   "entry_error_bps": 3.2938076416333395,
+   "stored": {
+    "stop": false,
+    "tp1": false,
+    "exit": "TIMEOUT"
+   },
+   "independent": {
+    "stop": false,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-09dd0cb9",
+   "asset": "XRP",
+   "date": "2025-03-31T00:00",
+   "direction": "short",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 2.1369,
+   "entry_price": 2.1369,
+   "status": "RESOLVED",
+   "binance_decision_close": 2.1369,
+   "decision_error_bps": 0,
+   "binance_entry_open": 2.1371,
+   "entry_error_bps": -0.9358476440057828,
+   "stored": {
+    "stop": true,
+    "tp1": true,
+    "exit": "BREAKEVEN_AFTER_TP1"
+   },
+   "independent": {
+    "stop": true,
+    "tp1": true
+   }
+  },
+  {
+   "candidate_id": "v2c-d1f89fa1",
+   "asset": "XRP",
+   "date": "2025-09-28T00:00",
+   "direction": "long",
+   "strategy": "BREAKOUT + RETEST",
+   "decision_price": 2.8058,
+   "entry_price": 2.8057,
+   "status": "RESOLVED",
+   "binance_decision_close": 2.8047,
+   "decision_error_bps": 3.9219880914176386,
+   "binance_entry_open": 2.8047,
+   "entry_error_bps": 3.5654437194709843,
+   "stored": {
+    "stop": true,
+    "tp1": false,
+    "exit": "STOP"
+   },
+   "independent": {
+    "stop": true,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-5a1ae914",
+   "asset": "LTC",
+   "date": "2024-05-17T00:00",
+   "direction": "long",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 82.44,
+   "entry_price": 82.44,
+   "status": "RESOLVED",
+   "binance_decision_close": 82.43,
+   "decision_error_bps": 1.2131505519819008,
+   "binance_entry_open": 82.43,
+   "entry_error_bps": 1.2131505519819008,
+   "stored": {
+    "stop": false,
+    "tp1": false,
+    "exit": "TIMEOUT"
+   },
+   "independent": {
+    "stop": false,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-397be2de",
+   "asset": "BTC",
+   "date": "2024-08-21T00:00",
+   "direction": "long",
+   "strategy": "MEAN REVERSION",
+   "decision_price": 59017.59,
+   "entry_price": 59017.59,
+   "status": "RESOLVED",
+   "binance_decision_close": 59013.8,
+   "decision_error_bps": 0.642222666562553,
+   "binance_entry_open": 59013.8,
+   "entry_error_bps": 0.642222666562553,
+   "stored": {
+    "stop": false,
+    "tp1": true,
+    "exit": "TP2"
+   },
+   "independent": {
+    "stop": false,
+    "tp1": true
+   }
+  },
+  {
+   "candidate_id": "v2c-c8b0069b",
+   "asset": "BTC",
+   "date": "2024-07-05T00:00",
+   "direction": "short",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 57042.14,
+   "entry_price": 57036.45,
+   "status": "RESOLVED",
+   "binance_decision_close": 57050.01,
+   "decision_error_bps": -1.3794914321663132,
+   "binance_entry_open": 57050.02,
+   "entry_error_bps": -2.378614415911029,
+   "stored": {
+    "stop": false,
+    "tp1": false,
+    "exit": "TIMEOUT"
+   },
+   "independent": {
+    "stop": false,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-6ebf405f",
+   "asset": "ETH",
+   "date": "2025-03-17T00:00",
+   "direction": "short",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 1886.8,
+   "entry_price": 1886.79,
+   "status": "RESOLVED",
+   "binance_decision_close": 1887,
+   "decision_error_bps": -1.0598834128250356,
+   "binance_entry_open": 1887.01,
+   "entry_error_bps": -1.1658655756996428,
+   "stored": {
+    "stop": true,
+    "tp1": false,
+    "exit": "STOP"
+   },
+   "independent": {
+    "stop": true,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-048dc517",
+   "asset": "XRP",
+   "date": "2025-05-05T00:00",
+   "direction": "short",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 2.1562,
+   "entry_price": 2.1563,
+   "status": "RESOLVED",
+   "binance_decision_close": 2.156,
+   "decision_error_bps": 0.9276437847871577,
+   "binance_entry_open": 2.1561,
+   "entry_error_bps": 0.9276007606318082,
+   "stored": {
+    "stop": false,
+    "tp1": false,
+    "exit": "TIMEOUT"
+   },
+   "independent": {
+    "stop": false,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-3e331a1a",
+   "asset": "DOGE",
+   "date": "2025-03-09T00:00",
+   "direction": "short",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 0.19229,
+   "entry_price": 0.19221,
+   "status": "RESOLVED",
+   "binance_decision_close": 0.19234,
+   "decision_error_bps": -2.599563273371075,
+   "binance_entry_open": 0.19234,
+   "entry_error_bps": -6.7588645107630185,
+   "stored": {
+    "stop": false,
+    "tp1": true,
+    "exit": "TP2"
+   },
+   "independent": {
+    "stop": false,
+    "tp1": true
+   }
+  },
+  {
+   "candidate_id": "v2c-951e6819",
+   "asset": "DOGE",
+   "date": "2024-05-15T00:00",
+   "direction": "long",
+   "strategy": "LIQUIDITY-SWEEP REVERSAL",
+   "decision_price": 0.14545,
+   "entry_price": 0.14544,
+   "status": "RESOLVED",
+   "binance_decision_close": 0.14552,
+   "decision_error_bps": -4.810335349093586,
+   "binance_entry_open": 0.14552,
+   "entry_error_bps": -5.4975261132483855,
+   "stored": {
+    "stop": false,
+    "tp1": true,
+    "exit": "TP2"
+   },
+   "independent": {
+    "stop": false,
+    "tp1": true
+   }
+  },
+  {
+   "candidate_id": "v2c-50b65c0f",
+   "asset": "XRP",
+   "date": "2025-10-17T00:00",
+   "direction": "short",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 2.3282,
+   "entry_price": 2.3283,
+   "status": "RESOLVED",
+   "binance_decision_close": 2.328,
+   "decision_error_bps": 0.8591065292096189,
+   "binance_entry_open": 2.328,
+   "entry_error_bps": 1.2886597938144284,
+   "stored": {
+    "stop": false,
+    "tp1": false,
+    "exit": "TIMEOUT"
+   },
+   "independent": {
+    "stop": false,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-8e0092cd",
+   "asset": "SOL",
+   "date": "2025-06-30T00:00",
+   "direction": "long",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 153.34,
+   "entry_price": 153.34,
+   "status": "RESOLVED",
+   "binance_decision_close": 153.32,
+   "decision_error_bps": 1.304461257500833,
+   "binance_entry_open": 153.32,
+   "entry_error_bps": 1.304461257500833,
+   "stored": {
+    "stop": false,
+    "tp1": true,
+    "exit": "TIMEOUT"
+   },
+   "independent": {
+    "stop": false,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-398d44d0",
+   "asset": "ETH",
+   "date": "2024-07-29T00:00",
+   "direction": "long",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 3269.98,
+   "entry_price": 3270.15,
+   "status": "RESOLVED",
+   "binance_decision_close": 3270.16,
+   "decision_error_bps": -0.5504317831539485,
+   "binance_entry_open": 3270.16,
+   "entry_error_bps": -0.03057954350738079,
+   "stored": {
+    "stop": false,
+    "tp1": false,
+    "exit": "TIMEOUT"
+   },
+   "independent": {
+    "stop": false,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-bd221f6b",
+   "asset": "ETH",
+   "date": "2024-07-24T00:00",
+   "direction": "short",
+   "strategy": "LIQUIDITY-SWEEP REVERSAL",
+   "decision_price": 3482.9,
+   "entry_price": 3482.89,
+   "status": "RESOLVED",
+   "binance_decision_close": 3482.51,
+   "decision_error_bps": 1.1198819242430602,
+   "binance_entry_open": 3482.51,
+   "entry_error_bps": 1.0911670031088505,
+   "stored": {
+    "stop": false,
+    "tp1": true,
+    "exit": "TP2"
+   },
+   "independent": {
+    "stop": false,
+    "tp1": true
+   }
+  },
+  {
+   "candidate_id": "v2c-187cd6a0",
+   "asset": "LTC",
+   "date": "2025-10-16T00:00",
+   "direction": "short",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 95.58,
+   "entry_price": 95.58,
+   "status": "RESOLVED",
+   "binance_decision_close": 95.5,
+   "decision_error_bps": 8.376963350784639,
+   "binance_entry_open": 95.5,
+   "entry_error_bps": 8.376963350784639,
+   "stored": {
+    "stop": false,
+    "tp1": false,
+    "exit": "TIMEOUT"
+   },
+   "independent": {
+    "stop": false,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-2e9466a8",
+   "asset": "XRP",
+   "date": "2024-07-08T00:00",
+   "direction": "short",
+   "strategy": "BREAKOUT + RETEST",
+   "decision_price": 0.4195,
+   "entry_price": 0.4195,
+   "status": "RESOLVED",
+   "binance_decision_close": 0.4195,
+   "decision_error_bps": 0,
+   "binance_entry_open": 0.4196,
+   "entry_error_bps": -2.3832221163011535,
+   "stored": {
+    "stop": false,
+    "tp1": true,
+    "exit": "TP2"
+   },
+   "independent": {
+    "stop": false,
+    "tp1": true
+   }
+  },
+  {
+   "candidate_id": "v2c-13348b26",
+   "asset": "BTC",
+   "date": "2024-09-03T00:00",
+   "direction": "long",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 59139.83,
+   "entry_price": 59138.89,
+   "status": "RESOLVED",
+   "binance_decision_close": 59132.13,
+   "decision_error_bps": 1.3021685503300517,
+   "binance_entry_open": 59132.12,
+   "entry_error_bps": 1.1448938411140475,
+   "stored": {
+    "stop": true,
+    "tp1": false,
+    "exit": "STOP"
+   },
+   "independent": {
+    "stop": false,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-90dc60b3",
+   "asset": "LTC",
+   "date": "2024-05-27T00:00",
+   "direction": "short",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 83.84,
+   "entry_price": 83.84,
+   "status": "RESOLVED",
+   "binance_decision_close": 83.9,
+   "decision_error_bps": -7.151370679380209,
+   "binance_entry_open": 83.91,
+   "entry_error_bps": -8.342271481348584,
+   "stored": {
+    "stop": true,
+    "tp1": false,
+    "exit": "STOP"
+   },
+   "independent": {
+    "stop": true,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-0c2b65a1",
+   "asset": "DOGE",
+   "date": "2025-05-18T00:00",
+   "direction": "short",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 0.21463,
+   "entry_price": 0.21469,
+   "status": "RESOLVED",
+   "binance_decision_close": 0.21457,
+   "decision_error_bps": 2.796290254927225,
+   "binance_entry_open": 0.21458,
+   "entry_error_bps": 5.126293223971512,
+   "stored": {
+    "stop": true,
+    "tp1": false,
+    "exit": "STOP"
+   },
+   "independent": {
+    "stop": true,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-ea4cddeb",
+   "asset": "XRP",
+   "date": "2025-02-10T00:00",
+   "direction": "short",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 2.3938,
+   "entry_price": 2.3936,
+   "status": "RESOLVED",
+   "binance_decision_close": 2.3928,
+   "decision_error_bps": 4.179204279506354,
+   "binance_entry_open": 2.3928,
+   "entry_error_bps": 3.3433634236046395,
+   "stored": {
+    "stop": false,
+    "tp1": false,
+    "exit": "TIMEOUT"
+   },
+   "independent": {
+    "stop": false,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-c7cbfb6c",
+   "asset": "XRP",
+   "date": "2024-08-09T00:00",
+   "direction": "long",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 0.6167,
+   "entry_price": 0.6169,
+   "status": "RESOLVED",
+   "binance_decision_close": 0.6166,
+   "decision_error_bps": 1.6217969510212704,
+   "binance_entry_open": 0.6166,
+   "entry_error_bps": 4.865390853063811,
+   "stored": {
+    "stop": true,
+    "tp1": false,
+    "exit": "STOP"
+   },
+   "independent": {
+    "stop": true,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-3dd54af6",
+   "asset": "SOL",
+   "date": "2025-04-09T00:00",
+   "direction": "short",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 105.35,
+   "entry_price": 105.36,
+   "status": "RESOLVED",
+   "binance_decision_close": 105.4,
+   "decision_error_bps": -4.7438330170790355,
+   "binance_entry_open": 105.4,
+   "entry_error_bps": -3.7950664136632284,
+   "stored": {
+    "stop": true,
+    "tp1": false,
+    "exit": "STOP"
+   },
+   "independent": {
+    "stop": true,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-3240d770",
+   "asset": "BTC",
+   "date": "2024-05-07T00:00",
+   "direction": "long",
+   "strategy": "MEAN REVERSION",
+   "decision_price": 63162.24,
+   "entry_price": 63161.35,
+   "status": "RESOLVED",
+   "binance_decision_close": 63165.19,
+   "decision_error_bps": -0.4670293875475018,
+   "binance_entry_open": 63165.18,
+   "entry_error_bps": -0.6063467245720489,
+   "stored": {
+    "stop": true,
+    "tp1": false,
+    "exit": "STOP"
+   },
+   "independent": {
+    "stop": true,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-81117a25",
+   "asset": "SOL",
+   "date": "2025-09-27T00:00",
+   "direction": "long",
+   "strategy": "BREAKOUT + RETEST",
+   "decision_price": 205.26,
+   "entry_price": 205.26,
+   "status": "RESOLVED",
+   "binance_decision_close": 205.17,
+   "decision_error_bps": 4.386606228981016,
+   "binance_entry_open": 205.16,
+   "entry_error_bps": 4.874244492103497,
+   "stored": {
+    "stop": true,
+    "tp1": false,
+    "exit": "STOP"
+   },
+   "independent": {
+    "stop": true,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-ea8b0ec5",
+   "asset": "BTC",
+   "date": "2024-10-01T00:00",
+   "direction": "short",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 63301.25,
+   "entry_price": 63305.52,
+   "status": "RESOLVED",
+   "binance_decision_close": 63327.59,
+   "decision_error_bps": -4.159324553484334,
+   "binance_entry_open": 63327.6,
+   "entry_error_bps": -3.486631421371067,
+   "stored": {
+    "stop": false,
+    "tp1": true,
+    "exit": "TIMEOUT"
+   },
+   "independent": {
+    "stop": false,
+    "tp1": true
+   }
+  },
+  {
+   "candidate_id": "v2c-b44d48f5",
+   "asset": "SOL",
+   "date": "2024-10-08T00:00",
+   "direction": "short",
+   "strategy": "BREAKOUT + RETEST",
+   "decision_price": 143.94,
+   "entry_price": 143.95,
+   "status": "RESOLVED",
+   "binance_decision_close": 143.96,
+   "decision_error_bps": -1.389274798555551,
+   "binance_entry_open": 143.97,
+   "entry_error_bps": -1.3891783010355763,
+   "stored": {
+    "stop": false,
+    "tp1": false,
+    "exit": "TIMEOUT"
+   },
+   "independent": {
+    "stop": false,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-8bf62590",
+   "asset": "BTC",
+   "date": "2024-07-18T00:00",
+   "direction": "long",
+   "strategy": "MEAN REVERSION",
+   "decision_price": 64085.81,
+   "entry_price": 64085.82,
+   "status": "RESOLVED",
+   "binance_decision_close": 64087.99,
+   "decision_error_bps": -0.34015733681114213,
+   "binance_entry_open": 64087.99,
+   "entry_error_bps": -0.3385969820546286,
+   "stored": {
+    "stop": true,
+    "tp1": true,
+    "exit": "BREAKEVEN_AFTER_TP1"
+   },
+   "independent": {
+    "stop": true,
+    "tp1": true
+   }
+  },
+  {
+   "candidate_id": "v2c-98d9863d",
+   "asset": "BTC",
+   "date": "2025-09-04T00:00",
+   "direction": "long",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 111756.41,
+   "entry_price": 111756.4,
+   "status": "RESOLVED",
+   "binance_decision_close": 111705.71,
+   "decision_error_bps": 4.538711584214372,
+   "binance_entry_open": 111705.72,
+   "entry_error_bps": 4.536920759294905,
+   "stored": {
+    "stop": true,
+    "tp1": false,
+    "exit": "STOP"
+   },
+   "independent": {
+    "stop": true,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-c2f53439",
+   "asset": "ETH",
+   "date": "2024-09-02T00:00",
+   "direction": "short",
+   "strategy": "MOMENTUM CONTINUATION",
+   "decision_price": 2425.9,
+   "entry_price": 2425.78,
+   "status": "RESOLVED",
+   "binance_decision_close": 2425.72,
+   "decision_error_bps": 0.7420477219155508,
+   "binance_entry_open": 2425.71,
+   "entry_error_bps": 0.2885753037262795,
+   "stored": {
+    "stop": true,
+    "tp1": false,
+    "exit": "STOP"
+   },
+   "independent": {
+    "stop": true,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-e4d4d057",
+   "asset": "LTC",
+   "date": "2025-03-30T00:00",
+   "direction": "short",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 85.43,
+   "entry_price": 85.45,
+   "status": "RESOLVED",
+   "binance_decision_close": 85.46,
+   "decision_error_bps": -3.5104142288777673,
+   "binance_entry_open": 85.46,
+   "entry_error_bps": -1.170138076291849,
+   "stored": {
+    "stop": false,
+    "tp1": false,
+    "exit": "TIMEOUT"
+   },
+   "independent": {
+    "stop": false,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-c936fb28",
+   "asset": "XRP",
+   "date": "2024-04-14T00:00",
+   "direction": "short",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 0.4801,
+   "entry_price": 0.4801,
+   "status": "RESOLVED",
+   "binance_decision_close": 0.4788,
+   "decision_error_bps": 27.151211361737815,
+   "binance_entry_open": 0.4788,
+   "entry_error_bps": 27.151211361737815,
+   "stored": {
+    "stop": false,
+    "tp1": false,
+    "exit": "TIMEOUT"
+   },
+   "independent": {
+    "stop": false,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-9229e66e",
+   "asset": "XRP",
+   "date": "2025-09-21T00:00",
+   "direction": "short",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 2.9768,
+   "entry_price": 2.9769,
+   "status": "RESOLVED",
+   "binance_decision_close": 2.975,
+   "decision_error_bps": 6.0504201680666725,
+   "binance_entry_open": 2.975,
+   "entry_error_bps": 6.386554621848894,
+   "stored": {
+    "stop": true,
+    "tp1": false,
+    "exit": "STOP"
+   },
+   "independent": {
+    "stop": false,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-a6893a5a",
+   "asset": "LTC",
+   "date": "2025-04-30T00:00",
+   "direction": "short",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 85.59,
+   "entry_price": 85.59,
+   "status": "RESOLVED",
+   "binance_decision_close": 85.57,
+   "decision_error_bps": 2.3372677340205428,
+   "binance_entry_open": 85.56,
+   "entry_error_bps": 3.506311360448322,
+   "stored": {
+    "stop": false,
+    "tp1": true,
+    "exit": "TIMEOUT"
+   },
+   "independent": {
+    "stop": false,
+    "tp1": true
+   }
+  },
+  {
+   "candidate_id": "v2c-a2f74324",
+   "asset": "SOL",
+   "date": "2024-09-02T00:00",
+   "direction": "short",
+   "strategy": "BREAKOUT + RETEST",
+   "decision_price": 128.5,
+   "entry_price": 128.5,
+   "status": "RESOLVED",
+   "binance_decision_close": 128.5,
+   "decision_error_bps": 0,
+   "binance_entry_open": 128.5,
+   "entry_error_bps": 0,
+   "stored": {
+    "stop": true,
+    "tp1": false,
+    "exit": "STOP"
+   },
+   "independent": {
+    "stop": true,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-996116d3",
+   "asset": "LTC",
+   "date": "2024-08-11T00:00",
+   "direction": "long",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 61.16,
+   "entry_price": 61.17,
+   "status": "RESOLVED",
+   "binance_decision_close": 61.16,
+   "decision_error_bps": 0,
+   "binance_entry_open": 61.17,
+   "entry_error_bps": 0,
+   "stored": {
+    "stop": true,
+    "tp1": false,
+    "exit": "STOP"
+   },
+   "independent": {
+    "stop": true,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-ab511e22",
+   "asset": "XRP",
+   "date": "2025-01-06T00:00",
+   "direction": "short",
+   "strategy": "LIQUIDITY-SWEEP REVERSAL",
+   "decision_price": 2.399,
+   "entry_price": 2.399,
+   "status": "RESOLVED",
+   "binance_decision_close": 2.3994,
+   "decision_error_bps": -1.6670834375254184,
+   "binance_entry_open": 2.3993,
+   "entry_error_bps": -1.250364689702188,
+   "stored": {
+    "stop": true,
+    "tp1": false,
+    "exit": "STOP"
+   },
+   "independent": {
+    "stop": true,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-f767e2fa",
+   "asset": "LTC",
+   "date": "2024-04-07T00:00",
+   "direction": "long",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 101.65,
+   "entry_price": 101.65,
+   "status": "RESOLVED",
+   "binance_decision_close": 101.6,
+   "decision_error_bps": 4.9212598425207865,
+   "binance_entry_open": 101.6,
+   "entry_error_bps": 4.9212598425207865,
+   "stored": {
+    "stop": true,
+    "tp1": true,
+    "exit": "BREAKEVEN_AFTER_TP1"
+   },
+   "independent": {
+    "stop": true,
+    "tp1": true
+   }
+  },
+  {
+   "candidate_id": "v2c-e5254057",
+   "asset": "LTC",
+   "date": "2025-06-08T00:00",
+   "direction": "long",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 88.39,
+   "entry_price": 88.39,
+   "status": "RESOLVED",
+   "binance_decision_close": 88.31,
+   "decision_error_bps": 9.058996716113654,
+   "binance_entry_open": 88.31,
+   "entry_error_bps": 9.058996716113654,
+   "stored": {
+    "stop": true,
+    "tp1": false,
+    "exit": "STOP"
+   },
+   "independent": {
+    "stop": true,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-bc2c4ff0",
+   "asset": "XRP",
+   "date": "2024-10-10T00:00",
+   "direction": "short",
+   "strategy": "BREAKOUT + RETEST",
+   "decision_price": 0.5241,
+   "entry_price": 0.5241,
+   "status": "RESOLVED",
+   "binance_decision_close": 0.5245,
+   "decision_error_bps": -7.626310772163025,
+   "binance_entry_open": 0.5245,
+   "entry_error_bps": -7.626310772163025,
+   "stored": {
+    "stop": true,
+    "tp1": false,
+    "exit": "STOP"
+   },
+   "independent": {
+    "stop": true,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-e0d3d96b",
+   "asset": "SOL",
+   "date": "2025-06-11T00:00",
+   "direction": "long",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 165.15,
+   "entry_price": 165.13,
+   "status": "RESOLVED",
+   "binance_decision_close": 165.12,
+   "decision_error_bps": 1.816860465115866,
+   "binance_entry_open": 165.12,
+   "entry_error_bps": 0.605620155038622,
+   "stored": {
+    "stop": false,
+    "tp1": false,
+    "exit": "TIMEOUT"
+   },
+   "independent": {
+    "stop": false,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-d7e622f5",
+   "asset": "XRP",
+   "date": "2024-10-15T00:00",
+   "direction": "long",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 0.5483,
+   "entry_price": 0.5483,
+   "status": "RESOLVED",
+   "binance_decision_close": 0.5483,
+   "decision_error_bps": 0,
+   "binance_entry_open": 0.5484,
+   "entry_error_bps": -1.8234865061994565,
+   "stored": {
+    "stop": true,
+    "tp1": false,
+    "exit": "STOP"
+   },
+   "independent": {
+    "stop": true,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-7a07e1a0",
+   "asset": "SOL",
+   "date": "2024-06-20T00:00",
+   "direction": "short",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 135.59,
+   "entry_price": 135.59,
+   "status": "RESOLVED",
+   "binance_decision_close": 135.62,
+   "decision_error_bps": -2.212063117534857,
+   "binance_entry_open": 135.62,
+   "entry_error_bps": -2.212063117534857,
+   "stored": {
+    "stop": true,
+    "tp1": false,
+    "exit": "STOP"
+   },
+   "independent": {
+    "stop": true,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-4848f453",
+   "asset": "LTC",
+   "date": "2025-06-02T00:00",
+   "direction": "short",
+   "strategy": "LIQUIDITY-SWEEP REVERSAL",
+   "decision_price": 88.44,
+   "entry_price": 88.46,
+   "status": "RESOLVED",
+   "binance_decision_close": 88.39,
+   "decision_error_bps": 5.656748500961761,
+   "binance_entry_open": 88.39,
+   "entry_error_bps": 7.919447901345578,
+   "stored": {
+    "stop": false,
+    "tp1": true,
+    "exit": "TP2"
+   },
+   "independent": {
+    "stop": false,
+    "tp1": true
+   }
+  },
+  {
+   "candidate_id": "v2c-e8d23f1a",
+   "asset": "ETH",
+   "date": "2025-02-24T00:00",
+   "direction": "long",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 2819.63,
+   "entry_price": 2819.77,
+   "status": "RESOLVED",
+   "binance_decision_close": 2819.69,
+   "decision_error_bps": -0.2127893491832289,
+   "binance_entry_open": 2819.7,
+   "entry_error_bps": 0.24825336028655443,
+   "stored": {
+    "stop": true,
+    "tp1": false,
+    "exit": "STOP"
+   },
+   "independent": {
+    "stop": true,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-1312745e",
+   "asset": "XRP",
+   "date": "2024-04-07T00:00",
+   "direction": "short",
+   "strategy": "LIQUIDITY-SWEEP REVERSAL",
+   "decision_price": 0.5931,
+   "entry_price": 0.5931,
+   "status": "RESOLVED",
+   "binance_decision_close": 0.593,
+   "decision_error_bps": 1.686340640809636,
+   "binance_entry_open": 0.593,
+   "entry_error_bps": 1.686340640809636,
+   "stored": {
+    "stop": true,
+    "tp1": false,
+    "exit": "STOP"
+   },
+   "independent": {
+    "stop": false,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-9645039b",
+   "asset": "SOL",
+   "date": "2025-03-13T00:00",
+   "direction": "long",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 126.6,
+   "entry_price": 126.59,
+   "status": "RESOLVED",
+   "binance_decision_close": 126.62,
+   "decision_error_bps": -1.579529300269611,
+   "binance_entry_open": 126.61,
+   "entry_error_bps": -1.5796540557611038,
+   "stored": {
+    "stop": true,
+    "tp1": false,
+    "exit": "STOP"
+   },
+   "independent": {
+    "stop": true,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-da540588",
+   "asset": "DOGE",
+   "date": "2025-08-18T00:00",
+   "direction": "long",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 0.23468,
+   "entry_price": 0.23467,
+   "status": "RESOLVED",
+   "binance_decision_close": 0.23456,
+   "decision_error_bps": 5.115961800818969,
+   "binance_entry_open": 0.23457,
+   "entry_error_bps": 4.2631197510334395,
+   "stored": {
+    "stop": true,
+    "tp1": false,
+    "exit": "STOP"
+   },
+   "independent": {
+    "stop": true,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-c0e466f5",
+   "asset": "ETH",
+   "date": "2025-06-14T00:00",
+   "direction": "short",
+   "strategy": "MEAN REVERSION",
+   "decision_price": 2580.21,
+   "entry_price": 2580.25,
+   "status": "RESOLVED",
+   "binance_decision_close": 2579.19,
+   "decision_error_bps": 3.9547299733633245,
+   "binance_entry_open": 2579.19,
+   "entry_error_bps": 4.109817423298967,
+   "stored": {
+    "stop": false,
+    "tp1": true,
+    "exit": "TP2"
+   },
+   "independent": {
+    "stop": false,
+    "tp1": true
+   }
+  },
+  {
+   "candidate_id": "v2c-779cd016",
+   "asset": "XRP",
+   "date": "2025-09-12T00:00",
+   "direction": "long",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 3.0405,
+   "entry_price": 3.0405,
+   "status": "RESOLVED",
+   "binance_decision_close": 3.0398,
+   "decision_error_bps": 2.3027830778343805,
+   "binance_entry_open": 3.0398,
+   "entry_error_bps": 2.3027830778343805,
+   "stored": {
+    "stop": false,
+    "tp1": false,
+    "exit": "TIMEOUT"
+   },
+   "independent": {
+    "stop": false,
+    "tp1": false
+   }
+  },
+  {
+   "candidate_id": "v2c-274019c9",
+   "asset": "LTC",
+   "date": "2025-06-06T00:00",
+   "direction": "short",
+   "strategy": "TREND CONTINUATION",
+   "decision_price": 83.64,
+   "entry_price": 83.64,
+   "status": "RESOLVED",
+   "binance_decision_close": 83.58,
+   "decision_error_bps": 7.1787508973431,
+   "binance_entry_open": 83.58,
+   "entry_error_bps": 7.1787508973431,
+   "stored": {
+    "stop": false,
+    "tp1": false,
+    "exit": "TIMEOUT"
+   },
+   "independent": {
+    "stop": false,
+    "tp1": false
+   }
+  }
+ ]
+}
