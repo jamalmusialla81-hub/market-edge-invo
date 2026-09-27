@@ -1,4 +1,5 @@
 # Editing this file on the research branch triggers phase5-v2-clean.yml.
-stage: dryrun-native
+stage: generate
+htf: native
 archive_run_id: 36305795134
-request: 4
+request: 5

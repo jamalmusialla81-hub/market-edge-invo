@@ -42,6 +42,12 @@ const precise = value => Number.isFinite(value) ? Number(value.toPrecision(5)) :
 // and 1d from the venue's native daily candles, instead of re-aggregating 5m.
 // It changes the dataset definition, so it carries its own dataset version.
 const NATIVE_HTF_VERSION = `${VERSION}-NATIVE-HTF`;
+const versionOf = prepared => prepared?.htfSource === 'COINBASE_NATIVE_1H_1D' ? NATIVE_HTF_VERSION : VERSION;
+// Exact source of every timeframe fed to Quant, per policy.
+function frameSources(prepared) {
+  const base = {m5: 'COINBASE_SPOT_5M', m15: 'AGGREGATED_FROM_COINBASE_SPOT_5M', h1: 'AGGREGATED_FROM_COINBASE_SPOT_5M'};
+  return prepared?.htfSource === 'COINBASE_NATIVE_1H_1D' ? {...base, h4: 'AGGREGATED_FROM_COINBASE_SPOT_NATIVE_1H', d1: 'COINBASE_SPOT_NATIVE_1D'} : {...base, h4: 'AGGREGATED_FROM_COINBASE_SPOT_5M', d1: 'AGGREGATED_FROM_COINBASE_SPOT_5M'};
+}
 function aggregateNative(rows, from, to) {
   const out = []; let bucket = null;
   const flush = () => { if (bucket && bucket.count === to / from) out.push({time: bucket.time, open: bucket.open, high: bucket.high, low: bucket.low, close: bucket.close, volume: bucket.volume}); };
@@ -140,11 +146,12 @@ function assetCandidates({scanId, timestamp, prepared, check}) {
   const sequence = Sequences.build(timeframes, timestamp);
   Sequences.assertNoFuture(sequence, timestamp); Rank.assertFresh(sequence, timestamp);
   const evaluated = Quant.evaluateSetupCandidates({timeframes, settings: Rank.SETTINGS}), diagnostics = gateDiagnostics(Quant.evaluateSetup({timeframes, settings: Rank.SETTINGS}).timeframes);
-  const historySha = windowHash(prepared, timestamp - HISTORY_MS, timestamp), compact = compactSequence(sequence);
+  const sources = frameSources(prepared), frameHashes = Object.fromEntries(Object.entries(timeframes).map(([name, bars]) => [name, sha(candleText(bars))]));
+  const historySha = sha(JSON.stringify([windowHash(prepared, timestamp - HISTORY_MS, timestamp), frameHashes])), compact = compactSequence(sequence), version = versionOf(prepared);
   const candidates = evaluated.map((candidate, index) => {
     const divider = String(candidate.candidateKey || '').lastIndexOf(':'), strategy = candidate.strategy || (divider > 0 ? candidate.candidateKey.slice(0, divider) : null), direction = candidate.direction || (divider > 0 ? candidate.candidateKey.slice(divider + 1) : null), identified = {...candidate, strategy, direction};
     const plan = Rank.geometry(identified), quant = Number.isFinite(Number(candidate.setupQuality ?? candidate.quality)) ? Number(candidate.setupQuality ?? candidate.quality) : null;
-    const provenance = {dataset_version: VERSION, label_version: LABEL_VERSION, scan_id: scanId, scan_timestamp: timestamp, asset: prepared.asset, product: prepared.product, entry_source: ENTRY.source, entry_venue: ENTRY.venue, entry_instrument_type: ENTRY.instrument_type, decision_price_definition: 'close of the latest completed 5m candle at the scan timestamp', latest_feature_candle_timestamp: check.latest_feature_candle_timestamp, latest_feature_candle_close: check.latest_feature_candle_close, freshness_status: check.freshness_status, history_window: {policy: 'production bar counts; every timeframe complete, consecutive, closing at the scan', htf_source: prepared.htfSource, bars: PRODUCTION_BARS, frames: check.frames, from: timestamp - HISTORY_MS, to: timestamp, sha256: historySha}, archive_version: Archive.ARCHIVE_VERSION};
+    const provenance = {dataset_version: version, label_version: LABEL_VERSION, scan_id: scanId, scan_timestamp: timestamp, asset: prepared.asset, product: prepared.product, entry_source: ENTRY.source, entry_venue: ENTRY.venue, entry_instrument_type: ENTRY.instrument_type, decision_price_definition: 'close of the latest completed 5m candle at the scan timestamp', latest_feature_candle_timestamp: check.latest_feature_candle_timestamp, latest_feature_candle_close: check.latest_feature_candle_close, freshness_status: check.freshness_status, history_window: {policy: 'production bar counts; every timeframe complete, consecutive, closing at the scan', htf_source: prepared.htfSource, frame_sources: sources, frame_sha256: frameHashes, bars: PRODUCTION_BARS, frames: check.frames, from: timestamp - HISTORY_MS, to: timestamp, sha256: historySha}, archive_version: Archive.ARCHIVE_VERSION};
     const features = {...Rank.preEntryFeatures(timeframes, timestamp, identified), provenance, sequence_compact: compact};
     return {candidate_id: `v2c-${Rank.hash([scanId, prepared.asset, index, strategy, direction, plan.entry, plan.stop])}`, timestamp, asset: prepared.asset, invo_instrument: prepared.product, direction: direction || null, strategy: strategy || null, reference_price: Number.isFinite(Number(candidate.entry)) ? Number(candidate.entry) : null, entry: plan.entry, stop: plan.stop, tp1: plan.tp1, tp2: plan.tp2, rr: plan.rr, setup_quality: quant, entry_quality: candidate.entryQuality || null, quant_score: quant, ml_applicability: 'ML_NOT_AVAILABLE_FOR_HISTORICAL_TIMESTAMP', ml_raw_score: null, combined_score: quant, regime: candidate.regime || 'UNCLASSIFIED', feature_json: features, feature_hash: Rank.hash(features), valid_current_geometry: plan.valid, invalidation_reason: plan.valid ? null : (candidate.reason || 'Candidate did not supply valid current geometry'), candidate_rank: null, candidate_count: 0, targets: {status: 'PENDING_OUTCOME'}, candidate_hash: null};
   });
@@ -178,7 +185,8 @@ function buildScan({timestamp, assets}) {
 // after TP1 (exit the rest at breakeven).  Any missing candle before the exit
 // makes the label UNRESOLVED; nothing is inferred across a gap.
 function resolveStrict(candidate, prepared) {
-  const timestamp = Number(candidate.timestamp), unresolved = (reason, extra = {}) => ({status: 'UNRESOLVED_DATA_GAP', reason, next_valid_candle_gap_ms: null, ...extra, outcome_source: ENTRY.source, outcome_venue: ENTRY.venue, outcome_instrument_type: ENTRY.instrument_type, label_version: LABEL_VERSION, dataset_version: VERSION, execution: 'No outcome inferred across missing same-venue candles'});
+  const version = versionOf(prepared);
+  const timestamp = Number(candidate.timestamp), unresolved = (reason, extra = {}) => ({status: 'UNRESOLVED_DATA_GAP', reason, next_valid_candle_gap_ms: null, ...extra, outcome_source: ENTRY.source, outcome_venue: ENTRY.venue, outcome_instrument_type: ENTRY.instrument_type, label_version: LABEL_VERSION, dataset_version: version, execution: 'No outcome inferred across missing same-venue candles'});
   if (!candidate?.valid_current_geometry) return null;
   const first = prepared.index.byTime.get(timestamp);
   if (!first) return unresolved('ENTRY_CANDLE_MISSING');
@@ -200,7 +208,7 @@ function resolveStrict(candidate, prepared) {
     finalR = tp1Hit ? rr * .5 + .5 * s * (candle.close - entry) / distance : s * (candle.close - entry) / distance;
   }
   const costR = .0016 / (distance / entry);
-  return {status: 'RESOLVED', TP1_BEFORE_SL: tp1Hit, FINAL_R: finalR - costR, MFE: mfe, MAE: mae, STOP_HIT: stopHit, TP2_HIT: tp2Hit, duration_bars: bars, exit_reason: exit, entry_timestamp: timestamp, entry_price: rawEntry, fill_price: entry, entry_source: ENTRY.source, entry_venue: ENTRY.venue, entry_instrument_type: ENTRY.instrument_type, outcome_source: ENTRY.source, outcome_venue: ENTRY.venue, outcome_instrument_type: ENTRY.instrument_type, outcome_window_sha256: sha(candleText(used)), same_candle_policy: 'STOP_FIRST; breakeven assumed after TP1 on the TP1 candle', cost_round_trip: .0016, label_version: LABEL_VERSION, dataset_version: VERSION};
+  return {status: 'RESOLVED', TP1_BEFORE_SL: tp1Hit, FINAL_R: finalR - costR, MFE: mfe, MAE: mae, STOP_HIT: stopHit, TP2_HIT: tp2Hit, duration_bars: bars, exit_reason: exit, entry_timestamp: timestamp, entry_price: rawEntry, fill_price: entry, entry_source: ENTRY.source, entry_venue: ENTRY.venue, entry_instrument_type: ENTRY.instrument_type, outcome_source: ENTRY.source, outcome_venue: ENTRY.venue, outcome_instrument_type: ENTRY.instrument_type, outcome_window_sha256: sha(candleText(used)), same_candle_policy: 'STOP_FIRST; breakeven assumed after TP1 on the TP1 candle', cost_round_trip: .0016, label_version: LABEL_VERSION, dataset_version: version};
 }
 
-module.exports = {VERSION, NATIVE_HTF_VERSION, aggregateNative, LABEL_VERSION, SEQUENCE_COMPACT_VERSION, PRODUCTION_BARS, TF_MS, HISTORY_BARS, HISTORY_MS, ENTRY, prepareAsset, historyCheck, assertWindowIntegrity, windowRows, windowHash, gateDiagnostics, compactSequence, expandSequence, assetCandidates, buildScan, snapshotRecord, resolveStrict};
+module.exports = {VERSION, NATIVE_HTF_VERSION, versionOf, frameSources, aggregateNative, LABEL_VERSION, SEQUENCE_COMPACT_VERSION, PRODUCTION_BARS, TF_MS, HISTORY_BARS, HISTORY_MS, ENTRY, prepareAsset, historyCheck, assertWindowIntegrity, windowRows, windowHash, gateDiagnostics, compactSequence, expandSequence, assetCandidates, buildScan, snapshotRecord, resolveStrict};

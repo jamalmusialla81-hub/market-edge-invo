@@ -1,12 +1,19 @@
 name: Phase 5 — V2-CLEAN rebuild (research only)
 
-# Rebuilds the historical rank dataset as a NEW immutable version from
-# genuine Coinbase spot 5m candles.  HISTORICAL-RANK-V1 is never modified.
-# Triggered by editing research/v2-clean/RUN_REQUEST on the research branch.
-# RUN_REQUEST keys:  stage: candles | generate | audit | all
-#                    archive_run_id: <run that produced the archive>, blank = this run
+# Rebuilds historical rank datasets as NEW immutable versions from genuine
+# Coinbase spot candles.  HISTORICAL-RANK-V1 is never modified.
+#   HISTORICAL-RANK-V2-CLEAN             htf: aggregated (all timeframes from 5m)
+#   HISTORICAL-RANK-V2-CLEAN-NATIVE-HTF  htf: native (4h from venue 1h, 1d venue daily)
+# RUN_REQUEST keys:
+#   stage: candles | generate | audit | analysis | all | dryrun-native | forward
+#   htf: aggregated | native
+#   archive_run_id: run that produced the archive (blank = this run)
+# The daily schedule appends genuine forward scans (native policy); schedules
+# only run from the default branch, i.e. after this workflow is merged.
 on:
   workflow_dispatch:
+  schedule:
+    - cron: '41 1 * * *'
   push:
     branches: [claude/clever-faraday-y12d11]
     paths: [research/v2-clean/RUN_REQUEST]
@@ -25,14 +32,27 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       stage: ${{ steps.read.outputs.stage }}
+      htf: ${{ steps.read.outputs.htf }}
       archive_run_id: ${{ steps.read.outputs.archive_run_id }}
+      engine: ${{ steps.read.outputs.engine }}
+      suffix: ${{ steps.read.outputs.suffix }}
     steps:
       - uses: actions/checkout@v4
       - id: read
         run: |
-          stage=$(sed -n 's/^stage: *//p' research/v2-clean/RUN_REQUEST | head -1)
-          archive=$(sed -n 's/^archive_run_id: *//p' research/v2-clean/RUN_REQUEST | head -1)
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            stage=forward; htf=native; archive=""
+          else
+            stage=$(sed -n 's/^stage: *//p' research/v2-clean/RUN_REQUEST | head -1)
+            htf=$(sed -n 's/^htf: *//p' research/v2-clean/RUN_REQUEST | head -1)
+            archive=$(sed -n 's/^archive_run_id: *//p' research/v2-clean/RUN_REQUEST | head -1)
+          fi
+          htf=${htf:-aggregated}
+          if [ "$htf" = native ]; then engine=HISTORICAL-RANK-V2-CLEAN-NATIVE-HTF; suffix=-native-htf; else engine=HISTORICAL-RANK-V2-CLEAN; suffix=; fi
           echo "stage=${stage:-candles}" >> "$GITHUB_OUTPUT"
+          echo "htf=$htf" >> "$GITHUB_OUTPUT"
+          echo "engine=$engine" >> "$GITHUB_OUTPUT"
+          echo "suffix=$suffix" >> "$GITHUB_OUTPUT"
           echo "archive_run_id=${archive:-${{ github.run_id }}}" >> "$GITHUB_OUTPUT"
 
   candles:
@@ -48,7 +68,7 @@ jobs:
         with:
           node-version: 22
       - run: node research/candle-archive.test.js
-      - name: Fetch and validate Coinbase spot 5m candles (no fill, no substitution)
+      - name: Fetch and validate Coinbase spot candles (no fill, no substitution)
         env:
           CANDLE_MANIFEST_OUT: research/data/v2-clean/candle-manifest.json
         run: node research/fetch-coinbase-candles.mjs
@@ -58,13 +78,13 @@ jobs:
           name: coinbase-5m-archive
           path: candle-archive/
           retention-days: 90
-      - name: Commit the provenance manifest to the research branch
+      - name: Commit the provenance manifest
         if: github.ref_name == 'claude/clever-faraday-y12d11'
         run: |
           git config user.name "market-edge-research-bot"
           git config user.email "research-bot@users.noreply.github.com"
           git add research/data/v2-clean/candle-manifest.json
-          git commit -m "data: Coinbase spot 5m candle manifest (run ${{ github.run_id }})" || exit 0
+          git commit -m "data: Coinbase spot candle manifest (run ${{ github.run_id }})" || exit 0
           git pull --rebase origin ${{ github.ref_name }}
           git push origin HEAD:${{ github.ref_name }}
 
@@ -79,7 +99,8 @@ jobs:
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       MARKET_EDGE_RESEARCH_TOKEN: ${{ secrets.MARKET_EDGE_RESEARCH_TOKEN }}
-      V2_CLEAN_REPORT: research/data/v2-clean/generation-report.json
+      V2_CLEAN_HTF_SOURCE: ${{ needs.config.outputs.htf }}
+      V2_CLEAN_REPORT: research/data/v2-clean/generation-report${{ needs.config.outputs.suffix }}.json
     steps:
       - uses: actions/checkout@v4
         with:
@@ -94,21 +115,20 @@ jobs:
           path: candle-archive
           run-id: ${{ needs.config.outputs.archive_run_id }}
           github-token: ${{ github.token }}
-      - name: Integrity tests
-        run: node research/historical-rank-v2-clean.test.js && node research/candle-archive.test.js
+      - run: node research/historical-rank-v2-clean.test.js && node research/candle-archive.test.js
       - name: Verify the archive against the committed manifest (fail closed)
         run: node research/verify-candle-archive.mjs
-      - name: Record HISTORICAL-RANK-V1 as INVALID (append-only; rows untouched)
+      - name: Record HISTORICAL-RANK-V1 as INVALID (append-only; idempotent)
         run: node research/invalidate-dataset.mjs
-      - name: Generate and freeze HISTORICAL-RANK-V2-CLEAN
+      - name: Generate and freeze ${{ needs.config.outputs.engine }}
         run: node research/run-v2-clean-dataset.mjs
-      - name: Commit the generation report to the research branch
+      - name: Commit the generation report
         if: always() && github.ref_name == 'claude/clever-faraday-y12d11'
         run: |
           git config user.name "market-edge-research-bot"
           git config user.email "research-bot@users.noreply.github.com"
-          git add research/data/v2-clean/generation-report.json || exit 0
-          git commit -m "data: V2-CLEAN generation report (run ${{ github.run_id }})" || exit 0
+          git add research/data/v2-clean/ || exit 0
+          git commit -m "data: ${{ needs.config.outputs.engine }} generation report (run ${{ github.run_id }})" || exit 0
           git pull --rebase origin ${{ github.ref_name }}
           git push origin HEAD:${{ github.ref_name }}
 
@@ -116,13 +136,15 @@ jobs:
     needs: [config, generate]
     if: ${{ always() && (needs.generate.result == 'success' || needs.generate.result == 'skipped') && (needs.config.outputs.stage == 'audit' || needs.config.outputs.stage == 'generate' || needs.config.outputs.stage == 'all') }}
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     permissions:
       contents: write
       actions: read
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      V2_CLEAN_AUDIT_REPORT: research/data/v2-clean/audit-report.json
+      V2_CLEAN_AUDIT_ENGINE: ${{ needs.config.outputs.engine }}
+      V2_CLEAN_AUDIT_SAMPLE: '150'
+      V2_CLEAN_AUDIT_REPORT: research/data/v2-clean/audit-report${{ needs.config.outputs.suffix }}.json
     steps:
       - uses: actions/checkout@v4
         with:
@@ -138,15 +160,105 @@ jobs:
           run-id: ${{ needs.config.outputs.archive_run_id }}
           github-token: ${{ github.token }}
       - run: node research/verify-candle-archive.mjs
-      - name: Independent price and label audit (development rows only)
+      - name: Independent Binance spot price and label audit (development rows only)
         run: node research/audit-v2-clean.mjs
-      - name: Commit the audit report to the research branch
+      - name: Commit the audit report
         if: always() && github.ref_name == 'claude/clever-faraday-y12d11'
         run: |
           git config user.name "market-edge-research-bot"
           git config user.email "research-bot@users.noreply.github.com"
-          git add research/data/v2-clean/audit-report.json || exit 0
-          git commit -m "data: V2-CLEAN independent audit report (run ${{ github.run_id }})" || exit 0
+          git add research/data/v2-clean/ || exit 0
+          git commit -m "data: ${{ needs.config.outputs.engine }} independent audit (run ${{ github.run_id }})" || exit 0
+          git pull --rebase origin ${{ github.ref_name }}
+          git push origin HEAD:${{ github.ref_name }}
+
+  analysis:
+    needs: [config, audit]
+    if: ${{ always() && (needs.audit.result == 'success' || needs.audit.result == 'skipped') && (needs.config.outputs.stage == 'analysis' || needs.config.outputs.stage == 'generate' || needs.config.outputs.stage == 'all') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write
+      actions: read
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      HTF_COMPARE_REPORT: research/data/v2-clean/htf-policy-comparison.json
+      SANITY_ENGINE: ${{ needs.config.outputs.engine }}
+      SANITY_REPORT: research/data/v2-clean/sanity-baselines${{ needs.config.outputs.suffix }}.json
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: coinbase-5m-archive*
+          merge-multiple: true
+          path: candle-archive
+          run-id: ${{ needs.config.outputs.archive_run_id }}
+          github-token: ${{ github.token }}
+      - run: node research/verify-candle-archive.mjs
+      - name: Strict vs native-HTF feature-definition comparison (archive only)
+        run: node research/compare-htf-policies.mjs
+      - name: Sanity baselines only (Random vs Current Quant; no tuning)
+        run: node research/sanity-baselines.mjs
+      - name: Commit the analysis reports
+        if: always() && github.ref_name == 'claude/clever-faraday-y12d11'
+        run: |
+          git config user.name "market-edge-research-bot"
+          git config user.email "research-bot@users.noreply.github.com"
+          git add research/data/v2-clean/ || exit 0
+          git commit -m "data: HTF policy comparison and sanity baselines (run ${{ github.run_id }})" || exit 0
+          git pull --rebase origin ${{ github.ref_name }}
+          git push origin HEAD:${{ github.ref_name }}
+
+  # Daily forward accumulation into the SAME native-HTF policy.  Fetches only
+  # complete past UTC days, generates only scans whose 24h outcome window has
+  # fully closed, and skips scans already frozen.  Never looks forward.
+  forward:
+    needs: config
+    if: ${{ needs.config.outputs.stage == 'forward' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: write
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      MARKET_EDGE_RESEARCH_TOKEN: ${{ secrets.MARKET_EDGE_RESEARCH_TOKEN }}
+      V2_CLEAN_HTF_SOURCE: native
+      CANDLE_MANIFEST: research/data/v2-clean/forward/candle-manifest.json
+      CANDLE_MANIFEST_OUT: research/data/v2-clean/forward/candle-manifest.json
+      V2_CLEAN_REPORT: research/data/v2-clean/forward/generation-report.json
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node research/candle-archive.test.js && node research/historical-rank-v2-clean.test.js
+      - name: Fetch the trailing 280 complete UTC days (production depth + outcome window)
+        run: CANDLE_FROM=$(node -e "console.log(new Date(Math.floor(Date.now()/864e5)*864e5-280*864e5).toISOString())") node research/fetch-coinbase-candles.mjs
+      - run: node research/verify-candle-archive.mjs
+      - name: Append new genuine forward scans (native-HTF policy)
+        run: node research/run-v2-clean-dataset.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coinbase-forward-archive
+          path: |
+            candle-archive/
+            research/data/v2-clean/forward/
+          retention-days: 90
+      - name: Commit the forward manifest and report (research branch only; never pushes to main)
+        if: always() && github.ref_name == 'claude/clever-faraday-y12d11'
+        run: |
+          git config user.name "market-edge-research-bot"
+          git config user.email "research-bot@users.noreply.github.com"
+          git add research/data/v2-clean/forward/ || exit 0
+          git commit -m "data: native-HTF forward scans (run ${{ github.run_id }})" || exit 0
           git pull --rebase origin ${{ github.ref_name }}
           git push origin HEAD:${{ github.ref_name }}
 
@@ -176,16 +288,5 @@ jobs:
           path: candle-archive
           run-id: ${{ needs.config.outputs.archive_run_id }}
           github-token: ${{ github.token }}
-      - run: node research/historical-rank-v2-clean.test.js
       - run: node research/verify-candle-archive.mjs
-      - name: Dry run of the proposed native-HTF policy (no D1 writes)
-        run: node research/run-v2-clean-dataset.mjs --dry-run
-      - name: Commit the dry-run report
-        if: github.ref_name == 'claude/clever-faraday-y12d11'
-        run: |
-          git config user.name "market-edge-research-bot"
-          git config user.email "research-bot@users.noreply.github.com"
-          git add research/data/v2-clean/dryrun-native-htf-report.json
-          git commit -m "data: native-HTF policy dry-run report (run ${{ github.run_id }})" || exit 0
-          git pull --rebase origin ${{ github.ref_name }}
-          git push origin HEAD:${{ github.ref_name }}
+      - run: node research/run-v2-clean-dataset.mjs --dry-run

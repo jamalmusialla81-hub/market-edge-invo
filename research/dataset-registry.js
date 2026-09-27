@@ -19,9 +19,10 @@ const DATASETS = Object.freeze({
     preservedIn: 'D1 historical_scan_snapshots / historical_scan_candidates / historical_candidate_sequences where engine_version = HISTORICAL-RANK-V1'
   }),
   'HISTORICAL-RANK-V2-CLEAN-NATIVE-HTF': Object.freeze({
-    status: 'PROPOSED_NOT_GENERATED',
-    trainable: false,
-    reason: 'Same-venue alternative (4h from native Coinbase 1h, 1d from native Coinbase daily candles). Dry-run only until explicitly approved; never mixed with strict V2-CLEAN rows.'
+    status: 'ACTIVE',
+    trainable: true,
+    approvedAt: '2026-09-27',
+    reason: 'Separate version, approved 2026-09-27. 5m/15m/1h strictly from Coinbase spot 5m (no fill, fail closed); 4h from native Coinbase spot 1h and 1d from native Coinbase spot daily candles, point-in-time only. Never mixed with strict V2-CLEAN rows.'
   }),
   'HISTORICAL-RANK-V2-CLEAN': Object.freeze({
     status: 'ACTIVE',

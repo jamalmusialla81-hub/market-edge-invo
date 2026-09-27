@@ -86,5 +86,14 @@ console.log('V2-CLEAN generator integrity tests passed');
   const nat = C.prepareAsset('BTC', full, {now: scan + 10 * DAY, native});
   assert.equal(nat.htfSource, 'COINBASE_NATIVE_1H_1D');
   assert.throws(() => C.buildScan({timestamp: scan, assets: [nat, assets[1]]}), /POLICY_MIXING_REJECTED/);
+  // Native rows are labelled with their own version and exact frame sources.
+  const natBuilt = C.buildScan({timestamp: scan, assets: [nat]});
+  assert.equal(natBuilt.snapshot.engine_version, C.NATIVE_HTF_VERSION);
+  assert.ok(natBuilt.scanId.includes('NATIVE-HTF'));
+  for (const row of natBuilt.candidates) { const p = row.feature_json.provenance; assert.equal(p.dataset_version, C.NATIVE_HTF_VERSION); assert.equal(p.history_window.frame_sources.d1, 'COINBASE_SPOT_NATIVE_1D'); assert.ok(/^[0-9a-f]{64}$/.test(p.history_window.frame_sha256.h4)); }
+  const natOutcome = C.resolveStrict({timestamp: scan, valid_current_geometry: true, direction: 'long', stop: full.find(r => r.time === scan).open * .98, rr: 1.8}, nat);
+  assert.equal(natOutcome.dataset_version, C.NATIVE_HTF_VERSION); assert.equal(natOutcome.outcome_venue, 'COINBASE');
+  // Strict rows keep the strict version.
+  for (const row of built.candidates) assert.equal(row.feature_json.provenance.dataset_version, C.VERSION);
 }
 console.log('V2-CLEAN native-HTF policy tests passed');

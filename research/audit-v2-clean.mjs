@@ -18,6 +18,7 @@ import V2 from './rank-research-v2.js';
 import {archiveCsv} from './recover-historical-rank-outcomes.mjs';
 
 const CF = process.env.CLOUDFLARE_API_TOKEN || '', ACCOUNT = process.env.CLOUDFLARE_ACCOUNT_ID || '8ea7796a8fb13ffb612245e8a08a55d6', DB = process.env.MARKET_EDGE_D1_DATABASE_ID || '39a4082e-41a4-45e9-9b76-99cf10eaca01';
+const ENGINE = process.env.V2_CLEAN_AUDIT_ENGINE || Clean.VERSION, HTF_NATIVE = ENGINE === Clean.NATIVE_HTF_VERSION;
 const DIR = process.env.CANDLE_ARCHIVE_DIR || 'candle-archive', REPORT = process.env.V2_CLEAN_AUDIT_REPORT || 'v2-clean-audit-report.json', SAMPLE = Math.max(50, Number(process.env.V2_CLEAN_AUDIT_SAMPLE) || 80);
 const REQUIRED = ['dataset_version', 'label_version', 'scan_id', 'scan_timestamp', 'asset', 'entry_source', 'entry_venue', 'entry_instrument_type', 'latest_feature_candle_timestamp', 'freshness_status'];
 const REQUIRED_TARGET = ['entry_timestamp', 'entry_price', 'entry_source', 'entry_venue', 'entry_instrument_type', 'outcome_source', 'outcome_venue', 'outcome_instrument_type', 'label_version', 'dataset_version'];
@@ -44,13 +45,16 @@ function independentEvents(row, target, path) {
   for (const c of path) { const lowT = s > 0 ? c.low <= (tp1Hit ? entry : stop) : c.high >= (tp1Hit ? entry : stop), hit1 = s > 0 ? c.high >= tp1 : c.low <= tp1; if (lowT) return {stopHit: true, tp1Hit}; if (!tp1Hit && hit1) tp1Hit = true; }
   return {stopHit: false, tp1Hit};
 }
-function loadAsset(asset) { const rows = gunzipSync(readFileSync(join(DIR, `${asset}.csv.gz`))).toString().trim().split('\n').filter(Boolean).map(line => { const [time, open, high, low, close, volume] = line.split(',').map(Number); return {time, open, high, low, close, volume}; }); return Clean.prepareAsset(asset, rows); }
+function readCsv(path) { return gunzipSync(readFileSync(path)).toString().trim().split('\n').filter(Boolean).map(line => { const [time, open, high, low, close, volume] = line.split(',').map(Number); return {time, open, high, low, close, volume}; }); }
+function loadAsset(asset) { const native = HTF_NATIVE ? {h1: readCsv(join(DIR, `${asset}-1h.csv.gz`)), d1: readCsv(join(DIR, `${asset}-1d.csv.gz`))} : null; return Clean.prepareAsset(asset, readCsv(join(DIR, `${asset}.csv.gz`)), {native}); }
 
-const rows = (await d1(`SELECT c.candidate_id,c.scan_id,c.asset,c.direction,c.strategy,c.entry,c.stop,c.rr,c.valid_current_geometry,c.feature_json,c.targets_json,s.scan_timestamp FROM historical_scan_candidates c JOIN historical_scan_snapshots s ON s.scan_id=c.scan_id WHERE s.engine_version=? AND s.scan_timestamp<? AND c.valid_current_geometry=1 ORDER BY s.scan_timestamp,c.candidate_id`, [Clean.VERSION, V2.HOLDOUT.devCutoffMs])).map(row => { const features = JSON.parse(row.feature_json || '{}'); return {...row, timestamp: Number(row.scan_timestamp), entry: Number(row.entry), stop: Number(row.stop), rr: Number(row.rr), provenance: features.provenance || {}, targets: JSON.parse(row.targets_json || '{}')}; });
+const rows = (await d1(`SELECT c.candidate_id,c.scan_id,c.asset,c.direction,c.strategy,c.entry,c.stop,c.rr,c.valid_current_geometry,c.feature_json,c.targets_json,s.scan_timestamp FROM historical_scan_candidates c JOIN historical_scan_snapshots s ON s.scan_id=c.scan_id WHERE s.engine_version=? AND s.scan_timestamp<? AND c.valid_current_geometry=1 ORDER BY s.scan_timestamp,c.candidate_id`, [ENGINE, V2.HOLDOUT.devCutoffMs])).map(row => { const features = JSON.parse(row.feature_json || '{}'); return {...row, timestamp: Number(row.scan_timestamp), entry: Number(row.entry), stop: Number(row.stop), rr: Number(row.rr), provenance: features.provenance || {}, targets: JSON.parse(row.targets_json || '{}')}; });
 if (rows.some(row => row.timestamp >= V2.HOLDOUT.devCutoffMs)) throw new Error('HOLDOUT_BREACH');
 const provenanceMissing = rows.filter(row => REQUIRED.some(key => row.provenance[key] === undefined || row.provenance[key] === null) || (row.targets.status === 'RESOLVED' && REQUIRED_TARGET.some(key => row.targets[key] === undefined)));
 const staleRows = rows.filter(row => row.provenance.freshness_status !== 'FRESH_EXACT' || row.provenance.latest_feature_candle_timestamp !== row.timestamp - 300_000);
-const foreignVenue = rows.filter(row => row.provenance.entry_venue !== 'COINBASE' || (row.targets.status === 'RESOLVED' && row.targets.outcome_venue !== 'COINBASE'));
+// Cross-venue constructed: any entry, outcome, or fed timeframe not from Coinbase spot.
+const foreignVenue = rows.filter(row => row.provenance.entry_venue !== 'COINBASE' || row.provenance.entry_instrument_type !== 'SPOT' || (row.targets.status === 'RESOLVED' && (row.targets.outcome_venue !== 'COINBASE' || row.targets.outcome_instrument_type !== 'SPOT')) || Object.values(row.provenance.history_window?.frame_sources || {}).some(source => !/^(COINBASE_SPOT|AGGREGATED_FROM_COINBASE_SPOT)/.test(source)) || (HTF_NATIVE && !row.provenance.history_window?.frame_sources));
+const versionMismatch = rows.filter(row => row.provenance.dataset_version !== ENGINE || (row.targets.status === 'RESOLVED' && row.targets.dataset_version !== ENGINE));
 const random = rng(20260927), sample = rows.slice().sort((a, b) => random() - .5).slice(0, SAMPLE), assets = new Map();
 const inspected = [], decisionErr = [], entryErr = [], agreement = {checked: 0, stopAgree: 0, tp1Agree: 0, noBinanceData: 0}, reproduce = {checked: 0, identical: 0, mismatches: []};
 for (const row of sample) {
@@ -68,9 +72,9 @@ for (const row of sample) {
 }
 const dist = values => ({n: values.length, p50_bps: quant(values, .5), p95_bps: quant(values, .95), max_bps: values.length ? Math.max(...values) : null});
 const stopRate = agreement.checked ? agreement.stopAgree / agreement.checked : null, tp1Rate = agreement.checked ? agreement.tp1Agree / agreement.checked : null;
-const labelPass = reproduce.checked > 0 && reproduce.identical === reproduce.checked && !provenanceMissing.length && !foreignVenue.length && !staleRows.length && (stopRate ?? 0) >= .9 && (tp1Rate ?? 0) >= .9;
-const report = {dataset_version: Clean.VERSION, audited_at: new Date().toISOString(), scope: 'development rows only (scan_timestamp < holdout dev cutoff)', audit_source: 'Binance SPOT 1m public archive (USDT quote); never used to construct entries or labels', rows: rows.length, sampled: sample.length,
-  decision_price_error_abs: dist(decisionErr), entry_price_error_abs: dist(entryErr), provenance_missing: provenanceMissing.length, stale_rows: staleRows.length, non_coinbase_rows: foreignVenue.length,
+const labelPass = reproduce.checked > 0 && reproduce.identical === reproduce.checked && !provenanceMissing.length && !foreignVenue.length && !versionMismatch.length && !staleRows.length && (stopRate ?? 0) >= .9 && (tp1Rate ?? 0) >= .9;
+const report = {dataset_version: ENGINE, audited_at: new Date().toISOString(), scope: 'development rows only (scan_timestamp < holdout dev cutoff)', audit_source: 'Binance SPOT 1m public archive (USDT quote); never used to construct entries or labels', rows: rows.length, sampled: sample.length,
+  decision_price_error_abs: dist(decisionErr), entry_price_error_abs: dist(entryErr), provenance_missing: provenanceMissing.length, stale_rows: staleRows.length, cross_venue_constructed_rows: foreignVenue.length, dataset_version_mismatch: versionMismatch.length,
   label_reproducibility: reproduce, independent_label_agreement: {...agreement, stopAgreement: stopRate, tp1Agreement: tp1Rate}, label_audit: labelPass ? 'PASS' : 'FAIL', inspected};
 writeFileSync(REPORT, JSON.stringify(report, null, 1) + '\n');
 console.log(JSON.stringify({...report, inspected: inspected.slice(0, 60)}));
