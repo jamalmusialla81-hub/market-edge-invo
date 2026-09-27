@@ -63,6 +63,28 @@ fn exe(name: &str) -> String {
     }
 }
 
+/// `std::env::current_exe()` on Windows can return an extended-length
+/// (`\\?\...`) verbatim path. That path is fine for our own file I/O, but
+/// Node's CJS main-module resolution (`fs.realpathSync` inside
+/// `resolveMainPath`) mishandles it and collapses it down to a bare drive
+/// root, crashing the frozen forward loop with `EISDIR: lstat 'C:'` before
+/// it runs a single cycle. Strip the prefix from every path built off the
+/// exe location so nothing downstream (Node, Python, our own logs) ever
+/// sees a verbatim path.
+pub fn de_verbatim(p: PathBuf) -> PathBuf {
+    if !cfg!(windows) {
+        return p;
+    }
+    let s = p.to_string_lossy();
+    if let Some(rest) = s.strip_prefix(r"\\?\UNC\") {
+        PathBuf::from(format!(r"\\{rest}"))
+    } else if let Some(rest) = s.strip_prefix(r"\\?\") {
+        PathBuf::from(rest)
+    } else {
+        p
+    }
+}
+
 /// The installed layout, if `resource_dir` holds one. Err when a bundle is
 /// present but incomplete -- that is a broken install, not a reason to go
 /// looking for a repository.
@@ -374,6 +396,16 @@ pub fn set_mode(requested: ExecutionMode) -> Result<ExecutionMode, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn de_verbatim_strips_the_windows_extended_length_prefix() {
+        if cfg!(windows) {
+            assert_eq!(de_verbatim(PathBuf::from(r"\\?\C:\Users\x\Market Edge")), PathBuf::from(r"C:\Users\x\Market Edge"));
+            assert_eq!(de_verbatim(PathBuf::from(r"\\?\UNC\server\share\x")), PathBuf::from(r"\\server\share\x"));
+        }
+        // a plain path is unchanged everywhere, including off Windows where the prefix is a no-op
+        assert_eq!(de_verbatim(PathBuf::from("plain/path")), PathBuf::from("plain/path"));
+    }
 
     #[test]
     fn live_can_never_be_selected() {

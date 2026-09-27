@@ -587,7 +587,7 @@ fn legacy_data_dir() -> Option<PathBuf> {
 /// (headless mode has no Tauri runtime): macOS Contents/MacOS/../Resources,
 /// Windows the install directory, Linux packages /usr/lib/<product>.
 pub fn resource_dir_from_exe() -> Option<PathBuf> {
-    let exe = std::env::current_exe().ok()?;
+    let exe = config::de_verbatim(std::env::current_exe().ok()?);
     let dir = exe.parent()?.to_path_buf();
     if cfg!(target_os = "macos") {
         return Some(dir.parent()?.join("Resources"));
@@ -713,7 +713,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let data_dir = config::data_dir();
-            let resource_dir = app.path().resource_dir().ok();
+            let resource_dir = app.path().resource_dir().ok().map(config::de_verbatim);
             let layout = config::resolve_layout(resource_dir.as_deref(), config::dev_allowed());
             let _ = std::fs::create_dir_all(data_dir.join("logs"));
             let logs = Arc::new(LogStore::new(Some(&data_dir.join("logs"))));
