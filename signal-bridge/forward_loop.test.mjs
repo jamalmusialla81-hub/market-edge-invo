@@ -143,9 +143,15 @@ test('fetchMid retries a transient failure, but not a missing coin', async () =>
     if (calls === 1) return { ok: false, status: 429, json: async () => ({}) };
     return { ok: true, status: 200, json: async () => ({ NEAR: '2.5' }) };
   };
-  const mid = await fetchMid('NEAR', { fetchImpl: flaky, now: () => 42, sleep: async () => {} });
+  const waits = [];
+  const mid = await fetchMid('NEAR', { fetchImpl: flaky, now: () => 42, sleep: async (ms) => { waits.push(ms); } });
   assert.deepEqual(mid, { price: 2.5, at: 42 });
   assert.equal(calls, 2);
+  assert.deepEqual(waits, [5000]);
+  const limited = async () => ({ ok: false, status: 429, json: async () => ({}) });
+  const total = [];
+  await assert.rejects(fetchMid('NEAR', { fetchImpl: limited, sleep: async (ms) => { total.push(ms); } }), /after 5 attempts: HTTP 429/);
+  assert.ok(total.reduce((a, b) => a + b, 0) > 60000, 'backoff outlasts the per-minute rate-limit window');
   const ok = async () => ({ ok: true, status: 200, json: async () => ({ BTC: '1' }) });
   await assert.rejects(fetchMid('NEAR', { fetchImpl: ok, sleep: async () => {} }), /no live mid for NEAR/);
 });
