@@ -1,3 +1,4 @@
 # Editing this file on the research branch triggers phase5-v2-clean.yml.
-# stage: candles
-request: 2
+stage: all
+archive_run_id:
+request: 3

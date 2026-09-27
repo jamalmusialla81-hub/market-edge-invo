@@ -5,7 +5,7 @@
 // missing slot stays missing and is reported.  Read-only against production.
 import {mkdirSync, writeFileSync} from 'node:fs';
 import {gzipSync} from 'node:zlib';
-import {join} from 'node:path';
+import {join, dirname} from 'node:path';
 import Archive from './candle-archive.js';
 
 const OUT = process.env.CANDLE_ARCHIVE_DIR || 'candle-archive', MANIFEST_OUT = process.env.CANDLE_MANIFEST_OUT || join(OUT, 'manifest.json');
@@ -55,5 +55,7 @@ mkdirSync(OUT, {recursive: true});
 const results = [];
 for (const name of ASSETS) { const started = Date.now(); results.push(await asset(name)); console.log(JSON.stringify({progress: 'asset-complete', asset: name, seconds: (Date.now() - started) / 1000, requests, retries})); }
 const manifest = {archive_version: Archive.ARCHIVE_VERSION, generated_at: new Date(NOW).toISOString(), window: {from: new Date(FROM).toISOString(), to: new Date(TO).toISOString()}, policy: 'Coinbase Exchange spot USD 5m only; no fill, no forward-fill, no venue substitution; gaps recorded, consumers fail closed', requests, retries, assets: results};
+mkdirSync(dirname(MANIFEST_OUT), {recursive: true});
+writeFileSync(join(OUT, 'manifest.json'), JSON.stringify(manifest, null, 1) + '\n');
 writeFileSync(MANIFEST_OUT, JSON.stringify(manifest, null, 1) + '\n');
 console.log(JSON.stringify({status: 'CANDLE_ARCHIVE_COMPLETE', window: manifest.window, requests, retries, coverage: results.map(r => ({asset: r.asset, present: r.present, expected: r.expected, coverage: Math.round(r.coverage * 1e5) / 1e5, internalGaps: r.internalGaps, gapHistogram: r.gapLengthHistogram, issues: r.issues, first: r.first, last: r.last, periodsOver1h: r.missingPeriodsOver1h.length, longestPeriods: r.missingPeriodsOver1h.slice().sort((x, y) => y.missing_candles - x.missing_candles).slice(0, 8), native: r.native}))}));

@@ -62,7 +62,7 @@ function monthKey(time) { return new Date(time).toISOString().slice(0, 7); }
 function monthlyManifest(rows, {asset, product, sourceKey = 'COINBASE_SPOT', from, to, interval = BASE_MS}) {
   const source = SOURCES[sourceKey], months = new Map();
   for (let cursor = Date.UTC(new Date(from).getUTCFullYear(), new Date(from).getUTCMonth(), 1); cursor < to; ) { const next = new Date(cursor); next.setUTCMonth(next.getUTCMonth() + 1); months.set(monthKey(cursor), {start: Math.max(cursor, from), end: Math.min(next.getTime(), to), rows: []}); cursor = next.getTime(); }
-  for (const row of rows) { const month = months.get(monthKey(row.time)); if (month && row.time >= month.start && row.time < month.end) month.rows.push(row); }
+  for (const row of rows) { if (!Number.isFinite(row.time)) continue; const month = months.get(monthKey(row.time)); if (month && row.time >= month.start && row.time < month.end) month.rows.push(row); }
   return [...months.entries()].map(([month, value]) => {
     const expected = Math.round((value.end - value.start) / interval), text = value.rows.map(row => [row.time, row.open, row.high, row.low, row.close, row.volume].join(',')).join('\n'), gaps = gapsOf(value.rows, interval);
     const leading = value.rows.length ? (value.rows[0].time - value.start) / interval : expected, trailing = value.rows.length ? (value.end - value.rows.at(-1).time - interval) / interval : 0;

@@ -53,6 +53,7 @@ jobs:
           CANDLE_MANIFEST_OUT: research/data/v2-clean/candle-manifest.json
         run: node research/fetch-coinbase-candles.mjs
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: coinbase-5m-archive
           path: candle-archive/
