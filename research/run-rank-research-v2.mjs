@@ -9,6 +9,7 @@ import Quant from '../quant-engine.js';
 import Replay from '../replay-engine.js';
 import Rank from './historical-rank.js';
 import {archiveCsv} from './recover-historical-rank-outcomes.mjs';
+import Registry from './dataset-registry.js';
 
 const CF_TOKEN = process.env.CLOUDFLARE_API_TOKEN || '', ACCOUNT = process.env.CLOUDFLARE_ACCOUNT_ID || '8ea7796a8fb13ffb612245e8a08a55d6', DATABASE = process.env.MARKET_EDGE_D1_DATABASE_ID || '39a4082e-41a4-45e9-9b76-99cf10eaca01';
 const ENGINE = process.env.HISTORICAL_RANK_ENGINE_VERSION || 'HISTORICAL-RANK-V1', REPORT = process.env.RANK_V2_REPORT || 'rank-research-v2-report.json';
@@ -112,6 +113,8 @@ function integrityAudit(rows, market) {
   return {geometry, priceVsBinance: {checked: price.length, medianRatio: median(price.map(item => item.ratio)), offBy2pct: off.length, offBySource: summary(off), examples: off.slice(0, 6)}, labelVsRealisedRange: {checked: label.length, inconsistent: inconsistent.length, inconsistentBySource: summary(inconsistent), checkedBySource: summary(label), medianStoredMfe: median(label.map(item => item.storedMfe)), medianCloseMfeLowerBound: median(label.map(item => item.closeMfeLowerBound)), examples: inconsistent.slice(0, 6)}};
 }
 async function run() {
+  // Invalid generations may only be audited, never used as model evidence.
+  const registry = Registry.status(ENGINE), auditOnly = !registry.trainable;
   const started = Date.now(), counts = await scanCounts(), raw = await loadCandidates(), {rows, excludedHoldoutOrEmbargo, droppedOther, droppedStaleInputs, staleByLabelSource} = V2.parseRows(raw), allDev = V2.parseRows(raw, {includeStale: true}).rows;
   if (excludedHoldoutOrEmbargo) throw new Error('HOLDOUT_BREACH: loader returned rows beyond the development cutoff');
   const meta = await loadAllCandidateMeta(), audit = V2.datasetAudit(rows, meta), auditIncludingStale = V2.datasetAudit(allDev), first = allDev[0].timestamp, last = allDev.at(-1).timestamp, context = {}, contextStatus = {};
@@ -122,8 +125,8 @@ async function run() {
     catch (error) { contextStatus[key] = `UNAVAILABLE: ${error.message}`; }
   }
   const integrity = integrityAudit(allDev, context.crossMarket);
-  if (audit.choiceScanGroups < MIN_CHOICE_SCANS) {
-    const report = {version: V2.VERSION, engine: ENGINE, status: 'INSUFFICIENT_VALID_DATA', reason: `Only ${audit.choiceScanGroups} fresh choice scan groups (< ${MIN_CHOICE_SCANS}); no model is trained on stale or invalid rows`, readOnly: true, productionInfluence: 'NONE', holdout: V2.HOLDOUT, scanCounts: counts, validity, audit, auditIncludingStale, contextStatus, integrity, d1RowsRead: rowsRead};
+  if (auditOnly || audit.choiceScanGroups < MIN_CHOICE_SCANS) {
+    const report = {version: V2.VERSION, engine: ENGINE, status: auditOnly ? `AUDIT_ONLY_${registry.status}` : 'INSUFFICIENT_VALID_DATA', reason: auditOnly ? registry.reason : `Only ${audit.choiceScanGroups} fresh choice scan groups (< ${MIN_CHOICE_SCANS}); no model is trained on stale or invalid rows`, readOnly: true, productionInfluence: 'NONE', holdout: V2.HOLDOUT, scanCounts: counts, validity, audit, auditIncludingStale, contextStatus, integrity, d1RowsRead: rowsRead};
     writeFileSync(REPORT, JSON.stringify(compact(report), null, 2) + '\n'); console.log(JSON.stringify(compact(report))); return;
   }
   const features = V2.featureTable(rows, context), coverage = Object.fromEntries(V2.FAMILIES.map(family => { const cols = V2.columns(features, [family]); return [family, {columns: cols.length, nonNullShare: cols.length ? V2.matrix(features, cols).flat().filter(Number.isFinite).length / (cols.length * features.length) : 0}]; }));
