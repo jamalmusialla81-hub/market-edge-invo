@@ -32,14 +32,15 @@ class AccountState:
 @dataclass
 class RiskLimits:
     max_risk_per_trade_pct: float = 1.0       # % of equity
-    max_portfolio_exposure_pct: float = 20.0  # % of equity, notional, open + new
-    max_concurrent_positions: int = 5
+    max_portfolio_exposure_pct: float = 20.0  # % of equity, notional, open + new -- aggregate ceiling, never raised
+    max_initial_position_notional_pct: float = 5.0  # % of equity, notional -- a ceiling per position, never a target
+    max_concurrent_positions: int = 4
     leverage_ceiling: float = 10.0
     min_liquidation_distance_pct: float = 5.0  # entry to liquidation, at minimum
     min_liquidation_buffer_pct: float = 1.0    # stop must be hit this far before liquidation
     daily_loss_limit_pct: float = 5.0
     drawdown_limit_pct: float = 15.0
-    min_capped_risk_fraction: float = 0.1     # a trade shrunk by the exposure cap must still risk >= 10% of the budget
+    min_capped_risk_fraction: float = 0.1     # a trade shrunk by a cap must still risk >= 10% of the budget
 
 
 @dataclass
@@ -92,24 +93,29 @@ def approve(intent: ExecutionIntent, account: AccountState, limits: RiskLimits =
     if drawdown_pct >= limits.drawdown_limit_pct:
         return reject("DRAWDOWN_LIMIT_HIT")
 
-    # position size = risk budget / stop distance (the core invariant; leverage never enters this)
+    # Risk sizing is authoritative: position size = risk budget / stop distance
+    # (the core invariant; leverage never enters this). Two ceilings can then
+    # shrink it -- never enlarge it -- and neither is a target: if risk sizing
+    # already produces 2.3% notional, that stands; if it produces 12%, it is
+    # capped to the 5% per-position ceiling.
     risk_budget = account.equity * (limits.max_risk_per_trade_pct / 100.0)
-    position_size = risk_budget / stop_distance
-    max_loss = position_size * stop_distance  # == risk_budget by construction; leverage cannot raise this
-    notional = position_size * entry
+    risk_size = risk_budget / stop_distance
 
-    # When the exposure cap binds, shrink the position to fit it instead of
-    # rejecting: the loss at the stop only gets smaller than risk_budget.
     room = account.equity * limits.max_portfolio_exposure_pct / 100.0 - account.open_notional
     if room <= 0:
-        return reject("MAX_PORTFOLIO_EXPOSURE_EXCEEDED")
-    exposure_capped = notional > room
-    if exposure_capped:
-        position_size = room / entry
-        notional = room
-        max_loss = position_size * stop_distance
-        if max_loss < risk_budget * limits.min_capped_risk_fraction:
-            return reject("MAX_PORTFOLIO_EXPOSURE_EXCEEDED")
+        return reject("PORTFOLIO_EXPOSURE_CAP")
+    position_cap_size = (account.equity * limits.max_initial_position_notional_pct / 100.0) / entry
+    room_size = room / entry
+
+    binding, position_size = min(
+        (("RISK", risk_size), ("POSITION", position_cap_size), ("PORTFOLIO", room_size)),
+        key=lambda pair: pair[1],
+    )
+    exposure_capped = binding != "RISK"
+    notional = position_size * entry
+    max_loss = position_size * stop_distance  # <= risk_budget by construction; leverage cannot raise this
+    if exposure_capped and max_loss < risk_budget * limits.min_capped_risk_fraction:
+        return reject(f"{binding}_EXPOSURE_CAP")
 
     requested_leverage = max(intent.leverage, 0.0001)
 

@@ -14,6 +14,7 @@ slippage assumptions production's forward engine uses (lifecycle.py).
 """
 from __future__ import annotations
 
+import threading
 import time
 from dataclasses import dataclass, field
 from typing import Callable, Optional
@@ -58,6 +59,12 @@ class PaperEngine:
         entries_gate returns a rejection reason (e.g. ENTRIES_PAUSED) or None."""
         self.ledger, self.router, self.store, self._limits, self.portfolio = ledger, router, store, limits, portfolio
         self._limits_provider, self._entries_gate, self._max_mark_age_provider = limits_provider, entries_gate, max_mark_age_provider
+        # FastAPI runs sync endpoints in a threadpool, so two /paper/signal
+        # calls can interleave. Without this lock each could read the same
+        # account_state() snapshot and both pass the exposure check,
+        # together exceeding the 20% cap. Held across read-check-write so
+        # exposure reservation is atomic within this process.
+        self._entry_lock = threading.Lock()
 
     @property
     def limits(self) -> RiskLimits:
@@ -111,65 +118,71 @@ class PaperEngine:
         max_mark_age = self._max_mark_age_provider() if self._max_mark_age_provider else MAX_MARK_AGE_SECONDS
         if (now_ms - mark_at_ms) / 1000.0 > max_mark_age:
             return self._reject(sid, "STALE_MARKET_DATA", payload, now_ms)
-        # One live trade per instrument: a fresh scan of the same setup every
-        # 5 minutes must not pyramid into it (endurance segment 1). The
-        # canonical portfolio counts too: a position opened outside the paper
-        # session would otherwise be merged in and break reconciliation.
-        if self.ledger.open_trade_for(instrument) or (self.portfolio and self.portfolio.position(instrument)):
-            return self._reject(sid, "POSITION_ALREADY_OPEN_ON_INSTRUMENT", payload, now_ms)
+        # Everything from here on reads account/instrument state and then
+        # writes it, so it runs under the entry lock: two concurrent signals
+        # must not both read "no position on this instrument" or both read
+        # the same exposure room and each pass the cap independently.
+        with self._entry_lock:
+            # One live trade per instrument: a fresh scan of the same setup
+            # every 5 minutes must not pyramid into it (endurance segment 1).
+            # The canonical portfolio counts too: a position opened outside
+            # the paper session would otherwise be merged in and break
+            # reconciliation.
+            if self.ledger.open_trade_for(instrument) or (self.portfolio and self.portfolio.position(instrument)):
+                return self._reject(sid, "DUPLICATE_INSTRUMENT", payload, now_ms)
 
-        long = signal.direction == "long"
-        side = DIRECTION_TO_SIDE[signal.direction]
-        if (long and mark_price <= signal.stop) or (not long and mark_price >= signal.stop):
-            return self._reject(sid, "STOP_ALREADY_BREACHED", payload, now_ms)
-        tp1 = signal.targets[0] if signal.targets else None
-        tp2 = signal.targets[1] if len(signal.targets) > 1 else None
-        if tp1 is not None and ((long and mark_price >= tp1) or (not long and mark_price <= tp1)):
-            return self._reject(sid, "TARGET_ALREADY_REACHED", payload, now_ms)
+            long = signal.direction == "long"
+            side = DIRECTION_TO_SIDE[signal.direction]
+            if (long and mark_price <= signal.stop) or (not long and mark_price >= signal.stop):
+                return self._reject(sid, "STOP_ALREADY_BREACHED", payload, now_ms)
+            tp1 = signal.targets[0] if signal.targets else None
+            tp2 = signal.targets[1] if len(signal.targets) > 1 else None
+            if tp1 is not None and ((long and mark_price >= tp1) or (not long and mark_price <= tp1)):
+                return self._reject(sid, "TARGET_ALREADY_REACHED", payload, now_ms)
 
-        entry_fill = lifecycle.slipped(mark_price, side)
-        provisional = ExecutionIntent.create({
-            "signal_id": sid, "instrument": instrument, "side": side, "quantity": 0.0, "order_type": "MARKET",
-            "strategy_id": signal.strategy_id or "market-edge-alpha", "limit_price": entry_fill, "stop": signal.stop,
-            "targets": list(signal.targets), "leverage": requested_leverage, "venue_preference": venue_preference,
-        })
-        account = self.ledger.account_state(killed=self.router.killed, now_ms=now_ms)
-        assessment = approve(provisional, account, self.limits)
-        if not assessment.decision.approved:
-            return self._reject(sid, assessment.decision.reason or "RISK_REJECTED", payload, now_ms, outcome="RISK_REJECTED")
+            entry_fill = lifecycle.slipped(mark_price, side)
+            provisional = ExecutionIntent.create({
+                "signal_id": sid, "instrument": instrument, "side": side, "quantity": 0.0, "order_type": "MARKET",
+                "strategy_id": signal.strategy_id or "market-edge-alpha", "limit_price": entry_fill, "stop": signal.stop,
+                "targets": list(signal.targets), "leverage": requested_leverage, "venue_preference": venue_preference,
+            })
+            account = self.ledger.account_state(killed=self.router.killed, now_ms=now_ms)
+            assessment = approve(provisional, account, self.limits)
+            if not assessment.decision.approved:
+                return self._reject(sid, assessment.decision.reason or "RISK_REJECTED", payload, now_ms, outcome="RISK_REJECTED")
 
-        leverage = float(assessment.decision.approved_leverage)
-        # 8dp matches the portfolio's Nautilus Quantity precision, so the
-        # ledger and the canonical position never drift by rounding.
-        quantity = round(assessment.position_size, 8)
-        if quantity <= 0:
-            return self._reject(sid, "SIZE_BELOW_PRECISION", payload, now_ms, outcome="RISK_REJECTED")
-        sized = ExecutionIntent.create({**provisional.to_dict(), "quantity": quantity, "leverage": leverage})
-        try:
-            backend, fill = self.router.route(sized, risk_decision=assessment.decision)
-        except RouterError as error:
-            return self._reject(sid, f"ROUTER: {error}", payload, now_ms)
+            leverage = float(assessment.decision.approved_leverage)
+            # 8dp matches the portfolio's Nautilus Quantity precision, so the
+            # ledger and the canonical position never drift by rounding.
+            quantity = round(assessment.position_size, 8)
+            if quantity <= 0:
+                return self._reject(sid, "SIZE_BELOW_PRECISION", payload, now_ms, outcome="RISK_REJECTED")
+            sized = ExecutionIntent.create({**provisional.to_dict(), "quantity": quantity, "leverage": leverage})
+            try:
+                backend, fill = self.router.route(sized, risk_decision=assessment.decision)
+            except RouterError as error:
+                return self._reject(sid, f"ROUTER: {error}", payload, now_ms)
 
-        qty = fill.quantity_filled
-        entry_fee = lifecycle.fee(entry_fill, qty)
-        trade = {
-            "trade_id": sid, "signal_id": sid, "instrument": instrument, "asset": signal.asset, "coin": coin or signal.asset,
-            "direction": signal.direction, "strategy": signal.strategy_id, "status": "OPEN", "backend": backend,
-            "execution_mode": EXECUTION_MODE, "opened_at_ms": now_ms, "closed_at_ms": None, "exit_reason": None,
-            "signal_timestamp": signal.timestamp, "signal_entry": signal.entry, "stop": signal.stop, "tp1": tp1, "tp2": tp2,
-            "mark_at_entry": mark_price, "entry_fill": entry_fill, "quantity": qty, "remaining_qty": qty,
-            "tp1_hit": False, "requested_leverage": requested_leverage, "approved_leverage": leverage,
-            "notional": assessment.notional, "margin_used": assessment.margin_required,
-            "stop_distance": assessment.stop_distance, "risk_amount": assessment.risk_amount, "max_loss": assessment.max_loss,
-            "liquidation_estimate": assessment.liquidation_estimate, "liquidation_buffer_pct": assessment.liquidation_buffer_pct,
-            "equity_at_entry": account.equity, "risk_pct_of_equity": assessment.risk_amount / account.equity * 100,
-            "exposure_capped": assessment.exposure_capped,
-            "realized_pnl": 0.0, "unrealized_pnl": 0.0, "fees": entry_fee,
-            "slippage_cost": abs(entry_fill - mark_price) * qty, "mark_price": mark_price, "last_checked_ms": now_ms,
-            "quant_score": signal.quant_score, "exits": [],
-        }
-        self.ledger.open_trade(trade)
-        self.ledger.record_signal(sid, "EXECUTED", None, payload, at_ms=now_ms)
+            qty = fill.quantity_filled
+            entry_fee = lifecycle.fee(entry_fill, qty)
+            trade = {
+                "trade_id": sid, "signal_id": sid, "instrument": instrument, "asset": signal.asset, "coin": coin or signal.asset,
+                "direction": signal.direction, "strategy": signal.strategy_id, "status": "OPEN", "backend": backend,
+                "execution_mode": EXECUTION_MODE, "opened_at_ms": now_ms, "closed_at_ms": None, "exit_reason": None,
+                "signal_timestamp": signal.timestamp, "signal_entry": signal.entry, "stop": signal.stop, "tp1": tp1, "tp2": tp2,
+                "mark_at_entry": mark_price, "entry_fill": entry_fill, "quantity": qty, "remaining_qty": qty,
+                "tp1_hit": False, "requested_leverage": requested_leverage, "approved_leverage": leverage,
+                "notional": assessment.notional, "margin_used": assessment.margin_required,
+                "stop_distance": assessment.stop_distance, "risk_amount": assessment.risk_amount, "max_loss": assessment.max_loss,
+                "liquidation_estimate": assessment.liquidation_estimate, "liquidation_buffer_pct": assessment.liquidation_buffer_pct,
+                "equity_at_entry": account.equity, "risk_pct_of_equity": assessment.risk_amount / account.equity * 100,
+                "exposure_capped": assessment.exposure_capped,
+                "realized_pnl": 0.0, "unrealized_pnl": 0.0, "fees": entry_fee,
+                "slippage_cost": abs(entry_fill - mark_price) * qty, "mark_price": mark_price, "last_checked_ms": now_ms,
+                "quant_score": signal.quant_score, "exits": [],
+            }
+            self.ledger.open_trade(trade)
+            self.ledger.record_signal(sid, "EXECUTED", None, payload, at_ms=now_ms)
         log_event("paper_trade_opened", signal_id=sid, instrument=instrument, backend=backend)
         self.ledger.record_equity(now_ms)
         return EntryResult(signal_id=sid, accepted=True, trade=trade)
