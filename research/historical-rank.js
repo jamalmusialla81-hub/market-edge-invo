@@ -14,6 +14,10 @@ const VERSION = process.env.HISTORICAL_RANK_ENGINE_VERSION || 'HISTORICAL-RANK-P
 const ASSETS = ['BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'LTC'];
 const BASE_MS = 300000;
 const OUTCOME_BARS = 288;
+// The latest completed 5m candle must close at the scan clock.  Without this,
+// a gap in the canonical cache lets cachedSnapshot() silently reuse the last
+// available (stale) candles: no lookahead, but not the market at that time.
+const MAX_STALENESS_MS = 2 * BASE_MS;
 const SETTINGS = Object.freeze({balance:7,riskPct:.01,maxLeverage:10,minQuality:72,minRR:1.8,maxExposurePct:1,minNotional:10,requireMTF:true,rankingMode:true});
 const finite = value => Number.isFinite(Number(value)) ? Number(value) : null;
 function stable(value) { if (Array.isArray(value)) return `[${value.map(stable).join(',')}]`; if (value && typeof value === 'object') return `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${stable(value[key])}`).join(',')}}`; return JSON.stringify(value); }
@@ -35,6 +39,7 @@ function candidateRows({scanId,timestamp,asset,timeframes,sourceHash,instrument=
   Replay.assertNoLookahead(timeframes,timestamp);
   const sequence=Sequences.build(timeframes,timestamp);
   Sequences.assertNoFuture(sequence,timestamp);
+  assertFresh(sequence,timestamp);
   const candidates=Quant.evaluateSetupCandidates({timeframes,settings:SETTINGS});
   const evaluated=candidates.map((candidate,index) => {
     // evaluateSetupCandidates keeps candidateKey when an early rejection does
@@ -50,6 +55,7 @@ function candidateRows({scanId,timestamp,asset,timeframes,sourceHash,instrument=
   evaluated.forEach(row=>{row.candidate_count=evaluated.length; row.candidate_hash=hash({...row,targets:undefined,candidate_hash:undefined});});
   return evaluated;
 }
+function assertFresh(sequence,timestamp){const end=Number(sequence?.timeframes?.m5?.window_end);if(!Number.isFinite(end)||timestamp-end>MAX_STALENESS_MS)throw new Error(`STALE_SNAPSHOT_REJECTED: latest completed 5m candle closes ${Number.isFinite(end)?Math.round((timestamp-end)/60000):'?'} minutes before the scan`);return true;}
 function snapshot({scanId,timestamp,universe,sourceHash,cadenceMs,candidates}) {
   const value={scan_id:scanId,scan_timestamp:timestamp,data_timestamp:timestamp,universe_mode:'HISTORICAL_DATA_UNIVERSE_PROXY',eligible_universe:universe,engine_version:VERSION,strategy_version:'quant-engine-shared',quant_version:'quant-engine-shared',ml_version:'ML_NOT_AVAILABLE_FOR_HISTORICAL_TIMESTAMP',feature_version:Features.VERSION,source_dataset_hash:sourceHash,scan_cadence_ms:cadenceMs,candidate_count:candidates.length};
   return {...value,snapshot_hash:hash(value)};
@@ -93,4 +99,4 @@ function resolveCandidate(candidate,future) {
   const costR=.0016/(distance/entry);
   return {status:'RESOLVED',TP1_BEFORE_SL:tp1Hit,FINAL_R:finalR-costR,MFE:mfe,MAE:mae,STOP_HIT:stopHit,TP2_HIT:tp2Hit,duration_bars:bars,BREAKOUT_FAILURE:candidate.strategy==='BREAKOUT + RETEST'&&!tp1Hit,execution:'next-valid 5m open with directional slippage; conservative stop-first same-candle ordering; 0.16% round-trip cost'};
 }
-module.exports={VERSION,ASSETS,BASE_MS,OUTCOME_BARS,SETTINGS,hash,geometry,preEntryFeatures,candidateRows,snapshot,finalizeCandidates,resolveCandidate};
+module.exports={VERSION,ASSETS,BASE_MS,OUTCOME_BARS,MAX_STALENESS_MS,assertFresh,SETTINGS,hash,geometry,preEntryFeatures,candidateRows,snapshot,finalizeCandidates,resolveCandidate};

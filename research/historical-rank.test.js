@@ -56,3 +56,12 @@ test('runner finalizes real historical candidate rows using combined_score',()=>
   assert.equal(finalized.find(row=>row.candidate_id==='rejected').candidate_rank,undefined);
   assert.ok(finalized.every(row=>row.candidate_count===3&&typeof row.candidate_hash==='string'));
 });
+
+test('stale frozen snapshots are rejected before any candidate is written',()=>{
+  const timestamp=1_700_000_000_000;
+  assert.ok(Rank.assertFresh({timeframes:{m5:{window_end:timestamp}}},timestamp));
+  assert.ok(Rank.assertFresh({timeframes:{m5:{window_end:timestamp-Rank.BASE_MS}}},timestamp));
+  assert.throws(()=>Rank.assertFresh({timeframes:{m5:{window_end:timestamp-3*Rank.BASE_MS}}},timestamp),/STALE_SNAPSHOT_REJECTED/);
+  assert.throws(()=>Rank.assertFresh({timeframes:{m5:{window_end:timestamp-86_400_000}}},timestamp),/STALE_SNAPSHOT_REJECTED/);
+  assert.throws(()=>Rank.assertFresh({timeframes:{}},timestamp),/STALE_SNAPSHOT_REJECTED/);
+});

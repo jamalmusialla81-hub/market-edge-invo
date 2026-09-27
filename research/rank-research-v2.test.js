@@ -39,6 +39,12 @@ const consumed = new Map(), registry = {has: id => consumed.has(id), add: (id, v
 V2.consumeHoldout({registry, modelSpec: {name: 'WITHIN_SCAN_RIDGE', families: ['MOMENTUM']}, confirm: 'CONSUME_SEALED_HOLDOUT_ONCE'});
 assert.throws(() => V2.consumeHoldout({registry, modelSpec: {name: 'WITHIN_SCAN_RIDGE', families: ['MOMENTUM']}, confirm: 'CONSUME_SEALED_HOLDOUT_ONCE'}), /HOLDOUT_ALREADY_CONSUMED/);
 
+// Stale frozen inputs (latest 5m candle older than the scan) are excluded.
+const fresh = synthetic(3), staleRows = fresh.map(row => ({...row, sequence_json: JSON.stringify({timeframes: Object.fromEntries(Object.entries(JSON.parse(row.sequence_json).timeframes).map(([k, v]) => [k, {...v, window_end: row.scan_timestamp - 3 * 86_400_000}]))})}));
+assert.equal(V2.parseRows(staleRows).rows.length, 0);
+assert.equal(V2.parseRows(staleRows).droppedStaleInputs, staleRows.length);
+assert.equal(V2.parseRows(staleRows, {includeStale: true}).rows.length, staleRows.length);
+
 // Leakage guard rejects any outcome-derived feature name.
 assert.throws(() => V2.assertPreEntryFeatureNames({BASE: {finalR: 1}}), /LEAKAGE_REJECTED/);
 assert.throws(() => V2.assertPreEntryFeatureNames({BASE: {mfeRatio: 1}}), /LEAKAGE_REJECTED/);

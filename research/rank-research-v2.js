@@ -36,6 +36,10 @@ const HOLDOUT = Object.freeze({
 });
 const FAMILIES = Object.freeze(['BASE', 'SETUP', 'STRUCTURE', 'VOLATILITY', 'MOMENTUM', 'LIQUIDITY', 'REGIME', 'CROSS_MARKET', 'DERIVATIVES']);
 const STRATEGIES = Object.freeze(['TREND CONTINUATION', 'BREAKOUT + RETEST', 'MOMENTUM CONTINUATION', 'MEAN REVERSION', 'LIQUIDITY-SWEEP REVERSAL']);
+// Frozen inputs whose latest completed 5m candle closes more than this before
+// the scan are stale replays of an older market and are excluded.
+const MAX_STALENESS_MS = 2 * 300_000;
+const freshInputs = row => row.timestamp - Number(row.sequence?.timeframes?.m5?.window_end) <= MAX_STALENESS_MS;
 const LEAK_PATTERN = /outcome|target_|label|future|final_?r|mfe|mae|tp1_?hit|tp2|stop_?hit|pnl|duration|resolved/i;
 
 const finite = value => value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value)) ? Number(value) : null;
@@ -56,12 +60,12 @@ function sequenceSafe(row) {
 }
 // Development rows only.  Holdout rows are rejected here even if a loader
 // accidentally returned them, so no downstream code can see them.
-function parseRows(rows, {cutoffMs = HOLDOUT.devCutoffMs} = {}) {
+function parseRows(rows, {cutoffMs = HOLDOUT.devCutoffMs, includeStale = false} = {}) {
   const parsed = rows.map(row => ({...row, timestamp: Number(row.scan_timestamp ?? row.timestamp), entry: finite(row.entry), stop: finite(row.stop), quant_score: finite(row.quant_score) ?? 0, candidate_rank: finite(row.candidate_rank), rr: finite(row.rr) ?? 0, targets: parse(row.targets_json ?? row.targets), sequence: parse(row.sequence_json ?? row.sequence), features: parse(row.feature_json ?? row.features)}));
-  const leaked = parsed.filter(row => row.timestamp >= cutoffMs);
-  const kept = parsed.filter(row => row.timestamp < cutoffMs && Number(row.valid_current_geometry) === 1 && row.targets.status === 'RESOLVED' && Number.isFinite(finite(row.targets.FINAL_R)) && row.entry > 0 && row.stop > 0 && sequenceSafe(row))
+  const leaked = parsed.filter(row => row.timestamp >= cutoffMs), stale = parsed.filter(row => row.timestamp < cutoffMs && !freshInputs(row));
+  const kept = parsed.filter(row => row.timestamp < cutoffMs && (includeStale || freshInputs(row)) && Number(row.valid_current_geometry) === 1 && row.targets.status === 'RESOLVED' && Number.isFinite(finite(row.targets.FINAL_R)) && row.entry > 0 && row.stop > 0 && sequenceSafe(row))
     .sort((a, b) => a.timestamp - b.timestamp || String(a.candidate_id).localeCompare(String(b.candidate_id)));
-  return {rows: kept, excludedHoldoutOrEmbargo: leaked.length, droppedOther: parsed.length - leaked.length - kept.length};
+  return {rows: kept, excludedHoldoutOrEmbargo: leaked.length, droppedStaleInputs: stale.length, staleByLabelSource: Object.fromEntries(Object.entries(Object.groupBy(stale, row => row.targets.outcome_source || 'COINBASE_CANONICAL')).map(([k, v]) => [k, v.length])), droppedOther: parsed.length - leaked.length - stale.length - kept.length};
 }
 function groupByScan(rows) { return Object.values(Object.groupBy(rows, row => row.scan_id)).sort((left, right) => left[0].timestamp - right[0].timestamp || String(left[0].scan_id).localeCompare(String(right[0].scan_id))); }
 const stopFraction = row => Math.max(Math.abs(row.entry - row.stop) / row.entry, 1e-6);
@@ -517,4 +521,4 @@ function consumeHoldout({registry, modelSpec, confirm}) {
   return {holdout: HOLDOUT, specHash, sqlFilter: `s.scan_timestamp >= ${HOLDOUT.startMs}`};
 }
 
-module.exports = {VERSION, HOLDOUT, COSTS, FAMILIES, MODEL_NAMES, EMBARGO_MS, OUTCOME_HORIZON_MS, parseRows, groupByScan, costR, stopFraction, extractFeatures, featureTable, columns, matrix, fitScaler, applyScaler, assertPreEntryFeatureNames, ridgeFit, logisticFit, gbmFit, convFit, sequenceTensor, demeanWithinGroups, weightedPairAccuracy, picks, summarise, blockBootstrap, rankBuckets, spearmanWithin, walkForwardFolds, innerSplit, walkForward, evaluateOos, acceptance, ablations, datasetAudit, consumeHoldout, closeAt, realizedVol, hashString};
+module.exports = {VERSION, HOLDOUT, MAX_STALENESS_MS, COSTS, FAMILIES, MODEL_NAMES, EMBARGO_MS, OUTCOME_HORIZON_MS, parseRows, groupByScan, costR, stopFraction, extractFeatures, featureTable, columns, matrix, fitScaler, applyScaler, assertPreEntryFeatureNames, ridgeFit, logisticFit, gbmFit, convFit, sequenceTensor, demeanWithinGroups, weightedPairAccuracy, picks, summarise, blockBootstrap, rankBuckets, spearmanWithin, walkForwardFolds, innerSplit, walkForward, evaluateOos, acceptance, ablations, datasetAudit, consumeHoldout, closeAt, realizedVol, hashString};
