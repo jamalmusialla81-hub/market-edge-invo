@@ -1,0 +1,48 @@
+name: Phase 5 — V2-CLEAN rebuild (research only)
+
+# Rebuilds the historical rank dataset as a NEW immutable version from
+# genuine Coinbase spot 5m candles.  HISTORICAL-RANK-V1 is never modified.
+# Triggered only by editing research/v2-clean/RUN_REQUEST on the research
+# branch (or manually once merged).  No production path is touched.
+on:
+  workflow_dispatch:
+  push:
+    branches: [claude/clever-faraday-y12d11]
+    paths: [research/v2-clean/RUN_REQUEST]
+
+concurrency:
+  group: historical-rank-v2-clean-write
+  cancel-in-progress: false
+
+jobs:
+  candles:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Archive-module tests
+        run: node research/candle-archive.test.js
+      - name: Fetch and validate Coinbase spot 5m candles (no fill, no substitution)
+        env:
+          CANDLE_ARCHIVE_DIR: candle-archive
+          CANDLE_MANIFEST_OUT: research/data/v2-clean/candle-manifest.json
+        run: node research/fetch-coinbase-candles.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coinbase-5m-archive-${{ github.run_id }}
+          path: candle-archive/
+          retention-days: 90
+      - name: Commit the provenance manifest to the research branch
+        if: github.ref_name == 'claude/clever-faraday-y12d11'
+        run: |
+          git config user.name "market-edge-research-bot"
+          git config user.email "research-bot@users.noreply.github.com"
+          git add research/data/v2-clean/candle-manifest.json
+          git commit -m "data: Coinbase spot 5m candle manifest (run ${{ github.run_id }})" || exit 0
+          git pull --rebase origin ${{ github.ref_name }}
+          git push origin HEAD:${{ github.ref_name }}
