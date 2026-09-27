@@ -30,6 +30,20 @@ export function bestTradeNowToAlphaSignal(scan) {
   };
 }
 
+// Display-only scan context for the desktop app's Signals screen. Never used
+// for sizing or routing; the execution-service stores it next to the signal.
+export function signalMeta(scan) {
+  const best = scan?.bestTradeNow;
+  if (!best) return null;
+  const pick = (key) => (best[key] === undefined ? null : best[key]);
+  return {
+    rank: pick('rank'), quant_score: pick('quant_score'), ml_score: pick('ml_score'), combined_score: pick('combined_score'),
+    rr1: pick('rr1'), rr2: pick('rr2'), strategy: pick('strategy'), entry_status: pick('entry_status'),
+    strict_verdict: pick('strict_verdict'), current_price: pick('current_price'), source_count: pick('source_count'),
+    regime: pick('regime'), scan_id: scan.scanId,
+  };
+}
+
 export function toInstrument(asset) {
   return `${asset}-PERP`;
 }
@@ -61,7 +75,7 @@ export async function runOnce({ fetchImpl = fetch, now = Date.now(), dryRun = fa
     return { scanId: scan.scanId, scannedAt: scan.scannedAt, status: scan.status, signal: null, reason: 'NO_VALID_CANDIDATE', posted: null };
   }
   if (dryRun) {
-    return { scanId: scan.scanId, scannedAt: scan.scannedAt, status: scan.status, signal, coin: toCoin(scan), posted: null };
+    return { scanId: scan.scanId, scannedAt: scan.scannedAt, status: scan.status, signal, coin: toCoin(scan), meta: signalMeta(scan), posted: null };
   }
   const posted = await postSignal(signal);
   return { scanId: scan.scanId, scannedAt: scan.scannedAt, status: scan.status, signal, posted };

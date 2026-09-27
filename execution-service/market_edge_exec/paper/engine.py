@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Callable, Optional
 
 from market_edge_exec.domain.contracts import AlphaSignal, ContractError, ExecutionIntent, RiskDecision
 from market_edge_exec.paper import lifecycle
@@ -48,8 +48,24 @@ class MarkResult:
 
 
 class PaperEngine:
-    def __init__(self, ledger: PaperLedger, router: ExecutionRouter, store: Store, limits: RiskLimits = RiskLimits(), portfolio=None):
-        self.ledger, self.router, self.store, self.limits, self.portfolio = ledger, router, store, limits, portfolio
+    def __init__(self, ledger: PaperLedger, router: ExecutionRouter, store: Store, limits: RiskLimits = RiskLimits(), portfolio=None,
+                 limits_provider: Optional[Callable[[], RiskLimits]] = None,
+                 entries_gate: Optional[Callable[[], Optional[str]]] = None,
+                 max_mark_age_provider: Optional[Callable[[], float]] = None):
+        """limits_provider / max_mark_age_provider let persisted operator
+        settings (control/settings.py) apply on every entry; without them the
+        fixed `limits` and MAX_MARK_AGE_SECONDS apply exactly as before.
+        entries_gate returns a rejection reason (e.g. ENTRIES_PAUSED) or None."""
+        self.ledger, self.router, self.store, self._limits, self.portfolio = ledger, router, store, limits, portfolio
+        self._limits_provider, self._entries_gate, self._max_mark_age_provider = limits_provider, entries_gate, max_mark_age_provider
+
+    @property
+    def limits(self) -> RiskLimits:
+        return self._limits_provider() if self._limits_provider else self._limits
+
+    @limits.setter
+    def limits(self, value: RiskLimits) -> None:
+        self._limits = value
 
     # ---- entries -------------------------------------------------------
     def _reject(self, signal_id: Optional[str], reason: str, payload: dict, now_ms: int, outcome: str = "REJECTED") -> EntryResult:
@@ -66,10 +82,12 @@ class PaperEngine:
 
     def open_from_signal(self, signal_payload: dict, instrument: str, mark_price: Optional[float], mark_at_ms: Optional[int],
                          requested_leverage: float = 1.0, venue_preference: Optional[str] = None,
-                         now_ms: Optional[int] = None, coin: Optional[str] = None) -> EntryResult:
+                         now_ms: Optional[int] = None, coin: Optional[str] = None, meta: Optional[dict] = None) -> EntryResult:
         now_ms = now_ms or int(time.time() * 1000)
         payload = {"signal": signal_payload, "instrument": instrument, "mark_price": mark_price,
                    "mark_at_ms": mark_at_ms, "requested_leverage": requested_leverage}
+        if meta:
+            payload["meta"] = meta  # display-only scan context (rank, scores, RR); never used for sizing
         try:
             signal = AlphaSignal.create(signal_payload)
         except ContractError as error:
@@ -79,6 +97,9 @@ class PaperEngine:
 
         if self.router.killed:
             return self._reject(sid, "KILL_SWITCH_ACTIVE", payload, now_ms)
+        gate_reason = self._entries_gate() if self._entries_gate else None
+        if gate_reason:
+            return self._reject(sid, gate_reason, payload, now_ms)
         if not is_fresh(signal, now_ms, MAX_SIGNAL_AGE_SECONDS):
             return self._reject(sid, "STALE_SIGNAL", payload, now_ms)
         if self.store.has_intent(sid) or self.ledger.trade(sid):
@@ -87,7 +108,8 @@ class PaperEngine:
             return self._reject(sid, "SIGNAL_MISSING_DIRECTION_ENTRY_OR_STOP", payload, now_ms)
         if mark_price is None or mark_price <= 0 or mark_at_ms is None:
             return self._reject(sid, "NO_MARKET_PRICE", payload, now_ms)
-        if (now_ms - mark_at_ms) / 1000.0 > MAX_MARK_AGE_SECONDS:
+        max_mark_age = self._max_mark_age_provider() if self._max_mark_age_provider else MAX_MARK_AGE_SECONDS
+        if (now_ms - mark_at_ms) / 1000.0 > max_mark_age:
             return self._reject(sid, "STALE_MARKET_DATA", payload, now_ms)
         # One live trade per instrument: a fresh scan of the same setup every
         # 5 minutes must not pyramid into it (endurance segment 1). The

@@ -14,7 +14,9 @@
 // open new risk that cycle (fail closed) and says so in the log.
 //
 // CYCLE_INTERVAL_MS defaults to production's 5-minute cadence. MAX_CYCLES is
-// unbounded unless set. LEVERAGE_ROTATION (e.g. "1,2,3,5,10") rotates the
+// unbounded unless set. FORWARD_LOOP_STDIN_CONTROL=1 (set by the desktop app)
+// lets a "STOP" line on stdin end the loop after the current cycle instead of
+// killing it mid-request -- works the same on macOS and Windows. LEVERAGE_ROTATION (e.g. "1,2,3,5,10") rotates the
 // *requested* paper leverage; risk decides what is actually approved.
 import { runOnce, toInstrument } from './fetch_signal.mjs';
 import { fetchCompletedCandles, fetchMid } from './market_data.mjs';
@@ -23,6 +25,25 @@ const CYCLE_INTERVAL_MS = Number(process.env.CYCLE_INTERVAL_MS || 300000);
 const MAX_CYCLES = process.env.MAX_CYCLES ? Number(process.env.MAX_CYCLES) : Infinity;
 const LEVERAGE_ROTATION = String(process.env.LEVERAGE_ROTATION || '1').split(',').map(Number).filter((n) => n > 0);
 const SEGMENT = process.env.SEGMENT_NAME || `local-${Date.now()}`;
+
+// Graceful stop: the current cycle always finishes (its mark/signal/reconcile
+// calls are each one committed backend transaction), then the loop ends its
+// segment and exits. Open trades stay OPEN in the ledger and are advanced from
+// their last checked candle on the next start.
+export const stopControl = { requested: false, wake: null };
+export function requestStop(reason = 'STOP_REQUESTED') {
+  if (stopControl.requested) return;
+  stopControl.requested = true;
+  console.log(JSON.stringify({ event: 'LOOP_STOP_REQUESTED', reason, at: new Date().toISOString() }));
+  if (stopControl.wake) stopControl.wake();
+}
+
+function interruptibleSleep(ms) {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => { stopControl.wake = null; resolve(); }, ms);
+    stopControl.wake = () => { clearTimeout(timer); stopControl.wake = null; resolve(); };
+  });
+}
 
 export function emptyMetrics() {
   return {
@@ -119,17 +140,18 @@ export async function runCycle(cycle, metrics, deps = {}) {
   const leverage = LEVERAGE_ROTATION[cycle % LEVERAGE_ROTATION.length] || 1;
   const posted = await api('POST', '/paper/signal', {
     signal: result.signal, instrument: toInstrument(result.signal.asset), coin: result.coin || result.signal.asset,
-    mark_price: mark.price, mark_at_ms: mark.at, requested_leverage: leverage,
+    mark_price: mark.price, mark_at_ms: mark.at, requested_leverage: leverage, meta: result.meta || undefined,
   });
   const outcome = classify({ ...result, posted }, metrics);
   return { outcome, lifecycle, signal_id: result.signal.signal_id, reason: posted.body?.reason, leverage };
 }
 
-export async function runLoop({ maxCycles = MAX_CYCLES, intervalMs = CYCLE_INTERVAL_MS, sleep = (ms) => new Promise((r) => setTimeout(r, ms)), deps = {} } = {}) {
+export async function runLoop({ maxCycles = MAX_CYCLES, intervalMs = CYCLE_INTERVAL_MS, sleep = interruptibleSleep, deps = {} } = {}) {
   const metrics = emptyMetrics();
   const { body: seg } = await api('POST', '/paper/segment/start', { segment: SEGMENT });
   try {
-    for (let cycle = 0; cycle < maxCycles; cycle += 1) {
+    for (let cycle = 0; cycle < maxCycles && !stopControl.requested; cycle += 1) {
+      console.log(JSON.stringify({ event: 'CYCLE_START', cycle, at: new Date().toISOString(), interval_ms: intervalMs }));
       try {
         const cycleResult = await runCycle(cycle, metrics, deps);
         const rec = (await api('POST', '/reconcile', {})).body;
@@ -141,7 +163,10 @@ export async function runLoop({ maxCycles = MAX_CYCLES, intervalMs = CYCLE_INTER
         metrics.cycles += 1;
         console.error(JSON.stringify({ cycle, outcome: 'ERROR', error: error.message }));
       }
-      if (cycle < maxCycles - 1) await sleep(intervalMs);
+      if (cycle < maxCycles - 1 && !stopControl.requested) {
+        console.log(JSON.stringify({ event: 'NEXT_CYCLE_AT', at: new Date(Date.now() + intervalMs).toISOString() }));
+        await sleep(intervalMs);
+      }
     }
   } finally {
     await api('POST', '/paper/segment/end', { segment_row: seg.segment_row }).catch(() => {});
@@ -151,7 +176,12 @@ export async function runLoop({ maxCycles = MAX_CYCLES, intervalMs = CYCLE_INTER
   return { metrics, report };
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (import.meta.url === `file://${process.argv[1]}` || process.env.FORWARD_LOOP_MAIN === '1') {
+  if (process.env.FORWARD_LOOP_STDIN_CONTROL === '1') {
+    process.stdin.setEncoding('utf8');
+    process.stdin.on('data', (chunk) => { if (String(chunk).split(/\r?\n/).includes('STOP')) requestStop('STDIN_STOP'); });
+    process.stdin.on('end', () => requestStop('STDIN_CLOSED'));  // parent (the app) went away
+  }
   runLoop({}).then((result) => {
     console.log('--- FORWARD_LOOP_METRICS ---');
     console.log(JSON.stringify(result.metrics, null, 2));

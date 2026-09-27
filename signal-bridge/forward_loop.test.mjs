@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { classify, emptyMetrics, runCycle } from './forward_loop.mjs';
+import { classify, emptyMetrics, requestStop, runCycle, runLoop, stopControl } from './forward_loop.mjs';
 import { parseCompletedCandles } from './market_data.mjs';
-import { bestTradeNowToAlphaSignal, toCoin, toInstrument } from './fetch_signal.mjs';
+import { bestTradeNowToAlphaSignal, signalMeta, toCoin, toInstrument } from './fetch_signal.mjs';
 
 test('classify counts NO_VALID_CANDIDATE when the scan has no bestTradeNow', () => {
   const metrics = emptyMetrics();
@@ -154,4 +154,41 @@ test('fetchMid retries a transient failure, but not a missing coin', async () =>
   assert.ok(total.reduce((a, b) => a + b, 0) > 60000, 'backoff outlasts the per-minute rate-limit window');
   const ok = async () => ({ ok: true, status: 200, json: async () => ({ BTC: '1' }) });
   await assert.rejects(fetchMid('NEAR', { fetchImpl: ok, sleep: async () => {} }), /no live mid for NEAR/);
+});
+
+test('signalMeta carries rank and scores for display only', () => {
+  const meta = signalMeta({ scanId: 'scan-1', bestTradeNow: { rank: 1, quant_score: 70, ml_score: 0.6, combined_score: 72, rr1: 1.8, strategy: 'MOMENTUM CONTINUATION' } });
+  assert.equal(meta.rank, 1);
+  assert.equal(meta.combined_score, 72);
+  assert.equal(meta.rr1, 1.8);
+  assert.equal(meta.rr2, null);
+  assert.equal(meta.scan_id, 'scan-1');
+  assert.equal(signalMeta({ bestTradeNow: null }), null);
+});
+
+test('runCycle forwards scan meta to /paper/signal', async () => {
+  process.env.MARKET_EDGE_EXEC_API_KEY = 'k';
+  const calls = fakeService([]);
+  await runCycle(0, emptyMetrics(), {
+    scan: async () => ({ signal: { signal_id: 's3', asset: 'BTC', direction: 'long', timestamp: Date.now(), entry: 1, stop: 0.9, targets: [1.1] }, coin: 'BTC', meta: { rank: 1 } }),
+    mid: async () => ({ price: 1, at: Date.now() }),
+  });
+  assert.deepEqual(calls.find((c) => c.path === '/paper/signal').body.meta, { rank: 1 });
+});
+
+test('requestStop ends the loop after the current cycle and still closes the segment', async () => {
+  process.env.MARKET_EDGE_EXEC_API_KEY = 'k';
+  const calls = fakeService([]);
+  let cycles = 0;
+  const result = await runLoop({
+    maxCycles: 50, intervalMs: 60_000,
+    // the stop arrives while the loop is waiting for its next cycle
+    sleep: async () => { requestStop('TEST'); },
+    deps: { scan: async () => { cycles += 1; return { signal: null, reason: 'NO_VALID_CANDIDATE' }; } },
+  });
+  assert.equal(cycles, 1);
+  assert.equal(result.metrics.cycles, 1);
+  assert.ok(calls.some((c) => c.path === '/paper/segment/end'));
+  assert.ok(calls.some((c) => c.path === '/reconcile'));
+  stopControl.requested = false;
 });
