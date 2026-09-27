@@ -103,6 +103,57 @@ pre-registered model spec.
   at 0.25%, and positive after removing the dominant asset.
 - Shadow promotion only if every check passes.
 
-## 6. Results
+## 6. Results (read-only CI runs 36302593855, 36302777190, 36303109323)
 
-See `RESULTS` below, filled from the read-only CI runs.
+### Validity
+| | All resolved V1 dev rows | Fresh (valid) rows |
+|---|---|---|
+| Candidates | 572 | **43** |
+| Scan groups | 285 | **16** |
+| Choice scans (>= 2 candidates) | 269 | **10** |
+| Window | 2024-10-31 → 2025-08-17 | 2024-10-31 → 2024-12-02 |
+| BTC/ETH share | 95.6% | 41.9% |
+| Long / short | 553 / 19 | 24 / 19 |
+| TP1 / stop / timeout | 4.5% / 8.9% / 88.8% | 34.9% / 41.9% / 32.6% |
+| Median MFE | 0.10R | 0.98R |
+| Label source | 530 proxy / 42 Coinbase | 1 proxy / 42 Coinbase |
+
+The fresh rows look like a real market; the stale rows do not. **10 choice scans
+cannot support any ranking claim**, so V2 correctly refuses to train
+(`INSUFFICIENT_VALID_DATA`).
+
+### Suite run on all 572 rows (before the stale filter; kept for the record, not valid evidence)
+Out-of-sample over 5 purged walk-forward folds (171 test scans), #1 pick at 0.16%:
+
+| Model | mean R | 95% CI | vs Quant | pair acc. |
+|---|---|---|---|---|
+| Random (exact) | -0.014 | -0.055 … 0.026 | — | 0.50 |
+| Current Quant | -0.013 | -0.068 … 0.035 | 0 | 0.50 |
+| Ridge FINAL_R (best) | +0.005 | -0.045 … 0.052 | +0.018 (-0.010 … 0.047) | 0.57 |
+| Within-scan ridge | -0.017 | -0.087 … 0.054 | -0.004 | 0.49 |
+| LambdaRank GBM | -0.021 | -0.072 … 0.025 | -0.008 | 0.48 |
+| Conv1D (direction-signed) | -0.032 | -0.109 … 0.042 | -0.019 | 0.44 |
+| Fusion | -0.028 | -0.104 … 0.044 | -0.015 | 0.45 |
+
+Every model: NO_PROMOTION. On these labels, Quant's #1 (-0.013R) is no better
+than its #2 (-0.016R). These numbers describe stale-input artefacts, not
+market behaviour.
+
+## 7. Verdict
+
+- Test purity: **CONTAMINATED** (daily test-set model selection), and the
+  underlying V1 labels are **INVALID** for 529/572 rows.
+- New holdout: **created and sealed by rule** (>= 2025-12-01). It will only
+  hold valid data once fresh canonical candles exist for those dates; the new
+  freshness guard makes generation fail rather than fill it with stale rows.
+- Promotion: **NO PROMOTION**. Shadow: **not ready**.
+- Production changes: **none**.
+
+## 8. Next step
+
+Backfill the Coinbase canonical 5m history (all six assets) continuously from
+2024-11 to the present. The D1 cache currently has zero candles for, e.g., March
+2025. Then regenerate Phase 5 as a new immutable engine version (V1 rows are
+kept for provenance but excluded) with the freshness guard active, and rerun
+`research-rank-v2.yml`. At the current ~2 candidates/scan, ~300 fresh daily
+scans are needed before rank evidence is meaningful.
