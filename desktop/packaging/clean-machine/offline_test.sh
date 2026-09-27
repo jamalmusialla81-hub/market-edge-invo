@@ -21,19 +21,20 @@ wait_for() { local d=$((SECONDS + $1)); while [ $SECONDS -lt $d ]; do [ -f "$STA
 
 check NO_MARKET_NETWORK "Hyperliquid, Coinbase and Binance APIs unreachable" \
   bash -c "! curl -s --max-time 8 -o /dev/null https://api.hyperliquid.xyz/info && ! curl -s --max-time 8 -o /dev/null https://api.exchange.coinbase.com/products && ! curl -s --max-time 8 -o /dev/null https://api.binance.com/api/v3/ping"
-BEFORE="$OUT/final-state.json"
 "$APP" > "$OUT/app-offline.stdout.log" 2>&1 &
 PID=$!
 check APP_LAUNCHES_OFFLINE "pid $PID" wait_for 240 '.execution_service.state == "RUNNING" and .status != null'
 wait_for 60 '.supervisor.market.online == false'
 check MARKET_DATA_OFFLINE_SHOWN "$(st .supervisor.market.detail)" test "$(st .supervisor.market.online)" = false
 check NO_NEW_ENTRIES "entries paused: $(st .status.entries_paused_reason)" test "$(st .status.entries_paused_reason)" = MARKET_DATA_OFFLINE
-if [ -f "$BEFORE" ]; then
-  check EXISTING_STATE_VISIBLE "trades $(jq -c .trade_ids "$BEFORE") -> $(st '.trade_ids|tostring')" test "$(jq -c .trade_ids "$BEFORE")" = "$(jq -c .trade_ids "$STATUS")"
-fi
+# baseline taken now, at confirmed-offline launch -- not from the earlier online
+# run, which can still be legitimately updating marks/trades up to its own quit
+BEFORE="$OUT/offline-start-state.json"
+cp "$STATUS" "$BEFORE"
+check EXISTING_STATE_VISIBLE "trades $(jq -c .trade_ids "$BEFORE") -> $(st '.trade_ids|tostring')" test "$(jq -c .trade_ids "$BEFORE")" = "$(jq -c .trade_ids "$STATUS")"
 sleep 75   # at least two loop cycles attempt a scan with no network
 check NO_TRADES_WHILE_OFFLINE "trades $(st .trades_count) after $(st .loop.cycles_seen) offline cycles, last outcome $(st .loop.last_outcome)" \
-  test "$(st .trades_count)" = "$(jq -r '.trades_count // 0' "$BEFORE" 2>/dev/null || echo 0)"
+  test "$(st .trades_count)" = "$(jq -r '.trades_count // 0' "$BEFORE")"
 # marks are never invented: every open position keeps its last real mark (source + timestamp from before going offline)
 check NO_FAKE_PRICES "$(st '[.positions[]? | "\(.asset) mark \(.current_price) via \(.mark_source)"] | join(", ")')" \
   jq -e --slurpfile b "$BEFORE" '[.positions[]?.current_price] == [$b[0].positions[]?.current_price]' "$STATUS"

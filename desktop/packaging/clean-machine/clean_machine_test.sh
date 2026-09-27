@@ -267,6 +267,7 @@ check BACKUP_RESTORE "kept $(jq -r .previous_database_kept_at "$OUT/restore.json
 launch after-restore
 wait_for 300 '.execution_service.state == "RUNNING" and .trades_count != null'
 check RESTORE_STATE_MATCHES "$(st '.trade_ids|tostring')" test "$(jq -c .trade_ids "$SNAP")" = "$(jq -c .trade_ids "$STATUS")"
+cp "$STATUS" "$OUT/final-state.json" 2>/dev/null   # the real last state, not the earlier before-restart snapshot
 quit_app
 check NO_ORPHANS_FINAL "$(leftovers | tr '\n' ' ')" test -z "$(leftovers)"
 
@@ -275,7 +276,6 @@ if [ -s "$TRAPS/trap-hits.log" ]; then fail NO_PATH_PYTHON_NODE_USED "$(tr '\n' 
 # never a repo path in any log
 if grep -rqE "run_server\.py|MARKET_EDGE_HOME|layout DevRepo|DEV_REPO" "$DATA/logs" 2>/dev/null; then fail NO_REPO_FALLBACK "repo path found in logs"; else pass NO_REPO_FALLBACK "logs show only the bundled layout"; fi
 
-cp "$SNAP" "$OUT/final-state.json" 2>/dev/null
 cp -r "$DATA/logs" "$OUT/app-data-logs" 2>/dev/null
 cp "$DATA/config.json" "$OUT/app-data-config.json" 2>/dev/null
 echo
