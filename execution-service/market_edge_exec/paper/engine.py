@@ -73,7 +73,8 @@ class PaperEngine:
 
     def open_from_signal(self, signal_payload: dict, instrument: str, mark_price: Optional[float], mark_at_ms: Optional[int],
                          requested_leverage: float = 1.0, venue_preference: Optional[str] = None,
-                         now_ms: Optional[int] = None, coin: Optional[str] = None) -> EntryResult:
+                         now_ms: Optional[int] = None, coin: Optional[str] = None,
+                         market_price_source: str = "UNKNOWN") -> EntryResult:
         now_ms = now_ms or int(time.time() * 1000)
         payload = {"signal": signal_payload, "instrument": instrument, "mark_price": mark_price,
                    "mark_at_ms": mark_at_ms, "requested_leverage": requested_leverage}
@@ -149,6 +150,12 @@ class PaperEngine:
                 "execution_mode": EXECUTION_MODE, "opened_at_ms": now_ms, "closed_at_ms": None, "exit_reason": None,
                 "signal_timestamp": signal.timestamp, "signal_entry": signal.entry, "stop": signal.stop, "tp1": tp1, "tp2": tp2,
                 "mark_at_entry": mark_price, "entry_fill": entry_fill, "quantity": qty, "remaining_qty": qty,
+                # Data-integrity audit (2026-09-27): every accepted trade
+                # records exactly what price it traded on and how old that
+                # price was, so a HISTORICAL-RANK-V1 or stale-cache
+                # dependency would be visible in the trade record itself.
+                "market_price_timestamp": mark_at_ms, "market_price_source": market_price_source,
+                "market_price_age_ms": now_ms - mark_at_ms,
                 "tp1_hit": False, "requested_leverage": requested_leverage, "approved_leverage": leverage,
                 "notional": assessment.notional, "margin_used": assessment.margin_required,
                 "stop_distance": assessment.stop_distance, "risk_amount": assessment.risk_amount, "max_loss": assessment.max_loss,

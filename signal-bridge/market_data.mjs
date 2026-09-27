@@ -3,6 +3,9 @@
 // scan uses (backend/scan-core.mjs hyperCandles/completedCandles). Read only.
 const HYPERLIQUID_API = 'https://api.hyperliquid.xyz/info';
 const FIVE_MINUTES = 5 * 60 * 1000;
+// Recorded on every accepted trade (data-integrity audit, 2026-09-27) so the
+// price source is never ambiguous in the trade record.
+export const MARKET_PRICE_SOURCE = 'HYPERLIQUID_ALLMIDS_LIVE';
 
 async function post(fetchImpl, body, timeoutMs = 8000) {
   const controller = new AbortController();

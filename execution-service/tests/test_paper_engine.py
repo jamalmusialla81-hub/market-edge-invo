@@ -40,6 +40,33 @@ def open_trade(app, sid="sig-1", mark=100.0, leverage=1.0, **kw):
     return app.state.paper.open_from_signal(make_signal(sid, **kw), f"{kw.get('asset', 'ETH')}-PERP", mark, now, requested_leverage=leverage, now_ms=now)
 
 
+def test_accepted_trade_records_price_provenance_and_age(db):
+    app = create_app(db_path=db, risk_limits=WIDE_LIMITS)
+    now = int(time.time() * 1000)
+    mark_at_ms = now - 45_000  # a 45s-old price, well under the 120s freshness threshold
+    signal = make_signal(ts=now)
+    result = app.state.paper.open_from_signal(signal, "ETH-PERP", 100.0, mark_at_ms, now_ms=now,
+                                              market_price_source="HYPERLIQUID_ALLMIDS_LIVE")
+    assert result.accepted, result.reason
+    trade = result.trade
+    assert trade["signal_timestamp"] == signal["timestamp"]
+    assert trade["market_price_timestamp"] == mark_at_ms
+    assert trade["market_price_source"] == "HYPERLIQUID_ALLMIDS_LIVE"
+    assert trade["market_price_age_ms"] == pytest.approx(45_000, abs=1000)
+
+
+def test_price_older_than_120s_fails_closed_never_falls_back(db):
+    # Data-integrity audit (2026-09-27): a stale price is NO_TRADE, never a
+    # silently reused old one.
+    app = create_app(db_path=db, risk_limits=WIDE_LIMITS)
+    now = int(time.time() * 1000)
+    too_old = now - 121_000
+    result = app.state.paper.open_from_signal(make_signal(), "ETH-PERP", 100.0, too_old, now_ms=now)
+    assert not result.accepted and result.reason == "STALE_MARKET_DATA"
+    missing = app.state.paper.open_from_signal(make_signal("sig-2"), "ETH-PERP", None, None, now_ms=now)
+    assert not missing.accepted and missing.reason == "NO_MARKET_PRICE"
+
+
 def test_full_lifecycle_tp1_then_tp2_realizes_profit_and_reconciles(db):
     app = create_app(db_path=db, risk_limits=WIDE_LIMITS)
     result = open_trade(app)
