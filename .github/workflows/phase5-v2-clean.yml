@@ -5,7 +5,7 @@ name: Phase 5 — V2-CLEAN rebuild (research only)
 #   HISTORICAL-RANK-V2-CLEAN             htf: aggregated (all timeframes from 5m)
 #   HISTORICAL-RANK-V2-CLEAN-NATIVE-HTF  htf: native (4h from venue 1h, 1d venue daily)
 # RUN_REQUEST keys:
-#   stage: candles | generate | audit | analysis | all | dryrun-native | forward
+#   stage: candles | generate | audit | analysis | all | dryrun-native | forward | label-audit
 #   htf: aggregated | native
 #   archive_run_id: run that produced the archive (blank = this run)
 # The daily schedule appends genuine forward scans (native policy); schedules
@@ -290,3 +290,41 @@ jobs:
           github-token: ${{ github.token }}
       - run: node research/verify-candle-archive.mjs
       - run: node research/run-v2-clean-dataset.mjs --dry-run
+
+  # Step-1 label audit: explain the entry outlier and every stop disagreement.
+  label_audit:
+    needs: config
+    if: ${{ needs.config.outputs.stage == 'label-audit' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: write
+      actions: read
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      V2_CLEAN_AUDIT_ENGINE: ${{ needs.config.outputs.engine }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: coinbase-5m-archive*
+          merge-multiple: true
+          path: candle-archive
+          run-id: ${{ needs.config.outputs.archive_run_id }}
+          github-token: ${{ github.token }}
+      - run: node research/verify-candle-archive.mjs
+      - run: node research/audit-stop-mismatches.mjs
+      - name: Commit the label audit
+        if: always() && github.ref_name == 'claude/clever-faraday-y12d11'
+        run: |
+          git config user.name "market-edge-research-bot"
+          git config user.email "research-bot@users.noreply.github.com"
+          git add research/data/v2-clean/ || exit 0
+          git commit -m "data: stop-mismatch and entry-outlier audit (run ${{ github.run_id }})" || exit 0
+          git pull --rebase origin ${{ github.ref_name }}
+          git push origin HEAD:${{ github.ref_name }}
