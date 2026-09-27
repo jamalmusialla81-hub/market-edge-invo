@@ -15,7 +15,9 @@ from market_edge_exec.api.app import create_app
 
 if __name__ == "__main__":
     app = create_app(db_path=os.environ.get("EXECUTION_SERVICE_DB_PATH", "market_edge_exec.sqlite3"))
-    server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=int(os.environ.get("EXECUTION_SERVICE_PORT", "8000"))))
+    server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=int(os.environ.get("EXECUTION_SERVICE_PORT", "8000")),
+                                          # the desktop app polls every few seconds; its log view doesn't need each GET
+                                          access_log=os.environ.get("EXECUTION_SERVICE_ACCESS_LOG", "1") != "0"))
 
     def request_shutdown():
         server.should_exit = True

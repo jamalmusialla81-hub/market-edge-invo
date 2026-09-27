@@ -188,6 +188,8 @@ if (import.meta.url === `file://${process.argv[1]}` || process.env.FORWARD_LOOP_
     console.log('--- FORWARD_PAPER_REPORT ---');
     const { trades, ...summary } = result.report;
     console.log(JSON.stringify(summary, null, 2));
+    // An open stdin control pipe would otherwise keep the process alive.
+    process.exit(0);
   }).catch((error) => {
     console.error('FORWARD_LOOP_FAILED:', error.message);
     process.exit(1);

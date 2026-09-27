@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "The main window may only call the app's own commands (core defaults). No fs, shell, http or sql plugin is exposed to the webview.",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}
