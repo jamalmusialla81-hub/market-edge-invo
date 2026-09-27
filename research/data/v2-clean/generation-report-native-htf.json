@@ -1,0 +1,536 @@
+{
+ "dataset_version": "HISTORICAL-RANK-V2-CLEAN-NATIVE-HTF",
+ "htf_source": "native",
+ "frame_sources": {
+  "m5": "COINBASE_SPOT_5M",
+  "m15": "AGGREGATED_FROM_COINBASE_SPOT_5M",
+  "h1": "AGGREGATED_FROM_COINBASE_SPOT_5M",
+  "h4": "AGGREGATED_FROM_COINBASE_SPOT_NATIVE_1H",
+  "d1": "COINBASE_SPOT_NATIVE_1D"
+ },
+ "label_version": "outcome-strict-v1",
+ "generated_at": "2026-09-27T09:21:16.872Z",
+ "dry_run": false,
+ "archive": {
+  "start": "2023-07-13T20:55:00.000Z",
+  "end": "2026-09-27T00:00:00.000Z",
+  "issues": {
+   "BTC": {
+    "invalidOhlc": 0,
+    "offGrid": 0,
+    "future": 0,
+    "duplicates": 0,
+    "conflictingDuplicates": 0,
+    "nonMonotonicInput": 0
+   },
+   "ETH": {
+    "invalidOhlc": 0,
+    "offGrid": 0,
+    "future": 0,
+    "duplicates": 0,
+    "conflictingDuplicates": 0,
+    "nonMonotonicInput": 0
+   },
+   "SOL": {
+    "invalidOhlc": 0,
+    "offGrid": 0,
+    "future": 0,
+    "duplicates": 0,
+    "conflictingDuplicates": 0,
+    "nonMonotonicInput": 0
+   },
+   "XRP": {
+    "invalidOhlc": 0,
+    "offGrid": 0,
+    "future": 0,
+    "duplicates": 0,
+    "conflictingDuplicates": 0,
+    "nonMonotonicInput": 0
+   },
+   "DOGE": {
+    "invalidOhlc": 0,
+    "offGrid": 0,
+    "future": 0,
+    "duplicates": 0,
+    "conflictingDuplicates": 0,
+    "nonMonotonicInput": 0
+   },
+   "LTC": {
+    "invalidOhlc": 0,
+    "offGrid": 0,
+    "future": 0,
+    "duplicates": 0,
+    "conflictingDuplicates": 0,
+    "nonMonotonicInput": 0
+   }
+  },
+  "gaps": {
+   "BTC": 7,
+   "ETH": 8,
+   "SOL": 10,
+   "XRP": 11,
+   "DOGE": 16,
+   "LTC": 12
+  }
+ },
+ "production_bars": {
+  "m5": 500,
+  "m15": 320,
+  "h1": 420,
+  "h4": 500,
+  "d1": 260
+ },
+ "scan_window": {
+  "first": "2024-03-31T00:00:00.000Z",
+  "last": "2026-09-25T00:00:00.000Z"
+ },
+ "holdout": {
+  "id": "PHASE5-V1-HOLDOUT-2025-12-01",
+  "startMs": 1764547200000,
+  "devCutoffMs": 1763539200000,
+  "rule": "scan_timestamp >= startMs is holdout; development uses scan_timestamp < devCutoffMs only; consumption is one-shot with a pre-registered model hash"
+ },
+ "development": {
+  "scans": 538,
+  "skippedNoEligibleAsset": 61,
+  "candidates": 701,
+  "rankable": 697,
+  "resolved": 695,
+  "unresolved": {
+   "OUTCOME_CANDLE_MISSING": 2
+  },
+  "choiceScans": 172,
+  "assets": {
+   "BTC": 97,
+   "ETH": 113,
+   "XRP": 111,
+   "SOL": 106,
+   "LTC": 144,
+   "DOGE": 126
+  },
+  "strategies": {
+   "BREAKOUT + RETEST": 94,
+   "TREND CONTINUATION": 428,
+   "LIQUIDITY-SWEEP REVERSAL": 96,
+   "MOMENTUM CONTINUATION": 43,
+   "MEAN REVERSION": 36
+  },
+  "directions": {
+   "short": 333,
+   "long": 364
+  },
+  "strategyDirection": {
+   "BREAKOUT + RETEST|short": 53,
+   "TREND CONTINUATION|short": 194,
+   "TREND CONTINUATION|long": 234,
+   "LIQUIDITY-SWEEP REVERSAL|short": 50,
+   "BREAKOUT + RETEST|long": 41,
+   "MOMENTUM CONTINUATION|short": 24,
+   "MOMENTUM CONTINUATION|long": 19,
+   "LIQUIDITY-SWEEP REVERSAL|long": 46,
+   "MEAN REVERSION|short": 12,
+   "MEAN REVERSION|long": 24
+  },
+  "exclusions": {
+   "GAP_IN_M5_WINDOW": 48,
+   "GAP_IN_M15_WINDOW": 45,
+   "GAP_IN_H1_WINDOW": 316,
+   "GAP_IN_H4_WINDOW": 42
+  },
+  "exclusionsByAsset": {
+   "BTC": {
+    "GAP_IN_M5_WINDOW": 6,
+    "GAP_IN_M15_WINDOW": 6,
+    "GAP_IN_H1_WINDOW": 42,
+    "GAP_IN_H4_WINDOW": 7
+   },
+   "ETH": {
+    "GAP_IN_M5_WINDOW": 8,
+    "GAP_IN_M15_WINDOW": 7,
+    "GAP_IN_H1_WINDOW": 56,
+    "GAP_IN_H4_WINDOW": 7
+   },
+   "SOL": {
+    "GAP_IN_M5_WINDOW": 10,
+    "GAP_IN_M15_WINDOW": 9,
+    "GAP_IN_H1_WINDOW": 60,
+    "GAP_IN_H4_WINDOW": 7
+   },
+   "XRP": {
+    "GAP_IN_M5_WINDOW": 10,
+    "GAP_IN_M15_WINDOW": 9,
+    "GAP_IN_H1_WINDOW": 60,
+    "GAP_IN_H4_WINDOW": 7
+   },
+   "DOGE": {
+    "GAP_IN_M5_WINDOW": 6,
+    "GAP_IN_M15_WINDOW": 6,
+    "GAP_IN_H1_WINDOW": 42,
+    "GAP_IN_H4_WINDOW": 7
+   },
+   "LTC": {
+    "GAP_IN_M5_WINDOW": 8,
+    "GAP_IN_M15_WINDOW": 8,
+    "GAP_IN_H1_WINDOW": 56,
+    "GAP_IN_H4_WINDOW": 7
+   }
+  },
+  "labelSources": {
+   "COINBASE:SPOT": 695
+  },
+  "exits": {
+   "STOP": 347,
+   "TIMEOUT": 220,
+   "BREAKEVEN_AFTER_TP1": 37,
+   "TP2": 90,
+   "BREAKEVEN_SAME_CANDLE_AS_TP1": 1
+  },
+  "perScanCandidates": {
+   "0": 215,
+   "1": 151,
+   "2": 75,
+   "3": 46,
+   "4": 23,
+   "5": 16,
+   "6": 6,
+   "7": 2,
+   "8": 3,
+   "12": 1
+  }
+ },
+ "holdout_counts_only": {
+  "scans": 150,
+  "candidates": 188,
+  "rankable": 188,
+  "resolvedOrUnresolved": 188
+ },
+ "diversity": {
+  "evaluations": {
+   "BTC": 538,
+   "ETH": 521,
+   "SOL": 513,
+   "XRP": 513,
+   "DOGE": 538,
+   "LTC": 520
+  },
+  "emitted": {
+   "BTC|BREAKOUT + RETEST|short": 7,
+   "ETH|TREND CONTINUATION|short": 31,
+   "BTC|TREND CONTINUATION|short": 19,
+   "XRP|TREND CONTINUATION|long": 40,
+   "SOL|TREND CONTINUATION|short": 35,
+   "XRP|LIQUIDITY-SWEEP REVERSAL|short": 5,
+   "LTC|TREND CONTINUATION|long": 51,
+   "DOGE|TREND CONTINUATION|long": 41,
+   "ETH|TREND CONTINUATION|long": 34,
+   "SOL|LIQUIDITY-SWEEP REVERSAL|short": 4,
+   "DOGE|LIQUIDITY-SWEEP REVERSAL|short": 8,
+   "ETH|BREAKOUT + RETEST|long": 7,
+   "DOGE|TREND CONTINUATION|short": 34,
+   "XRP|TREND CONTINUATION|short": 34,
+   "XRP|MOMENTUM CONTINUATION|short": 6,
+   "DOGE|MOMENTUM CONTINUATION|short": 9,
+   "LTC|TREND CONTINUATION|short": 41,
+   "DOGE|BREAKOUT + RETEST|long": 4,
+   "DOGE|MOMENTUM CONTINUATION|long": 7,
+   "LTC|LIQUIDITY-SWEEP REVERSAL|long": 7,
+   "SOL|LIQUIDITY-SWEEP REVERSAL|long": 4,
+   "BTC|LIQUIDITY-SWEEP REVERSAL|long": 10,
+   "ETH|LIQUIDITY-SWEEP REVERSAL|long": 9,
+   "SOL|TREND CONTINUATION|long": 34,
+   "LTC|BREAKOUT + RETEST|short": 12,
+   "DOGE|LIQUIDITY-SWEEP REVERSAL|long": 9,
+   "XRP|LIQUIDITY-SWEEP REVERSAL|long": 7,
+   "SOL|MOMENTUM CONTINUATION|short": 4,
+   "LTC|LIQUIDITY-SWEEP REVERSAL|short": 10,
+   "SOL|BREAKOUT + RETEST|long": 5,
+   "SOL|MEAN REVERSION|short": 3,
+   "LTC|MEAN REVERSION|short": 2,
+   "BTC|TREND CONTINUATION|long": 34,
+   "DOGE|MEAN REVERSION|long": 4,
+   "BTC|MEAN REVERSION|long": 5,
+   "BTC|LIQUIDITY-SWEEP REVERSAL|short": 12,
+   "ETH|MEAN REVERSION|long": 4,
+   "LTC|BREAKOUT + RETEST|long": 12,
+   "DOGE|BREAKOUT + RETEST|short": 7,
+   "SOL|BREAKOUT + RETEST|short": 10,
+   "ETH|BREAKOUT + RETEST|short": 9,
+   "XRP|BREAKOUT + RETEST|short": 8,
+   "DOGE|MEAN REVERSION|short": 3,
+   "SOL|MEAN REVERSION|long": 3,
+   "ETH|MOMENTUM CONTINUATION|long": 3,
+   "ETH|LIQUIDITY-SWEEP REVERSAL|short": 11,
+   "SOL|MOMENTUM CONTINUATION|long": 4,
+   "BTC|MOMENTUM CONTINUATION|short": 1,
+   "ETH|MOMENTUM CONTINUATION|short": 3,
+   "LTC|MEAN REVERSION|long": 6,
+   "XRP|MEAN REVERSION|long": 2,
+   "XRP|BREAKOUT + RETEST|long": 6,
+   "BTC|BREAKOUT + RETEST|long": 7,
+   "LTC|MOMENTUM CONTINUATION|long": 2,
+   "XRP|MOMENTUM CONTINUATION|long": 2,
+   "LTC|MOMENTUM CONTINUATION|short": 1,
+   "BTC|MEAN REVERSION|short": 1,
+   "ETH|MEAN REVERSION|short": 2,
+   "XRP|MEAN REVERSION|short": 1,
+   "BTC|MOMENTUM CONTINUATION|long": 1
+  },
+  "regimes": {
+   "BTC": {
+    "BREAKOUT RETEST": 32,
+    "BREAKOUT": 144,
+    "RANGE": 86,
+    "WEAK DOWNTREND": 96,
+    "WEAK UPTREND": 114,
+    "COMPRESSION": 57,
+    "STRONG DOWNTREND": 4,
+    "STRONG UPTREND": 5
+   },
+   "ETH": {
+    "WEAK DOWNTREND": 92,
+    "WEAK UPTREND": 87,
+    "COMPRESSION": 55,
+    "BREAKOUT RETEST": 42,
+    "STRONG UPTREND": 12,
+    "RANGE": 100,
+    "STRONG DOWNTREND": 15,
+    "BREAKOUT": 118
+   },
+   "SOL": {
+    "RANGE": 74,
+    "BREAKOUT": 147,
+    "WEAK DOWNTREND": 68,
+    "BREAKOUT RETEST": 44,
+    "COMPRESSION": 42,
+    "WEAK UPTREND": 86,
+    "STRONG DOWNTREND": 23,
+    "STRONG UPTREND": 28,
+    "HIGH-VOLATILITY RANGE": 1
+   },
+   "XRP": {
+    "RANGE": 99,
+    "COMPRESSION": 62,
+    "WEAK DOWNTREND": 83,
+    "BREAKOUT RETEST": 37,
+    "WEAK UPTREND": 76,
+    "STRONG UPTREND": 29,
+    "STRONG DOWNTREND": 17,
+    "BREAKOUT": 109,
+    "HIGH-VOLATILITY RANGE": 1
+   },
+   "DOGE": {
+    "WEAK DOWNTREND": 70,
+    "STRONG UPTREND": 28,
+    "STRONG DOWNTREND": 34,
+    "BREAKOUT RETEST": 42,
+    "COMPRESSION": 57,
+    "WEAK UPTREND": 77,
+    "BREAKOUT": 134,
+    "RANGE": 96
+   },
+   "LTC": {
+    "COMPRESSION": 56,
+    "BREAKOUT RETEST": 46,
+    "STRONG UPTREND": 14,
+    "BREAKOUT": 130,
+    "WEAK UPTREND": 88,
+    "STRONG DOWNTREND": 18,
+    "RANGE": 83,
+    "WEAK DOWNTREND": 85
+   }
+  },
+  "trendState": {
+   "BTC": {
+    "DOWN": 147,
+    "UP": 176,
+    "NEITHER": 215
+   },
+   "ETH": {
+    "DOWN": 150,
+    "UP": 162,
+    "NEITHER": 209
+   },
+   "SOL": {
+    "NEITHER": 211,
+    "UP": 151,
+    "DOWN": 151
+   },
+   "XRP": {
+    "NEITHER": 223,
+    "UP": 150,
+    "DOWN": 140
+   },
+   "DOGE": {
+    "DOWN": 155,
+    "UP": 157,
+    "NEITHER": 226
+   },
+   "LTC": {
+    "NEITHER": 225,
+    "DOWN": 152,
+    "UP": 143
+   }
+  },
+  "gates": {
+   "TREND_LONG": {
+    "evaluations": 3143,
+    "allPass": 235,
+    "pass": {
+     "notExtended": 2907,
+     "noExhaustion": 3008,
+     "volume": 1414,
+     "trend": 939,
+     "rsiBand": 1217
+    },
+    "soleBlocker": {
+     "rsiBand": 116,
+     "volume": 309,
+     "trend": 261,
+     "notExtended": 3
+    }
+   },
+   "TREND_SHORT": {
+    "evaluations": 3143,
+    "allPass": 196,
+    "pass": {
+     "trend": 895,
+     "notExtended": 2907,
+     "noExhaustion": 3008,
+     "rsiBand": 1254,
+     "volume": 1414
+    },
+    "soleBlocker": {
+     "trend": 304,
+     "volume": 302,
+     "rsiBand": 132,
+     "notExtended": 1
+    }
+   },
+   "BREAKOUT_LONG": {
+    "evaluations": 3143,
+    "allPass": 41,
+    "pass": {
+     "volume": 990,
+     "retest": 123
+    },
+    "soleBlocker": {
+     "retest": 949,
+     "volume": 82
+    }
+   },
+   "BREAKOUT_SHORT": {
+    "evaluations": 3143,
+    "allPass": 53,
+    "pass": {
+     "retest": 120,
+     "volume": 990
+    },
+    "soleBlocker": {
+     "retest": 937,
+     "volume": 67
+    }
+   },
+   "MOMENTUM_LONG": {
+    "evaluations": 3143,
+    "allPass": 19,
+    "pass": {
+     "volume": 824,
+     "notExtended": 2907,
+     "accel": 1572,
+     "trend": 939,
+     "macd": 1532,
+     "roc": 272,
+     "rsiBand": 810
+    },
+    "soleBlocker": {
+     "roc": 35,
+     "trend": 14,
+     "rsiBand": 8,
+     "volume": 11
+    }
+   },
+   "MOMENTUM_SHORT": {
+    "evaluations": 3143,
+    "allPass": 24,
+    "pass": {
+     "trend": 895,
+     "accel": 1571,
+     "rsiBand": 873,
+     "macd": 1611,
+     "volume": 824,
+     "notExtended": 2907,
+     "roc": 281
+    },
+    "soleBlocker": {
+     "roc": 30,
+     "trend": 18,
+     "rsiBand": 16,
+     "accel": 2,
+     "macd": 1,
+     "volume": 16,
+     "notExtended": 2
+    }
+   },
+   "MEAN_REV_LONG": {
+    "evaluations": 3143,
+    "allPass": 24,
+    "pass": {
+     "rejection": 2613,
+     "nearSupport": 1075,
+     "rangeRegime": 540,
+     "oversold": 388
+    },
+    "soleBlocker": {
+     "oversold": 122,
+     "rangeRegime": 263,
+     "nearSupport": 7,
+     "rejection": 1
+    }
+   },
+   "MEAN_REV_SHORT": {
+    "evaluations": 3143,
+    "allPass": 12,
+    "pass": {
+     "rejection": 2675,
+     "rangeRegime": 540,
+     "overbought": 375,
+     "nearResistance": 1181
+    },
+    "soleBlocker": {
+     "rangeRegime": 286,
+     "overbought": 134,
+     "nearResistance": 2
+    }
+   },
+   "SWEEP_LONG": {
+    "evaluations": 3143,
+    "allPass": 47,
+    "pass": {
+     "confirm": 580,
+     "sweep": 158
+    },
+    "soleBlocker": {
+     "sweep": 533,
+     "confirm": 111
+    }
+   },
+   "SWEEP_SHORT": {
+    "evaluations": 3143,
+    "allPass": 50,
+    "pass": {
+     "confirm": 647,
+     "sweep": 164
+    },
+    "soleBlocker": {
+     "sweep": 597,
+     "confirm": 114
+    }
+   }
+  }
+ },
+ "ingest": {
+  "committedScans": 688,
+  "skippedAlreadyComplete": 0,
+  "outcomeCommits": 403
+ }
+}
