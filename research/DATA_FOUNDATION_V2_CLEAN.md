@@ -214,3 +214,85 @@ activates once the workflow is on the default branch.
 
 Every forward scan is dated after 2025-12-01, so it lands in the sealed
 holdout and does **not** grow the development choice-scan count.
+
+---
+
+## Update — backward extension to 2021-09-01 (approved; CI runs 36313007806 and 36313185824)
+
+### Step 1 label audit (`stop-mismatch-audit.json`) — PASS
+
+- **Entry outlier:** XRP, 2024-04-14 00:00 UTC. Coinbase decision price 0.4801 vs Binance
+  spot 0.4788, a 27.2 bps gap. Every neighbouring 5m bar shows the same 19–29 bps Coinbase
+  premium. Binance's 30-minute range was 400 bps: this was the night after the
+  2024-04-13 market-wide sell-off. It is a sustained USD/USDT venue dislocation under stress, not a bad
+  tick, and it is acceptable venue divergence.
+- **Stop disagreements:** 150 sampled rows produced 23 flags.
+  - 10 are diagnostic artefacts: exits at breakeven after TP1, which the diagnostic compared against the original stop. On these, both venues agree to within 7 bps.
+  - The 13 real disagreements are all **near-misses**: Binance stayed 0.2–7.7 bps short of, or crossed by up to 1.1 bps, a stop that sat 43–236 bps from entry. The venue gap was at most 11.8 bps.
+  - 13/13 follow the sign of the Coinbase–Binance basis over their own window.
+  - Across all 150 rows, adverse extremes are symmetric between venues: 68 deeper on Coinbase vs 73 deeper on Binance, z = −0.42.
+  - **No systematic label issue.** Labels are correct for Coinbase execution. About 9% of stop events sit within ±8 bps of the stop and could flip on another venue.
+
+### Archive (`candle-manifest.json`, `ARCHIVE_MONTHS.md`)
+
+- The window is 2021-09-01 → 2026-09-27, fetched with 11,604 requests and 0 retries.
+- Coverage: BTC 99.954%, ETH 99.952%, SOL 99.949%, DOGE 99.949%, LTC 99.949%. XRP is at 63.2% because it was not listed on Coinbase until 2023-07-13; nothing is fabricated.
+- Every asset has 0 invalid, 0 duplicate and 0 future candles.
+- There are five venue-wide outages, documented separately from corruption: 2023-03-04, 2024-05-31, 2024-10-26, 2025-10-25 and 2026-05-08.
+- The 234 previously archived asset-months are byte-identical after the refetch. The extension changed coverage only and **kept the dataset version**.
+
+### Development data (`generation-report-native-htf.json`)
+
+| | Before | After extension |
+|---|---|---|
+| Date range (dev) | 2024-03-31 → 2025-11-18 | 2022-05-20 → 2025-11-18 |
+| Development scan groups | 538 | **1,109** |
+| **Choice scan groups** | 172 | **360** |
+| Rankable candidates | 697 | 1,365 |
+| Resolved / unresolved | 695 / 2 | 1,362 / 3 (missing same-venue candle) |
+| Assets | all 6 | DOGE 261, ETH 236, LTC 290, BTC 220, SOL 246, XRP 112 |
+| Long / short | 364 / 333 | 693 / 672 |
+| Strategies | TC 61% | TC 838, SWEEP 200, BRK 199, MOM 72, MR 56 |
+| Holdout (counts only) | 150 scans / 188 | 150 scans / 188 (unchanged; existing scans skipped) |
+
+### Independent audit (`audit-report-native-htf.json`) — PASS
+
+| Check | Result |
+|---|---|
+| Entry-price error p50 / p95 / max | 2.7 / 13.0 / 17.7 bps (max: DOGE 2022-11-19) |
+| Label reproduction | 150 / 150 |
+| Stop / TP1 agreement | 93.3% / 99.3% |
+| Stale / cross-venue / missing provenance / wrong version | 0 / 0 / 0 / 0 |
+
+### Sanity baselines only (`sanity-baselines-native-htf.json`; development; no tuning or selection)
+
+Covers 359 choice scans and 1,062 candidates. Values are #1-pick mean R (max drawdown in R) at each cost level:
+
+| | 0% | 0.08% | 0.16% | 0.25% |
+|---|---|---|---|---|
+| Random (exact) | -0.060 (-34) | -0.128 (-56) | -0.196 (-78) | -0.273 (-104) |
+| Current Quant | -0.058 (-46) | -0.123 (-64) | -0.187 (-82) | -0.260 (-106) |
+
+- **Confidence intervals and difference:** at 0.16%, Random's 95% CI is -0.279 … -0.109 and Quant's is -0.298 … -0.076. Quant minus Random is **+0.009R (CI -0.073 … +0.089)**.
+- **Rank buckets (Quant):** #1 -0.178, #2-5 -0.140, #6-10 -0.405. There is **no monotonicity**: #1 does not beat #2-5. Weighted pair accuracy is 0.544; mean within-scan Spearman is 0.06.
+- **Temporal folds (Random / Quant):**
+  - 2022-05 → 2022-11: -0.039 / +0.036
+  - 2022-12 → 2023-11: -0.326 / -0.322
+  - 2023-11 → 2024-07: -0.266 / -0.292
+  - 2024-07 → 2025-02: -0.173 / -0.281
+  - 2025-02 → 2025-10: -0.175 / -0.076
+
+  Quant is not stable relative to Random.
+- **Quant #1 by asset:** XRP +0.164, LTC +0.018, DOGE -0.117, SOL -0.139, BTC -0.406, ETH -0.596.
+- **Long / short:** -0.187 / -0.187.
+- **By strategy:** TC -0.114 (241 picks), BRK -0.284, SWEEP -0.567, MR -0.435, MOM +0.043 (3 picks).
+- **All candidates:** the average candidate is negative after 0.16% cost in every asset, direction and strategy family.
+
+These are diagnostics only; there is no alpha claim.
+
+### Status
+
+**MODEL-RESEARCH-READY.** There are 360 development choice scans (≥ 300), the audit passes, and provenance is clean.
+Model optimisation has **not** started. The next separate phase will compare Random, Current
+Quant, Ridge, Logistic, LightGBM regression and LightGBM ranker, using grouped, purged
+walk-forward validation. The sealed holdout stays untouched.
