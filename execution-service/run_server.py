@@ -105,6 +105,13 @@ def main():
 
         threading.Thread(target=watch_parent, daemon=True).start()
     server.run()
+    if os.environ.get("EXECUTION_SERVICE_EXIT_ON_STDIN_EOF") == "1":
+        # Every write is its own committed SQLite transaction, so nothing is
+        # pending here. Exit now rather than in interpreter teardown, which can
+        # block on Windows while the watcher thread still has a read on stdin.
+        print(json.dumps({"event": "service_stopped"}), file=sys.stderr, flush=True)
+        sys.stdout.flush()
+        os._exit(0)
 
 
 if __name__ == "__main__":

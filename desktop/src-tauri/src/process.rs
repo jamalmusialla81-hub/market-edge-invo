@@ -435,6 +435,9 @@ impl Services {
         if let Some(mut m) = slot.managed.take() {
             slot.stop_requested = false;
             let _ = http().post(format!("{}/system/shutdown", self.cfg.base_url())).header("X-API-Key", &self.api_key).send();
+            // close its stdin too: ends the service's parent-watch read, which on
+            // Windows otherwise blocks interpreter teardown (synchronous pipe I/O)
+            drop(m.stdin.take());
             let deadline = Instant::now() + SERVICE_STOP_GRACE;
             loop {
                 if let Ok(Some(status)) = m.child.try_wait() {
