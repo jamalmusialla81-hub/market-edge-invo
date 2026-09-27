@@ -99,7 +99,9 @@ jobs:
 
       - name: Existing execution-service test suite (Phase 2/3 bookkeeping paper route — always runs, independent of the engine crash)
         working-directory: execution-service
-        run: python -m pytest -q | tee pytest.log
+        run: |
+          set -o pipefail
+          python -m pytest -q | tee pytest.log
 
       - name: Upload Nautilus environment artifacts
         if: always()
@@ -200,6 +202,7 @@ jobs:
       - name: Verify real mode is what's selected (never a silent mock fallback)
         working-directory: execution-service
         run: |
+          set -o pipefail
           python -m pip install --quiet nautilus_trader httpx pytest fastapi "uvicorn[standard]"
           python -m pytest tests/test_hummingbot_real_client.py -q | tee real_client_ci.log
 
@@ -212,6 +215,13 @@ jobs:
           HUMMINGBOT_BRIDGE_API_KEY: ci-bridge-key
           PYTHONPATH: .
         run: python diagnostics/end_to_end_testnet_flow.py | tee e2e_testnet.json
+
+      - name: Bridge contract test suite (fake-API tests; caught 0 CI runs before this step existed)
+        working-directory: hummingbot-service
+        run: |
+          set -o pipefail
+          python -m pip install --quiet httpx pytest fastapi "uvicorn[standard]"
+          python -m pytest -q | tee bridge_pytest.log
 
       - name: Verify client against the LIVE Hummingbot API schema (fails the job on mismatch)
         if: always()
@@ -245,6 +255,7 @@ jobs:
         with:
           name: hummingbot-docker-report
           path: |
+            hummingbot-service/bridge_pytest.log
             hummingbot-service/bridge_health.json
             hummingbot-service/hummingbot_api_health.json
             hummingbot-service/hummingbot_api_openapi.json

@@ -115,10 +115,14 @@ def test_exposure_cap_counts_open_trades_across_instruments(db):
     for sid, asset in [("a", "ETH"), ("b", "BTC"), ("c", "SOL"), ("d", "AVAX")]:
         result = open_trade(app, sid, asset=asset)
         assert result.accepted, result.reason
-        assert result.trade["notional"] == pytest.approx(500)
+        # Each slot is ~5% of equity at the moment it opens; equity itself
+        # drifts down slightly trade to trade from entry fees, so this is a
+        # tolerance, not an exact 500.
+        assert result.trade["notional"] == pytest.approx(500, rel=0.01)
     fifth = open_trade(app, "e", asset="LINK")
     assert not fifth.accepted and fifth.reason == "MAX_CONCURRENT_POSITIONS_EXCEEDED"
-    assert app.state.ledger.account_state().open_notional == pytest.approx(2_000)
+    assert app.state.ledger.account_state().open_notional <= 2_000 + 1e-6  # never overshoots the 20% cap
+    assert app.state.ledger.account_state().open_notional == pytest.approx(2_000, rel=0.01)
 
 
 def test_closing_a_position_releases_its_slot_and_exposure_for_a_new_trade(db):
@@ -135,7 +139,7 @@ def test_closing_a_position_releases_its_slot_and_exposure_for_a_new_trade(db):
     closed = app.state.ledger.trade("a")
     assert closed["status"] == "CLOSED" and closed["exit_reason"] == "STOP"
     assert app.state.ledger.account_state().open_positions == 3
-    assert app.state.ledger.account_state().open_notional == pytest.approx(1_500)
+    assert app.state.ledger.account_state().open_notional == pytest.approx(1_500, rel=0.01)
 
     admitted = open_trade(app, "e", asset="LINK")
     assert admitted.accepted, admitted.reason
@@ -180,7 +184,8 @@ def test_simultaneous_signals_cannot_independently_pass_the_exposure_check(db, m
     assert len(rejected) == 1
     assert rejected[0].reason in ("MAX_CONCURRENT_POSITIONS_EXCEEDED", "PORTFOLIO_EXPOSURE_CAP", "POSITION_EXPOSURE_CAP")
     account = app.state.ledger.account_state()
-    assert account.open_notional == pytest.approx(2_000)  # never overshoots the 20% cap
+    assert account.open_notional <= 2_000 + 1e-6  # never overshoots the 20% cap
+    assert account.open_notional == pytest.approx(2_000, rel=0.01)
     assert account.open_positions == 4
 
 
