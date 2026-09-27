@@ -72,6 +72,8 @@ jobs:
         env:
           CANDLE_MANIFEST_OUT: research/data/v2-clean/candle-manifest.json
         run: node research/fetch-coinbase-candles.mjs
+      - name: Previously archived months must be byte-identical (coverage-only extension)
+        run: node research/compare-candle-manifests.mjs research/data/v2-clean/candle-manifest-2023-06-window.json research/data/v2-clean/candle-manifest.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:

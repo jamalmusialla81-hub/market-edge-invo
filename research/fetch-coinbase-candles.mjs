@@ -9,7 +9,7 @@ import {join, dirname} from 'node:path';
 import Archive from './candle-archive.js';
 
 const OUT = process.env.CANDLE_ARCHIVE_DIR || 'candle-archive', MANIFEST_OUT = process.env.CANDLE_MANIFEST_OUT || join(OUT, 'manifest.json');
-const FROM = Date.parse(process.env.CANDLE_FROM || '2023-06-01T00:00:00Z');
+const FROM = Date.parse(process.env.CANDLE_FROM || '2021-09-01T00:00:00Z');
 const NOW = Date.now(), TO = Math.floor((Number(process.env.CANDLE_TO_MS) || NOW) / 86_400_000) * 86_400_000; // whole UTC days only
 const ASSETS = (process.env.CANDLE_ASSETS || 'BTC,ETH,SOL,XRP,DOGE,LTC').split(',');
 const PAGE = 300, BASE = Archive.BASE_MS, NATIVE = [['1h', 3600], ['1d', 86400]], RPS = Math.max(1, Number(process.env.COINBASE_RPS) || 4);
