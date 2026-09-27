@@ -19,12 +19,14 @@ async function post(fetchImpl, body, timeoutMs = 8000) {
   }
 }
 
-// The scan makes many Hyperliquid calls right before this, so a transient
-// failure (e.g. HTTP 429) is retried briefly; a missing coin is not.
-export async function fetchMid(coin, { fetchImpl = fetch, now = Date.now, retries = 3, sleep = (ms) => new Promise((r) => setTimeout(r, ms)) } = {}) {
+// The scan makes many Hyperliquid calls right before this and Hyperliquid's
+// rate limit is a per-minute weight budget, so a 429 is retried until the
+// window has rolled over (5+10+20+30s); a missing coin is not retried.
+const MID_BACKOFF_MS = [5000, 10000, 20000, 30000];
+export async function fetchMid(coin, { fetchImpl = fetch, now = Date.now, retries = MID_BACKOFF_MS.length, sleep = (ms) => new Promise((r) => setTimeout(r, ms)) } = {}) {
   let lastError;
   for (let attempt = 0; attempt <= retries; attempt += 1) {
-    if (attempt > 0) await sleep(1000 * 2 ** (attempt - 1));
+    if (attempt > 0) await sleep(MID_BACKOFF_MS[Math.min(attempt - 1, MID_BACKOFF_MS.length - 1)]);
     let mids;
     try {
       mids = await post(fetchImpl, { type: 'allMids' });
