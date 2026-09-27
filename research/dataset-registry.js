@@ -18,6 +18,11 @@ const DATASETS = Object.freeze({
     evidence: 'research/RANK_RESEARCH_V2.md; CI runs 36302777190 and 36303109323',
     preservedIn: 'D1 historical_scan_snapshots / historical_scan_candidates / historical_candidate_sequences where engine_version = HISTORICAL-RANK-V1'
   }),
+  'HISTORICAL-RANK-V2-CLEAN-NATIVE-HTF': Object.freeze({
+    status: 'PROPOSED_NOT_GENERATED',
+    trainable: false,
+    reason: 'Same-venue alternative (4h from native Coinbase 1h, 1d from native Coinbase daily candles). Dry-run only until explicitly approved; never mixed with strict V2-CLEAN rows.'
+  }),
   'HISTORICAL-RANK-V2-CLEAN': Object.freeze({
     status: 'ACTIVE',
     trainable: true,
