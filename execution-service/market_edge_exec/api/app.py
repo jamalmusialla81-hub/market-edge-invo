@@ -22,7 +22,7 @@ from market_edge_exec.paper.ledger import PaperLedger
 from market_edge_exec.paper.report import build_report
 from market_edge_exec.persistence.store import Store
 from market_edge_exec.reconciliation.reconcile import reconcile
-from market_edge_exec.risk.engine import approve
+from market_edge_exec.risk.engine import RiskLimits, approve
 from market_edge_exec.routing.router import BACKEND_HUMMINGBOT, BACKEND_NAUTILUS_NATIVE, ExecutionRouter, RouterError
 from market_edge_exec.signal_bridge.bridge import process_signal
 
@@ -52,16 +52,21 @@ class PaperBackendAdapter:
         return ExecutionFill.create({"signal_id": signal_id, "fill_id": f"{self._name}-{signal_id}-cancel", "status": "CANCELLED", "quantity_filled": 0, "backend": self._name, "timestamp": int(time.time() * 1000)})
 
 
-def create_app(db_path: str = "market_edge_exec.sqlite3", hummingbot_mode: str = None) -> FastAPI:
+def create_app(db_path: str = "market_edge_exec.sqlite3", hummingbot_mode: str = None,
+               risk_limits: RiskLimits = None) -> FastAPI:
     """hummingbot_mode: 'disabled' (default: no Hummingbot backend at all),
     'real' (bridge must be reachable at startup) or 'mock' (tests only).
-    There is no runtime fallback between them."""
+    There is no runtime fallback between them.
+    risk_limits: defaults to RiskLimits() (the production policy: 1% risk,
+    5% per-position notional ceiling, 20% aggregate, 4 concurrent). Tests
+    pass a wider RiskLimits() to isolate lifecycle mechanics from sizing."""
     app = FastAPI(title="Market Edge Execution Service (paper-only)")
     store = Store(db_path)
     portfolio = NautilusPortfolio(store)
     mode = hummingbot_mode or os.environ.get("HUMMINGBOT_MODE", "disabled")
     hummingbot = None if mode == "disabled" else build_hummingbot_client(mode)
     ledger = PaperLedger(db_path)
+    limits = risk_limits or RiskLimits()
 
     # Account state is re-derived from the persistent ledger on every call.
     # It used to be one AccountState built at startup and never updated, so
@@ -70,14 +75,14 @@ def create_app(db_path: str = "market_edge_exec.sqlite3", hummingbot_mode: str =
         return ledger.account_state(killed=router.killed)
 
     def risk_gate(intent: ExecutionIntent):
-        return approve(intent, current_account()).decision
+        return approve(intent, current_account(), limits).decision
 
     router = ExecutionRouter(
         store=store, risk_gate=risk_gate,
         backends={BACKEND_NAUTILUS_NATIVE: PaperBackendAdapter(portfolio, BACKEND_NAUTILUS_NATIVE),
                   **({BACKEND_HUMMINGBOT: hummingbot} if hummingbot else {})},
     )
-    paper = PaperEngine(ledger, router, store, portfolio=portfolio)
+    paper = PaperEngine(ledger, router, store, limits=limits, portfolio=portfolio)
     app.state.store, app.state.portfolio, app.state.hummingbot, app.state.router = store, portfolio, hummingbot, router
     app.state.ledger, app.state.paper = ledger, paper
 
