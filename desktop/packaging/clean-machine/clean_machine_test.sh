@@ -195,14 +195,18 @@ screenshot "01-running"
 log "waiting up to ${TRADE_WAIT_S}s for a live scan to route a paper trade"
 wait_for 120 '.supervisor.market.online != null'
 check LIVE_MARKET_DATA "$(st .supervisor.market.detail)" test "$(st .supervisor.market.online)" = true
-if wait_for "$TRADE_WAIT_S" '(.positions_count // 0) >= 1 or (.trades_count // 0) >= 1'; then
+# this process's own cycle count, not the trade/position count: on a reinstall those can
+# already be >=1 from state carried over, which would satisfy the trade wait instantly and
+# never actually prove this run's loop scanned anything.
+wait_for "$TRADE_WAIT_S" '(.loop.cycles_seen // 0) >= 1'
+check LIVE_SCAN_RAN "cycles $(st .loop.cycles_seen), last outcome $(st .loop.last_outcome)" test "$(st .loop.cycles_seen)" -ge 1 -a "$(st .loop.last_outcome)" != ERROR
+if wait_for 30 '(.positions_count // 0) >= 1 or (.trades_count // 0) >= 1'; then
   pass PAPER_SIGNAL_ROUTED "$(st '.status.latest_signal | "\(.asset) \(.direction) \(.outcome)"')"
   pass POSITION_APPEARS "$(st '.positions[0] | "\(.asset) \(.direction) qty \(.quantity) @ \(.entry) lev \(.leverage)"')"
 else
-  fail PAPER_SIGNAL_ROUTED "no trade within ${TRADE_WAIT_S}s; last outcome $(st .loop.last_outcome), signals $(st .signals_count)"
+  fail PAPER_SIGNAL_ROUTED "no trade within TRADE_WAIT_S; last outcome $(st .loop.last_outcome), signals $(st .signals_count)"
   fail POSITION_APPEARS "none"
 fi
-check LIVE_SCAN_RAN "cycles $(st .loop.cycles_seen), last outcome $(st .loop.last_outcome)" test "$(st .loop.cycles_seen)" -ge 1 -a "$(st .loop.last_outcome)" != ERROR
 wait_for 30 '.status.last_reconcile.reconciled == true'
 check RECONCILIATION_PASSES "$(st '.status.last_reconcile | "reconciled=\(.reconciled)"')" test "$(st .status.last_reconcile.reconciled)" = true
 check RECONCILIATION_LOG "$(wc -l < "$DATA/logs/reconciliation.log") lines" test -s "$DATA/logs/reconciliation.log"
