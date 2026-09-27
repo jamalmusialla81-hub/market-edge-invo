@@ -19,7 +19,7 @@
 // killing it mid-request -- works the same on macOS and Windows. LEVERAGE_ROTATION (e.g. "1,2,3,5,10") rotates the
 // *requested* paper leverage; risk decides what is actually approved.
 import { runOnce, toInstrument } from './fetch_signal.mjs';
-import { fetchCompletedCandles, fetchMid } from './market_data.mjs';
+import { fetchCompletedCandles, fetchMid, MARKET_PRICE_SOURCE } from './market_data.mjs';
 
 const CYCLE_INTERVAL_MS = Number(process.env.CYCLE_INTERVAL_MS || 300000);
 const MAX_CYCLES = process.env.MAX_CYCLES ? Number(process.env.MAX_CYCLES) : Infinity;
@@ -141,6 +141,7 @@ export async function runCycle(cycle, metrics, deps = {}) {
   const posted = await api('POST', '/paper/signal', {
     signal: result.signal, instrument: toInstrument(result.signal.asset), coin: result.coin || result.signal.asset,
     mark_price: mark.price, mark_at_ms: mark.at, requested_leverage: leverage, meta: result.meta || undefined,
+    market_price_source: MARKET_PRICE_SOURCE,
   });
   const outcome = classify({ ...result, posted }, metrics);
   return { outcome, lifecycle, signal_id: result.signal.signal_id, reason: posted.body?.reason, leverage };

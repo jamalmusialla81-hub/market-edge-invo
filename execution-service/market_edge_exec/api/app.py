@@ -216,6 +216,7 @@ def create_app(db_path: str = "market_edge_exec.sqlite3", hummingbot_mode: str =
             requested_leverage=float(payload.get("requested_leverage") or 1.0),
             venue_preference=payload.get("venue_preference"), now_ms=payload.get("now_ms"), coin=payload.get("coin"),
             meta=payload.get("meta") if isinstance(payload.get("meta"), dict) else None,
+            market_price_source=payload.get("market_price_source") or "UNKNOWN",
         )
         return {"accepted": result.accepted, "signal_id": result.signal_id, "reason": result.reason, "trade": result.trade}
 
