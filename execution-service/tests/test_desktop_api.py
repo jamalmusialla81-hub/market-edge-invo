@@ -74,7 +74,10 @@ def test_signal_position_trade_and_performance_views_follow_the_ledger(client):
     positions = client.get("/paper/positions", headers=HEADERS).json()["positions"]
     assert len(positions) == 1
     p = positions[0]
-    assert p["direction"] == "long" and p["backend"] == "NAUTILUS_NATIVE" and p["risk_amount"] == pytest.approx(100.0)
+    # 1% risk / $10 stop would be 10 units ($1,000 = 10% of equity); the 5%
+    # per-position notional ceiling binds first, so ~5 units and ~$50 at risk.
+    assert p["direction"] == "long" and p["backend"] == "NAUTILUS_NATIVE" and p["risk_amount"] == pytest.approx(50.0, rel=0.01)
+    assert opened["trade"]["notional"] <= 0.05 * 10_000 + 1e-9 and opened["trade"]["exposure_capped"] is True
     assert p["liquidation_estimate"] is not None and p["margin"] > 0
 
     t0 = opened["trade"]["opened_at_ms"]
@@ -99,6 +102,14 @@ def test_risk_settings_are_validated_by_the_backend(client):
                 {"not_a_setting": 1}, {"daily_loss_limit_pct": "3"}, {}):
         assert client.put("/risk/config", headers=HEADERS, json=bad).status_code == 422, bad
     assert client.get("/risk/config", headers=HEADERS).json()["settings"]["leverage_ceiling"] == 10.0
+
+
+def test_operator_settings_can_tighten_but_never_raise_the_exposure_policy(client):
+    # 20% aggregate and 4 concurrent are ceilings; the UI may only go below them.
+    for bad in ({"max_portfolio_exposure_pct": 25}, {"max_concurrent_positions": 5}, {"max_initial_position_notional_pct": 10}):
+        assert client.put("/risk/config", headers=HEADERS, json=bad).status_code == 422, bad
+    ok = client.put("/risk/config", headers=HEADERS, json={"max_portfolio_exposure_pct": 10, "max_concurrent_positions": 2})
+    assert ok.status_code == 200 and ok.json()["settings"]["max_portfolio_exposure_pct"] == 10
 
 
 def test_risk_settings_persist_across_restart_and_apply_to_sizing(db):

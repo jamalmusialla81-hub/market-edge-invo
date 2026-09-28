@@ -30,7 +30,7 @@ from market_edge_exec.paper.report import build_report
 from market_edge_exec.persistence import migrations
 from market_edge_exec.persistence.store import Store
 from market_edge_exec.reconciliation.reconcile import reconcile
-from market_edge_exec.risk.engine import approve
+from market_edge_exec.risk.engine import RiskLimits, approve
 from market_edge_exec.routing.router import BACKEND_HUMMINGBOT, BACKEND_NAUTILUS_NATIVE, ExecutionRouter, RouterError
 from market_edge_exec.signal_bridge.bridge import process_signal
 
@@ -60,10 +60,15 @@ class PaperBackendAdapter:
         return ExecutionFill.create({"signal_id": signal_id, "fill_id": f"{self._name}-{signal_id}-cancel", "status": "CANCELLED", "quantity_filled": 0, "backend": self._name, "timestamp": int(time.time() * 1000)})
 
 
-def create_app(db_path: str = "market_edge_exec.sqlite3", hummingbot_mode: str = None) -> FastAPI:
+def create_app(db_path: str = "market_edge_exec.sqlite3", hummingbot_mode: str = None,
+               risk_limits: RiskLimits = None) -> FastAPI:
     """hummingbot_mode: 'disabled' (default: no Hummingbot backend at all),
     'real' (bridge must be reachable at startup) or 'mock' (tests only).
-    There is no runtime fallback between them."""
+    There is no runtime fallback between them.
+    risk_limits: None (default) applies the operator's persisted settings on
+    top of RiskLimits() (the production policy: 1% risk, 5% per-position
+    notional ceiling, 20% aggregate, 4 concurrent). Tests pass a wider
+    RiskLimits() to isolate lifecycle mechanics from sizing."""
     app = FastAPI(title="Market Edge Execution Service (paper-only)", version=__version__)
     # Refuses a database from a newer build, and backs up an older one
     # before anything (including the stores' CREATE TABLE IF NOT EXISTS)
@@ -76,6 +81,7 @@ def create_app(db_path: str = "market_edge_exec.sqlite3", hummingbot_mode: str =
     ledger = PaperLedger(db_path)
     control = ControlStore(db_path)
     migration = migrations.apply(migration)
+    limits_provider = (lambda: risk_limits) if risk_limits is not None else control.risk_limits
 
     # Account state is re-derived from the persistent ledger on every call.
     # It used to be one AccountState built at startup and never updated, so
@@ -84,14 +90,14 @@ def create_app(db_path: str = "market_edge_exec.sqlite3", hummingbot_mode: str =
         return ledger.account_state(killed=router.killed)
 
     def risk_gate(intent: ExecutionIntent):
-        return approve(intent, current_account(), control.risk_limits()).decision
+        return approve(intent, current_account(), limits_provider()).decision
 
     router = ExecutionRouter(
         store=store, risk_gate=risk_gate,
         backends={BACKEND_NAUTILUS_NATIVE: PaperBackendAdapter(portfolio, BACKEND_NAUTILUS_NATIVE),
                   **({BACKEND_HUMMINGBOT: hummingbot} if hummingbot else {})},
     )
-    paper = PaperEngine(ledger, router, store, portfolio=portfolio, limits_provider=control.risk_limits,
+    paper = PaperEngine(ledger, router, store, portfolio=portfolio, limits_provider=limits_provider,
                         entries_gate=lambda: "ENTRIES_PAUSED" if control.entries_paused() else None,
                         max_mark_age_provider=control.stale_data_timeout_s)
     app.state.store, app.state.portfolio, app.state.hummingbot, app.state.router = store, portfolio, hummingbot, router
@@ -210,6 +216,7 @@ def create_app(db_path: str = "market_edge_exec.sqlite3", hummingbot_mode: str =
             requested_leverage=float(payload.get("requested_leverage") or 1.0),
             venue_preference=payload.get("venue_preference"), now_ms=payload.get("now_ms"), coin=payload.get("coin"),
             meta=payload.get("meta") if isinstance(payload.get("meta"), dict) else None,
+            market_price_source=payload.get("market_price_source") or "UNKNOWN",
         )
         return {"accepted": result.accepted, "signal_id": result.signal_id, "reason": result.reason, "trade": result.trade}
 

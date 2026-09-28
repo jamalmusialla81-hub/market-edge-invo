@@ -45,11 +45,14 @@ def test_fresh_signal_is_accepted_and_sized_by_risk_not_by_the_signal(setup):
     result = process_signal(make_signal(), "BTC-PERP", router, account, store)
     assert result.accepted is True
     assert result.backend == BACKEND_NAUTILUS_NATIVE
-    # risk_budget (1% of 10,000 equity) / stop_distance (4000) = 0.025 -- not
-    # anything the raw signal payload specified (it has no quantity field at all).
+    # risk_budget (1% of 10,000 equity) / stop_distance (4000) = 0.025 units,
+    # but the 5% per-position notional ceiling (2026-09-27 exposure policy)
+    # binds first at this entry: 5% of 10,000 / 60,000 = 0.008333... units.
+    # Either way, it's risk-computed, not anything the raw signal payload
+    # specified (it has no quantity field at all).
     submitted_intent = backend.submitted[0]
     assert submitted_intent.quantity == pytest.approx(result.assessment.position_size)
-    assert submitted_intent.quantity == pytest.approx(10_000 * 0.01 / 4000)
+    assert submitted_intent.quantity == pytest.approx(10_000 * 0.05 / 60_000)
 
 
 def test_stale_signal_is_rejected_before_risk_or_execution(setup):

@@ -33,7 +33,9 @@ def test_kill_switch_blocks_new_intents():
 
 def test_position_size_equals_risk_budget_over_stop_distance_leverage_does_not_change_max_loss():
     account = AccountState(equity=10_000, peak_equity=10_000)
-    limits = RiskLimits(max_risk_per_trade_pct=1.0)
+    # Wide caps: this test isolates the risk-budget invariant from the
+    # 5%-per-position and 20%-aggregate exposure ceilings, covered separately.
+    limits = RiskLimits(max_risk_per_trade_pct=1.0, max_initial_position_notional_pct=100.0, max_portfolio_exposure_pct=100.0)
     low_leverage = approve(intent(leverage=1), account, limits)
     high_leverage = approve(intent(leverage=5), account, limits)
     assert low_leverage.max_loss == high_leverage.max_loss  # leverage changes margin, never allowed loss

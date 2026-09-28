@@ -47,11 +47,14 @@ DEFAULT_STALE_DATA_TIMEOUT_S = 120  # engine.MAX_MARK_AGE_SECONDS
 
 # (min, max) per editable setting. Bounds are deliberately conservative:
 # the ceiling on leverage is the largest band the risk engine knows about,
-# and risk per trade cannot exceed 2% of equity from the UI.
+# and risk per trade cannot exceed 2% of equity from the UI. Aggregate
+# exposure and concurrent positions can only be tightened below the
+# production policy (20% of equity, 4 positions), never raised above it; the
+# 5% per-position notional ceiling is not operator-editable at all.
 BOUNDS = {
     "max_risk_per_trade_pct": (0.05, 2.0),
-    "max_portfolio_exposure_pct": (1.0, 100.0),
-    "max_concurrent_positions": (1, 20),
+    "max_portfolio_exposure_pct": (1.0, 20.0),
+    "max_concurrent_positions": (1, 4),
     "leverage_ceiling": (1.0, float(max(LEVERAGE_BANDS))),
     "daily_loss_limit_pct": (0.5, 20.0),
     "drawdown_limit_pct": (1.0, 50.0),
