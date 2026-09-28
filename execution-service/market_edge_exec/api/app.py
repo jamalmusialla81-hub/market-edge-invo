@@ -33,6 +33,8 @@ from market_edge_exec.reconciliation.reconcile import reconcile
 from market_edge_exec.risk.engine import RiskLimits, approve
 from market_edge_exec.routing.router import BACKEND_HUMMINGBOT, BACKEND_NAUTILUS_NATIVE, ExecutionRouter, RouterError
 from market_edge_exec.signal_bridge.bridge import process_signal
+from market_edge_exec.shadow import contracts as shadow_contracts
+from market_edge_exec.shadow.store import ShadowStore, default_path as shadow_default_path
 
 PAPER_ONLY = True  # hard-coded, not configurable via request or env
 
@@ -61,7 +63,7 @@ class PaperBackendAdapter:
 
 
 def create_app(db_path: str = "market_edge_exec.sqlite3", hummingbot_mode: str = None,
-               risk_limits: RiskLimits = None) -> FastAPI:
+               risk_limits: RiskLimits = None, shadow_db_path: str = None) -> FastAPI:
     """hummingbot_mode: 'disabled' (default: no Hummingbot backend at all),
     'real' (bridge must be reachable at startup) or 'mock' (tests only).
     There is no runtime fallback between them.
@@ -103,6 +105,10 @@ def create_app(db_path: str = "market_edge_exec.sqlite3", hummingbot_mode: str =
     app.state.store, app.state.portfolio, app.state.hummingbot, app.state.router = store, portfolio, hummingbot, router
     app.state.ledger, app.state.paper, app.state.control = ledger, paper, control
     app.state.migration = migration
+    # Shadow learning (research only): its own database file, no access to
+    # the router, the ledger, the portfolio or risk -- it cannot place,
+    # size, block or modify any paper trade.
+    app.state.shadow = ShadowStore(shadow_db_path or shadow_default_path(db_path))
     app.state.request_shutdown = None  # set by run_server.py when it owns the uvicorn server
     started_at = time.time()
 
@@ -219,6 +225,44 @@ def create_app(db_path: str = "market_edge_exec.sqlite3", hummingbot_mode: str =
             market_price_source=payload.get("market_price_source") or "UNKNOWN",
         )
         return {"accepted": result.accepted, "signal_id": result.signal_id, "reason": result.reason, "trade": result.trade}
+
+    # ---- shadow learning (research only) --------------------------------
+    @app.post("/shadow/scan", dependencies=[Depends(require_api_key)])
+    def shadow_scan(payload: dict):
+        try:
+            return app.state.shadow.record_scan(payload)
+        except shadow_contracts.LeakageError as error:
+            raise HTTPException(status_code=422, detail={"reason": "LEAKAGE_GUARD", "error": str(error)})
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail={"reason": str(error)})
+
+    @app.get("/shadow/pending", dependencies=[Depends(require_api_key)])
+    def shadow_pending(limit: int = 50):
+        return {"pending": app.state.shadow.pending(limit=limit)}
+
+    @app.post("/shadow/resolve", dependencies=[Depends(require_api_key)])
+    def shadow_resolve(payload: dict):
+        try:
+            return app.state.shadow.resolve(str(payload.get("coin") or ""), payload.get("candles") or [],
+                                            payload.get("venue"), payload.get("interval"), payload.get("now_ms"))
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail={"reason": str(error)})
+
+    @app.get("/shadow/summary", dependencies=[Depends(require_api_key)])
+    def shadow_summary(since_ms: int = None):
+        return app.state.shadow.summary(since_ms=since_ms)
+
+    @app.get("/shadow/observations", dependencies=[Depends(require_api_key)])
+    def shadow_observations(limit: int = 100, kind: str = None, execution_status: str = None, classification: str = None):
+        return {"observations": app.state.shadow.observations(limit=limit, kind=kind, execution_status=execution_status,
+                                                              classification=classification)}
+
+    @app.get("/shadow/observations/{observation_id}", dependencies=[Depends(require_api_key)])
+    def shadow_observation(observation_id: str):
+        found = app.state.shadow.observation(observation_id)
+        if found is None:
+            raise HTTPException(status_code=404, detail="NOT_FOUND")
+        return found
 
     @app.post("/paper/no-trade", dependencies=[Depends(require_api_key)])
     def paper_no_trade(payload: dict):

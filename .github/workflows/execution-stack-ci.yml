@@ -337,7 +337,7 @@ jobs:
           pip install fastapi "uvicorn[standard]" pydantic httpx nautilus_trader
 
       - name: Signal-bridge unit tests (pure logic, no network)
-        run: node --test signal-bridge/forward_loop.test.mjs
+        run: node --test signal-bridge/forward_loop.test.mjs signal-bridge/shadow_capture.test.mjs
 
       - name: Start the paper execution-service in the background
         working-directory: execution-service

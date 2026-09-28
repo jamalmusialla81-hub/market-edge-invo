@@ -198,3 +198,11 @@ input:disabled { opacity: 0.5; }
 @media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }
 .controls-inline { display: flex; gap: 8px; margin: 8px 0; }
 .seg select { background: transparent; color: inherit; border: 1px solid var(--border); border-radius: 4px; padding: 2px 6px; margin-right: 8px; font: inherit; }
+
+/* Shadow learning (research only) */
+.banner-info { background: rgba(90,160,255,0.10); color: #b9d4ff; border-left: 4px solid #5aa0ff; }
+.btn-small { padding: 2px 8px; font-size: 11px; margin-left: 4px; }
+.btn-small.active { border-color: #5aa0ff; color: #b9d4ff; }
+tr.clickable { cursor: pointer; }
+tr.clickable:hover td { background: rgba(255,255,255,0.03); }
+.panel-research { border-color: rgba(245,176,65,0.45); }

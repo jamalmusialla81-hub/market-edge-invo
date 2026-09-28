@@ -20,11 +20,21 @@
 // *requested* paper leverage; risk decides what is actually approved.
 import { runOnce, toInstrument } from './fetch_signal.mjs';
 import { fetchCompletedCandles, fetchMid, MARKET_PRICE_SOURCE } from './market_data.mjs';
+import { buildShadowPayload, executionFromCycle, scanCandlesByCoin } from './shadow_capture.mjs';
 
 const CYCLE_INTERVAL_MS = Number(process.env.CYCLE_INTERVAL_MS || 300000);
 const MAX_CYCLES = process.env.MAX_CYCLES ? Number(process.env.MAX_CYCLES) : Infinity;
 const LEVERAGE_ROTATION = String(process.env.LEVERAGE_ROTATION || '1').split(',').map(Number).filter((n) => n > 0);
 const SEGMENT = process.env.SEGMENT_NAME || `local-${Date.now()}`;
+// Shadow learning (research only; see shadow_capture.mjs). It observes the
+// scan this loop already runs -- it never adds scans, never changes the
+// paper cadence, and a shadow failure never affects the paper cycle.
+// SHADOW_EVERY_N_CYCLES=3 would record every 3rd scan (the interval is stored
+// with every scan row); SHADOW_EXTRA_FETCH_PER_CYCLE bounds the extra candle
+// requests used for the 48h/72h windows the scan's own 5m history can't reach.
+const SHADOW_ENABLED = process.env.SHADOW_LEARNING !== '0';
+const SHADOW_EVERY_N_CYCLES = Math.max(1, Number(process.env.SHADOW_EVERY_N_CYCLES || 1));
+const SHADOW_EXTRA_FETCH_PER_CYCLE = Math.max(0, Number(process.env.SHADOW_EXTRA_FETCH_PER_CYCLE ?? 2));
 
 // Graceful stop: the current cycle always finishes (its mark/signal/reconcile
 // calls are each one committed backend transaction), then the loop ends its
@@ -113,14 +123,54 @@ export async function advanceOpenTrades(metrics, { candles = fetchCompletedCandl
   return { open: open.length, exits, dataOk };
 }
 
+// Research-only side channel: record every candidate and market state of this
+// scan with the paper decision it got, then label whatever windows are due.
+// Any error is logged and swallowed -- paper execution never depends on it.
+export async function shadowObserve(cycle, result, outcome, posted, deps = {}) {
+  if (!result?.scan?.research) return null;
+  const { candles = fetchCompletedCandles, intervalMs = CYCLE_INTERVAL_MS, extraFetches = SHADOW_EXTRA_FETCH_PER_CYCLE } = deps;
+  const out = { recorded: 0, resolved: 0, errors: 0 };
+  try {
+    const payload = buildShadowPayload(result, executionFromCycle(outcome, result, posted), { observationIntervalMs: intervalMs * SHADOW_EVERY_N_CYCLES });
+    if (payload) out.recorded = (await api('POST', '/shadow/scan', payload)).body?.inserted || 0;
+  } catch (error) {
+    out.errors += 1;
+    console.error(JSON.stringify({ event: 'SHADOW_RECORD_FAILED', cycle, error: error.message }));
+  }
+  try {
+    const pending = (await api('GET', '/shadow/pending')).body?.pending || [];
+    const fromScan = scanCandlesByCoin(result);
+    let fetched = 0;
+    for (const { coin, since_ms: since } of pending) {
+      let rows = fromScan[coin];
+      if (!rows || rows[0].time > since) {
+        if (fetched >= extraFetches) continue;
+        fetched += 1;
+        try { rows = await candles(coin, since, { now: Date.now() }); } catch (error) {
+          console.error(JSON.stringify({ event: 'SHADOW_CANDLES_UNAVAILABLE', coin, error: error.message }));
+          continue;   // no fallback: the window stays pending
+        }
+      }
+      const res = (await api('POST', '/shadow/resolve', { coin, venue: 'HYPERLIQUID', interval: '5m', candles: rows })).body;
+      out.resolved += res?.labels || 0;
+    }
+  } catch (error) {
+    out.errors += 1;
+    console.error(JSON.stringify({ event: 'SHADOW_RESOLVE_FAILED', cycle, error: error.message }));
+  }
+  return out;
+}
+
 export async function runCycle(cycle, metrics, deps = {}) {
-  const { scan = runOnce, mid = fetchMid } = deps;
+  const { scan = runOnce, mid = fetchMid, shadow = SHADOW_ENABLED } = deps;
+  const observe = shadow && cycle % SHADOW_EVERY_N_CYCLES === 0;
   const lifecycle = await advanceOpenTrades(metrics, deps);
-  const result = await scan({ dryRun: true });
+  const result = await scan({ dryRun: true, includeResearch: observe });
   if (!result.signal) {
     await api('POST', '/paper/no-trade', { reason: result.reason || 'NO_VALID_CANDIDATE', detail: { scanId: result.scanId, status: result.status } });
     const outcome = classify(result, metrics);
-    return { outcome, lifecycle };
+    const shadowResult = observe ? await shadowObserve(cycle, result, outcome, null, deps) : null;
+    return { outcome, lifecycle, ...(shadowResult ? { shadow: shadowResult } : {}) };
   }
   if (!lifecycle.dataOk) {
     // Can't see open positions' live prices: do not add risk this cycle.
@@ -128,7 +178,8 @@ export async function runCycle(cycle, metrics, deps = {}) {
     metrics.cycles += 1;
     metrics.signals_observed += 1;
     metrics.stale_signals_blocked += 1;
-    return { outcome: 'STALE', lifecycle };
+    const shadowResult = observe ? await shadowObserve(cycle, result, 'STALE_OPEN_POSITIONS', null, deps) : null;
+    return { outcome: 'STALE', lifecycle, ...(shadowResult ? { shadow: shadowResult } : {}) };
   }
   let mark = { price: null, at: null };
   try {
@@ -144,7 +195,8 @@ export async function runCycle(cycle, metrics, deps = {}) {
     market_price_source: MARKET_PRICE_SOURCE,
   });
   const outcome = classify({ ...result, posted }, metrics);
-  return { outcome, lifecycle, signal_id: result.signal.signal_id, reason: posted.body?.reason, leverage };
+  const shadowResult = observe ? await shadowObserve(cycle, result, outcome, posted, deps) : null;
+  return { outcome, lifecycle, signal_id: result.signal.signal_id, reason: posted.body?.reason, leverage, ...(shadowResult ? { shadow: shadowResult } : {}) };
 }
 
 export async function runLoop({ maxCycles = MAX_CYCLES, intervalMs = CYCLE_INTERVAL_MS, sleep = interruptibleSleep, deps = {} } = {}) {

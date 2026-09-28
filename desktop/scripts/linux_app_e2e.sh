@@ -49,6 +49,7 @@ screen 5; shot 07-performance 5
 screen 6; shot 08-risk
 screen 7; shot 09-system 4
 screen 8; shot 09b-about 3
+screen 9; shot 09c-shadow 3
 screen 7
 click 334 80           # RECONCILE NOW
 shot 10-reconciled
