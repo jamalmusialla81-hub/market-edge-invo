@@ -238,3 +238,8 @@ tr.clickable:focus-visible { outline: 2px solid var(--info); outline-offset: -2p
 .candle-chart .mk-stop path { fill: var(--neg); }
 .candle-chart .mk-other path { fill: var(--warn); }
 table.exits { margin-top: 10px; }
+.shadow-filters { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 6px; }
+.shadow-filters select { margin-right: 0; }
+.shadow-filters input { background: transparent; color: inherit; border: 1px solid var(--border); border-radius: 4px; padding: 2px 6px; font: inherit; }
+.shadow-filters input[type="number"] { width: 84px; }
+.shadow-filters input[type="search"] { width: 110px; }
