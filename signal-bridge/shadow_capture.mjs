@@ -180,8 +180,25 @@ export function buildShadowPayload(result, execution, { observationIntervalMs = 
       submitted_signal_id: submittedId, execution: supplement ? { decision: 'NOT_APPLICABLE', reason: OUTSIDE_PRODUCTION_UNIVERSE } : execution || { decision: 'NO_SIGNAL' },
       observation_interval_ms: observationIntervalMs,
       generator_version: GENERATOR_VERSION, feature_version: FEATURE_VERSION,
-      model_version: supplement ? 'QUANT_ONLY' : best?.ml?.model_id || 'QUANT_ONLY', failures: research.failures || [], universe: scan.universe || null, cross_market: cross },
+      model_version: supplement ? 'QUANT_ONLY' : best?.ml?.model_id || 'QUANT_ONLY', failures: research.failures || [], universe: scan.universe || null, cross_market: cross,
+      // Consumed (and removed) by the execution-service to compute each
+      // candidate's COUNTERFACTUAL Risk Sizing V2; not stored as a feature.
+      risk_inputs: Object.fromEntries(research.markets.map((m) => [m.symbol, riskInputsFor(research, m.symbol)]).filter(([, v]) => v)) },
     observations,
+  };
+}
+
+// Point-in-time inputs Risk Sizing V2 needs, from the SAME scan and venue:
+// the completed Hyperliquid daily candles (volatility state) and the venue's
+// size precision. Never substituted from another asset or venue.
+export function riskInputsFor(research, coin) {
+  const m = (research?.markets || []).find((x) => x.symbol === coin);
+  const d1 = m?.timeframes?.d1;
+  if (!Array.isArray(d1) || !d1.length) return null;
+  const decimals = research?.assetMeta?.[coin]?.szDecimals;
+  return {
+    vol: { venue: 'HYPERLIQUID', interval: '1d', closes: d1.map((c) => c.close), last_bar_open_ms: d1.at(-1).time },
+    venue_rules: { min_notional: 10, qty_decimals: Number.isInteger(decimals) ? decimals : 8 },
   };
 }
 

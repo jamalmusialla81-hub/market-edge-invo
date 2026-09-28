@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api, errorText, RiskUsage } from '../api';
 import { ErrorBanner, Panel, usePoll } from '../components/ui';
+import { RiskSizingPanel } from './RiskSizing';
 import { DASH, num, usageLevel, usd } from '../format';
 
 const FIELDS: { key: string; label: string; unit: string; step: number; help: string }[] = [
@@ -32,6 +33,7 @@ export function UsageRow({ u }: { u: RiskUsage }) {
 export function Risk() {
   const config = usePoll(api.riskConfig, 15000);
   const usage = usePoll(api.riskUsage, 3000);
+  const sizing = usePoll(api.riskSizing, 5000);
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [result, setResult] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
   const [saving, setSaving] = useState(false);
@@ -64,7 +66,8 @@ export function Risk() {
 
   return (
     <div className="screen">
-      <ErrorBanner error={config.error ?? usage.error} />
+      <ErrorBanner error={config.error ?? usage.error ?? sizing.error} />
+      {sizing.data && <RiskSizingPanel s={sizing.data} />}
       <div className="grid-2">
         <Panel title="Current usage vs limits">
           {(usage.data?.usage ?? []).map((u) => <UsageRow key={u.key} u={u} />)}

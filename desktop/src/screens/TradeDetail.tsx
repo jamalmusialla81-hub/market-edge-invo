@@ -3,6 +3,7 @@ import { api, CandleInterval, Distance, Excursion, TradeDetail } from '../api';
 import { CandleChart, HindsightLine } from '../components/CandleChart';
 import { Badge, ErrorBanner, Panel, Stat, usePoll } from '../components/ui';
 import { ago, DASH, duration, lev, num, pct, price, qty, tone, ts, usd } from '../format';
+import { TradeRiskSizingView } from './RiskSizing';
 
 const INTERVALS: CandleInterval[] = ['1m', '5m', '15m', '1h'];
 const HINDSIGHT_LABELS: Record<string, string> = { optimal_entry: 'optimal entry', optimal_tp1: 'optimal TP1', optimal_tp2: 'optimal TP2', optimal_exit: 'optimal exit' };
@@ -169,6 +170,8 @@ export function TradeDetailView({ tradeId, onBack, pollMs = 2000, candlePollMs =
           </table>
         </Panel>
       </div>
+
+      {d.risk_sizing && <TradeRiskSizingView s={d.risk_sizing} />}
 
       <Panel title="Shadow learning link (research only)">
         {d.shadow?.linked ? (

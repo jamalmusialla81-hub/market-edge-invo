@@ -215,6 +215,27 @@ def hindsight_view(ledger: PaperLedger, trade: dict, shadow_link: Optional[dict]
     return {**base, "available": False, "reason": "NO_RESOLVED_RESEARCH_LABEL"}
 
 
+COUNTERFACTUAL_LABEL = "COUNTERFACTUAL RISK SIZING - RESEARCH ONLY - NOT USED FOR EXECUTION"
+
+
+def risk_sizing_view(ledger: PaperLedger, trade: dict) -> dict:
+    """The ORIGINAL immutable sizing decision(s) of this trade, the evolving
+    current risk (separate, recomputed), and the after-trade measurement.
+    A counterfactual (shadow-mode V2) record is labelled as such and never
+    presented as the executed size."""
+    from market_edge_exec.risk import sizing_v2   # local: keeps this view module's import surface small
+    records = ledger.sizing_records(trade["trade_id"])
+    executed = next((r for r in records if r["role"] == "AUTHORITATIVE"), None)
+    counterfactual = [dict(r, label=COUNTERFACTUAL_LABEL) for r in records if r["role"] == "COUNTERFACTUAL"]
+    current = None
+    if trade["status"] != "CLOSED":
+        current = sizing_v2.current_risk(trade, executed["record"] if executed else None)
+    return {"mode": trade.get("sizing_mode"), "executed": executed, "counterfactual": counterfactual,
+            "executed_quantity": trade.get("quantity"), "current_risk": current,
+            "outcome": ledger.sizing_outcome(trade["trade_id"]),
+            "note": None if records else "This trade was opened before Risk Sizing V2 recorded sizing decisions."}
+
+
 def build_trade_detail(ledger: PaperLedger, trade: dict, now_ms: int, max_age_s: float,
                        shadow_link: Optional[dict] = None) -> dict:
     return {
@@ -226,6 +247,7 @@ def build_trade_detail(ledger: PaperLedger, trade: dict, now_ms: int, max_age_s:
         "markers": chart_markers(trade),
         "exits": trade.get("exits") or [],
         "realized_pnl": trade["realized_pnl"], "fees": trade["fees"], "net_pnl": trade["realized_pnl"] - trade["fees"],
+        "risk_sizing": risk_sizing_view(ledger, trade),
         "shadow": shadow_view(shadow_link),
         "hindsight": hindsight_view(ledger, trade, shadow_link),
         "generated_at_ms": now_ms,

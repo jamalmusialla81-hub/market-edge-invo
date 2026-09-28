@@ -32,6 +32,8 @@ from market_edge_exec.paper.report import build_report
 from market_edge_exec.persistence import migrations
 from market_edge_exec.persistence.store import Store
 from market_edge_exec.reconciliation.reconcile import reconcile
+from market_edge_exec.paper import lifecycle
+from market_edge_exec.risk import sizing_runtime, sizing_v2
 from market_edge_exec.risk.engine import RiskLimits, approve
 from market_edge_exec.routing.router import BACKEND_HUMMINGBOT, BACKEND_NAUTILUS_NATIVE, ExecutionRouter, RouterError
 from market_edge_exec.signal_bridge.bridge import process_signal
@@ -66,7 +68,7 @@ class PaperBackendAdapter:
 
 def create_app(db_path: str = "market_edge_exec.sqlite3", hummingbot_mode: str = None,
                risk_limits: RiskLimits = None, shadow_db_path: str = None,
-               candle_fetcher=None) -> FastAPI:
+               candle_fetcher=None, sizing_mode: str = None) -> FastAPI:
     """hummingbot_mode: 'disabled' (default: no Hummingbot backend at all),
     'real' (bridge must be reachable at startup) or 'mock' (tests only).
     There is no runtime fallback between them.
@@ -104,7 +106,7 @@ def create_app(db_path: str = "market_edge_exec.sqlite3", hummingbot_mode: str =
     )
     paper = PaperEngine(ledger, router, store, portfolio=portfolio, limits_provider=limits_provider,
                         entries_gate=lambda: "ENTRIES_PAUSED" if control.entries_paused() else None,
-                        max_mark_age_provider=control.stale_data_timeout_s)
+                        max_mark_age_provider=control.stale_data_timeout_s, sizing_mode=sizing_mode)
     app.state.store, app.state.portfolio, app.state.hummingbot, app.state.router = store, portfolio, hummingbot, router
     app.state.ledger, app.state.paper, app.state.control = ledger, paper, control
     app.state.migration = migration
@@ -230,13 +232,47 @@ def create_app(db_path: str = "market_edge_exec.sqlite3", hummingbot_mode: str =
             venue_preference=payload.get("venue_preference"), now_ms=payload.get("now_ms"), coin=payload.get("coin"),
             meta=payload.get("meta") if isinstance(payload.get("meta"), dict) else None,
             market_price_source=payload.get("market_price_source") or "UNKNOWN",
+            risk_inputs=payload.get("risk_inputs") if isinstance(payload.get("risk_inputs"), dict) else None,
         )
         return {"accepted": result.accepted, "signal_id": result.signal_id, "reason": result.reason, "trade": result.trade}
 
     # ---- shadow learning (research only) --------------------------------
+    def attach_counterfactual_sizing(payload: dict) -> None:
+        """COUNTERFACTUAL RISK SIZING (research only): what Risk Sizing V2
+        would have assigned each candidate at decision time, sized alone
+        against the paper account as it is right now. Pure computation on a
+        read-only snapshot: no reservation, no exposure or cluster budget
+        consumed, no position, no order, no Nautilus/Hummingbot call."""
+        risk_inputs = (payload.get("scan") or {}).pop("risk_inputs", None) or {}
+        account = current_account()
+        opens = sizing_runtime.open_risks(ledger)
+        policy = sizing_runtime.effective_policy(limits_provider())
+        for obs in payload.get("observations") or []:
+            decision = obs.get("decision") if isinstance(obs, dict) else None
+            cand = (decision or {}).get("candidate") or {}
+            price = ((decision or {}).get("market") or {}).get("price")
+            if obs.get("kind") != "CANDIDATE" or cand.get("direction") not in ("long", "short") or not cand.get("stop") or not price:
+                continue
+            coin = str(obs.get("coin") or obs.get("asset") or "")
+            vol, _, rules = sizing_runtime.parse_inputs(risk_inputs.get(coin) if isinstance(risk_inputs, dict) else None)
+            entry = lifecycle.slipped(float(price), "buy" if cand["direction"] == "long" else "sell")
+            try:
+                d = sizing_v2.size(sizing_v2.SizingRequest(
+                    asset=str(obs.get("asset")), direction=cand["direction"], entry_price=entry, stop_price=float(cand["stop"]),
+                    equity=account.equity, peak_equity=account.peak_equity, open_positions=opens,
+                    now_ms=int((payload.get("scan") or {}).get("decision_ts") or time.time() * 1000), vol=vol, depth=None,
+                    venue=rules, require_depth=False, provenance={"price": price, "vol_source": f"{vol.venue} {vol.interval}" if vol else None,
+                                                                  "depth_source": None}), policy)
+            except (TypeError, ValueError):
+                continue
+            decision["counterfactual_sizing"] = {**d.record, "role": "COUNTERFACTUAL", "research_only": True,
+                                                 "used_for_execution": False, "consumes_capital": False,
+                                                 "basis": "sized alone against the open paper positions at decision time"}
+
     @app.post("/shadow/scan", dependencies=[Depends(require_api_key)])
     def shadow_scan(payload: dict):
         try:
+            attach_counterfactual_sizing(payload)
             return app.state.shadow.record_scan(payload)
         except shadow_contracts.LeakageError as error:
             raise HTTPException(status_code=422, detail={"reason": "LEAKAGE_GUARD", "error": str(error)})
@@ -469,6 +505,44 @@ def create_app(db_path: str = "market_edge_exec.sqlite3", hummingbot_mode: str =
              if t.get("liquidation_buffer_pct") is not None), default=None), "limit": limits.min_liquidation_buffer_pct, "unit": "%", "floor": True},
             {"key": "stale_data_timeout_s", "label": "Stale-data timeout (entry mid age)", "current": None, "limit": settings["stale_data_timeout_s"], "unit": "s"},
         ]}
+
+    @app.get("/risk/sizing", dependencies=[Depends(require_api_key)])
+    def risk_sizing():
+        """Risk Sizing V2 status for the desktop Risk screen."""
+        limits = limits_provider()
+        policy = sizing_runtime.effective_policy(limits)
+        account = current_account()
+        E = account.equity
+        peak = account.peak_equity or E
+        dd = max(0.0, (peak - E) / peak) if peak else 0.0
+        m_dd = sizing_v2.drawdown_multiplier(dd, policy)
+        positions, clusters = [], {}
+        for t in ledger.trades("OPEN"):
+            original = ledger.authoritative_sizing(t["trade_id"])
+            cur = sizing_v2.current_risk(t, original)
+            clusters[cur["cluster_id"]] = clusters.get(cur["cluster_id"], 0.0) + cur["current_planned_loss"]
+            positions.append({
+                "signal_id": t["trade_id"], "asset": t.get("asset"), "direction": t["direction"],
+                "notional": cur["current_notional"], "notional_pct_equity": cur["current_notional"] / E if E else None,
+                "planned_loss_dollars": cur["current_planned_loss"], "planned_loss_pct_equity": cur["current_planned_loss"] / E if E else None,
+                "original_planned_loss_dollars": (original or {}).get("planned_loss_dollars", t.get("planned_loss_dollars")),
+                "stop_distance_pct": abs(t["entry_fill"] - cur["active_stop"]) / t["entry_fill"], "active_stop": cur["active_stop"],
+                "cluster_id": cur["cluster_id"], "binding_constraint": (original or {}).get("sizing_binding_constraint", t.get("sizing_binding_constraint")),
+                "sizing_rule_version": (original or {}).get("sizing_rule_version", t.get("risk_policy_version")),
+                "position_leverage": t.get("approved_leverage"),
+            })
+        open_planned = sum(clusters.values())
+        return {
+            "mode": paper.sizing_mode, "kelly": "OFF", "live": "DISABLED", "sizing_rule_version": policy.version,
+            "policy": policy.public(), "equity": E, "peak_equity": peak, "drawdown_pct": dd,
+            "drawdown_multiplier": m_dd, "drawdown_pause": m_dd is None,
+            "base_risk_pct": policy.base_risk_pct, "effective_risk_pct_before_vol": policy.base_risk_pct * (m_dd or 0.0),
+            "open_planned_risk_dollars": open_planned, "open_planned_risk_pct": open_planned / E if E else None,
+            "cluster_planned_risk": {k: {"dollars": v, "pct": v / E if E else None} for k, v in sorted(clusters.items())},
+            "gross_exposure_dollars": account.open_notional, "gross_exposure_multiple": account.open_notional / E if E else None,
+            "open_positions": account.open_positions, "positions": positions,
+            "records": ledger.sizing_counts(),
+        }
 
     # ---- desktop app: controls ----------------------------------------
     @app.post("/control/pause", dependencies=[Depends(require_api_key)])

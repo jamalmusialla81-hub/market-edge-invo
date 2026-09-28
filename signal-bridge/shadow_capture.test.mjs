@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { buildShadowPayload, crossMarket, executionFromCycle, frameFeatures, scanCandlesByCoin, FEATURE_VERSION, GENERATOR_VERSION } from './shadow_capture.mjs';
+import { buildShadowPayload, crossMarket, executionFromCycle, frameFeatures, riskInputsFor, scanCandlesByCoin, FEATURE_VERSION, GENERATOR_VERSION } from './shadow_capture.mjs';
 import { emptyMetrics, runCycle, shadowObserve } from './forward_loop.mjs';
 
 const require = createRequire(import.meta.url);
@@ -177,4 +177,33 @@ test('shadow code only talks to /shadow/* and cannot reach paper or live executi
   assert.ok(calls.length > 0 && calls.every((c) => c.path.startsWith('/shadow/')));
   const src = readFileSync(new URL('./shadow_capture.mjs', import.meta.url), 'utf8');
   for (const forbidden of ['/paper/', '/execution/', 'fetch(', 'hummingbot', 'mainnet', 'LIVE_']) assert.ok(!src.includes(forbidden), forbidden);
+});
+
+test('Risk Sizing V2 inputs: same-scan daily candles and venue precision, never substituted', () => {
+  const scan = researchScan();
+  scan.research.assetMeta = { BTC: { szDecimals: 5 } };
+  const btc = riskInputsFor(scan.research, 'BTC');
+  assert.equal(btc.vol.venue, 'HYPERLIQUID');
+  assert.equal(btc.vol.interval, '1d');
+  assert.equal(btc.vol.closes.length, 220);
+  assert.equal(btc.vol.last_bar_open_ms, scan.research.markets[0].timeframes.d1.at(-1).time);
+  assert.equal(btc.venue_rules.qty_decimals, 5);
+  assert.equal(riskInputsFor(scan.research, 'NOPE'), null);
+  const p = buildShadowPayload({ scan, signal }, { decision: 'NO_SIGNAL' });
+  assert.deepEqual(Object.keys(p.scan.risk_inputs).sort(), ['BTC', 'ETH', 'SOL']);
+});
+
+test('the submitted signal carries V2 inputs; a failed order-book read is sent as missing, not faked', async () => {
+  process.env.MARKET_EDGE_EXEC_API_KEY = 'k';
+  let calls = fakeService();
+  const book = { venue: 'HYPERLIQUID', bids: [[99.9, 5]], asks: [[100.1, 5]], at_ms: Date.now() };
+  await runCycle(0, emptyMetrics(), { scan: scanDep(), mid: async () => ({ price: 100, at: Date.now() }), book: async () => book, shadow: false });
+  let sent = calls.find((c) => c.path === '/paper/signal').body.risk_inputs;
+  assert.equal(sent.vol.closes.length, 220);
+  assert.deepEqual(sent.depth, book);
+  calls = fakeService();
+  await runCycle(0, emptyMetrics(), { scan: scanDep(), mid: async () => ({ price: 100, at: Date.now() }), book: async () => { throw new Error('HTTP 429'); }, shadow: false });
+  sent = calls.find((c) => c.path === '/paper/signal').body.risk_inputs;
+  assert.equal(sent.depth, undefined);
+  assert.ok(sent.vol);
 });

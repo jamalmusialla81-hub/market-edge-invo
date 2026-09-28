@@ -24,8 +24,8 @@
 // killing it mid-request -- works the same on macOS and Windows. LEVERAGE_ROTATION (e.g. "1,2,3,5,10") rotates the
 // *requested* paper leverage; risk decides what is actually approved.
 import { runOnce, toInstrument } from './fetch_signal.mjs';
-import { fetchCompletedCandles, fetchMid, MARKET_PRICE_SOURCE } from './market_data.mjs';
-import { buildShadowPayload, executionFromCycle, scanCandlesByCoin, SCOPE_RESEARCH_SUPPLEMENT } from './shadow_capture.mjs';
+import { fetchCompletedCandles, fetchL2Book, fetchMid, MARKET_PRICE_SOURCE } from './market_data.mjs';
+import { buildShadowPayload, executionFromCycle, riskInputsFor, scanCandlesByCoin, SCOPE_RESEARCH_SUPPLEMENT } from './shadow_capture.mjs';
 import { supplementMarkets, supplementPerCycle, supplementPlan } from './research_universe.mjs';
 import { runLiveScan } from '../backend/scan-core.mjs';
 import { monitorIntervalMs, PositionMonitor } from './position_monitor.mjs';
@@ -202,10 +202,12 @@ export async function shadowObserve(cycle, result, outcome, posted, deps = {}) {
 }
 
 export async function runCycle(cycle, metrics, deps = {}) {
-  const { scan = runOnce, mid = fetchMid, shadow = SHADOW_ENABLED } = deps;
+  const { scan = runOnce, mid = fetchMid, book = fetchL2Book, shadow = SHADOW_ENABLED } = deps;
   const observe = shadow && cycle % SHADOW_EVERY_N_CYCLES === 0;
   const lifecycle = await advanceOpenTrades(metrics, deps);
-  const result = await scan({ dryRun: true, includeResearch: observe });
+  // Research capture adds no requests (the scan already fetched every frame);
+  // it is always on so Risk Sizing V2 gets its daily-candle input.
+  const result = await scan({ dryRun: true, includeResearch: true });
   if (!result.signal) {
     await api('POST', '/paper/no-trade', { reason: result.reason || 'NO_VALID_CANDIDATE', detail: { scanId: result.scanId, status: result.status } });
     const outcome = classify(result, metrics);
@@ -229,10 +231,19 @@ export async function runCycle(cycle, metrics, deps = {}) {
     console.error(JSON.stringify({ event: 'NO_LIVE_MID', coin: result.coin || result.signal.asset, error: error.message }));
   }
   const leverage = LEVERAGE_ROTATION[cycle % LEVERAGE_ROTATION.length] || 1;
+  const coin = result.coin || result.signal.asset;
+  // Risk Sizing V2 inputs: same-scan daily candles + one order-book read for
+  // this one signal. A missing input is sent as missing, never filled in.
+  const riskInputs = riskInputsFor(result.scan?.research, coin) || {};
+  try {
+    riskInputs.depth = await book(coin);
+  } catch (error) {
+    console.error(JSON.stringify({ event: 'NO_ORDER_BOOK', coin, error: error.message }));
+  }
   const posted = await api('POST', '/paper/signal', {
-    signal: result.signal, instrument: toInstrument(result.signal.asset), coin: result.coin || result.signal.asset,
+    signal: result.signal, instrument: toInstrument(result.signal.asset), coin,
     mark_price: mark.price, mark_at_ms: mark.at, requested_leverage: leverage, meta: result.meta || undefined,
-    market_price_source: MARKET_PRICE_SOURCE,
+    market_price_source: MARKET_PRICE_SOURCE, risk_inputs: riskInputs,
   });
   const outcome = classify({ ...result, posted }, metrics);
   const shadowResult = observe ? await shadowObserve(cycle, result, outcome, posted, deps) : null;

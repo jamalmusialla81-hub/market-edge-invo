@@ -12,6 +12,7 @@ import { PositionTable } from '../screens/Positions';
 import { TradeTable } from '../screens/Trades';
 import { UsageRow } from '../screens/Risk';
 import { ShadowDetailView, ShadowTable } from '../screens/Shadow';
+import { RiskSizingPanel, TradeRiskSizingView } from '../screens/RiskSizing';
 import { appInfoFixture, healthFixture, positionFixture, rejectedFixture, signalFixture, tradeFixture } from './fixtures';
 
 afterEach(() => { cleanup(); invoke.mockReset(); });
@@ -208,5 +209,50 @@ describe('shadow learning (research only)', () => {
     expect(screen.getByText('GOOD_TRADE_MISSED')).toBeInTheDocument();
     expect(screen.getByText(/unvalidated; not a training target/)).toBeInTheDocument();
     expect(screen.getAllByText('0.80R')).toHaveLength(2);   // horizon policy R and the current-policy result
+  });
+});
+
+describe('risk sizing V2', () => {
+  const status = {
+    mode: 'SHADOW' as const, kelly: 'OFF' as const, live: 'DISABLED' as const, sizing_rule_version: 'RISK-SIZING-V2.0',
+    policy: { base_risk_pct: 0.005, max_position_notional_pct: 0.05, max_portfolio_gross_pct: 0.2, max_open_planned_risk_pct: 0.02,
+      max_cluster_planned_risk_pct: 0.01, max_positions: 4, max_leverage: 1, execution_buffer_floor_pct: 0.0025, max_expected_entry_slippage_bps: 25, dd_pause_pct: 0.15 },
+    equity: 10000, peak_equity: 10000, drawdown_pct: 0, drawdown_multiplier: 1, drawdown_pause: false, base_risk_pct: 0.005,
+    effective_risk_pct_before_vol: 0.005, open_planned_risk_dollars: 50, open_planned_risk_pct: 0.005,
+    cluster_planned_risk: { L1_PLATFORMS: { dollars: 50, pct: 0.005 } }, gross_exposure_dollars: 488, gross_exposure_multiple: 0.0488, open_positions: 1,
+    positions: [{ signal_id: 's1', asset: 'SOL', direction: 'long', notional: 488, notional_pct_equity: 0.0488, planned_loss_dollars: 50,
+      planned_loss_pct_equity: 0.005, original_planned_loss_dollars: 50, stop_distance_pct: 0.1, active_stop: 90, cluster_id: 'L1_PLATFORMS',
+      binding_constraint: 'RISK_BUDGET', sizing_rule_version: 'RISK-SIZING-V2.0', position_leverage: 1 }],
+  };
+
+  it('shows the policy, the mode and gross exposure separately from position leverage', () => {
+    render(<RiskSizingPanel s={status} />);
+    expect(screen.getByText('MODE SHADOW')).toBeInTheDocument();
+    expect(screen.getByText('KELLY OFF')).toBeInTheDocument();
+    expect(screen.getByText('Base risk / trade').parentElement).toHaveTextContent('0.50%');
+    expect(screen.getByText('Max position notional').parentElement).toHaveTextContent('5%');
+    expect(screen.getByText('Max open planned risk').parentElement).toHaveTextContent('2%');
+    expect(screen.getByText('Gross exposure').parentElement).toHaveTextContent('0.05x');
+    expect(screen.getByText(/ceiling, never a target/)).toBeInTheDocument();
+    expect(screen.getByText(/open notional — not leverage/)).toBeInTheDocument();
+    expect(screen.getByText('Position leverage')).toBeInTheDocument();
+    expect(screen.getByText('RISK_BUDGET')).toBeInTheDocument();
+  });
+
+  it('shows DRAWDOWN_RISK_PAUSE', () => {
+    render(<RiskSizingPanel s={{ ...status, drawdown_pct: 0.16, drawdown_multiplier: null, drawdown_pause: true }} />);
+    expect(screen.getByRole('alert')).toHaveTextContent('DRAWDOWN_RISK_PAUSE');
+  });
+
+  it('never presents counterfactual sizing as the executed quantity', () => {
+    const rec = (over: Record<string, unknown>) => ({ decision_id: String(over.id), mode: 'SHADOW', policy_version: String(over.v), approved: true, reason: null,
+      created_at_ms: 1790000000000, record_hash_ok: true, role: over.role as 'AUTHORITATIVE' | 'COUNTERFACTUAL',
+      record: { sizing_rule_version: String(over.v), approved: true, final_notional: over.n as number, final_quantity: over.q as number, wallet_equity: 10000, sizing_binding_constraint: 'RISK_BUDGET' } });
+    render(<TradeRiskSizingView s={{ mode: 'SHADOW', executed_quantity: 10, current_risk: null, outcome: null, note: null,
+      executed: rec({ id: 'a', v: 'RISK-V1-LEGACY', role: 'AUTHORITATIVE', n: 1000, q: 10 }),
+      counterfactual: [rec({ id: 'b', v: 'RISK-SIZING-V2.0', role: 'COUNTERFACTUAL', n: 488, q: 4.88 })] }} />);
+    expect(screen.getByText('COUNTERFACTUAL RISK SIZING')).toBeInTheDocument();
+    expect(screen.getByRole('note')).toHaveTextContent(/RESEARCH ONLY · NOT USED FOR EXECUTION/);
+    expect(screen.getByText(/this is the size actually used/)).toHaveTextContent('Executed quantity 10');
   });
 });
