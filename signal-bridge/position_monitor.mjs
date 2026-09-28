@@ -23,13 +23,23 @@
 // It never runs the scan, never calls /paper/signal, and never opens a trade.
 // It runs only while >=1 position is open; with none it goes IDLE (no timer,
 // no stream) until the discovery loop wakes it.
+//
+// Rate limits (#14): the heartbeat's allMids read is the highest priority
+// (P0) in the shared request budget (rate_limit.mjs), so discovery / shadow
+// traffic can never starve it. The trade stream is a websocket and does not
+// spend the REST budget at all. After a rate-limited heartbeat the next one
+// is spaced out (bounded, 2x the interval up to 30s) instead of hammering the
+// limit -- positions are flagged MARKET_DATA_OFFLINE meanwhile, exactly as
+// before, and the stream keeps checking every real print against the levels.
 import { fetchAllMids, MARKET_PRICE_SOURCE } from './market_data.mjs';
+import { isRateLimitError, sharedBudget } from './rate_limit.mjs';
 
 export const DEFAULT_MONITOR_INTERVAL_MS = 10_000;
 // Internal safety bounds: nobody can configure millisecond polling of a
 // public API, nor a monitor so slow it stops being one.
 export const MIN_MONITOR_INTERVAL_MS = 5_000;
 export const MAX_MONITOR_INTERVAL_MS = 60_000;
+export const RATE_LIMITED_MAX_INTERVAL_MS = 30_000;
 export const WS_TRADE_SOURCE = 'HYPERLIQUID_WS_TRADES';
 export const HYPERLIQUID_WS_URL = 'wss://api.hyperliquid.xyz/ws';
 const RECONNECT_BACKOFF_MS = [1000, 2000, 5000, 10000, 30000];
@@ -157,7 +167,7 @@ export class HyperliquidTradeStream {
 }
 
 export class PositionMonitor {
-  constructor({ api, fetchMids = fetchAllMids, intervalMs = DEFAULT_MONITOR_INTERVAL_MS, timers = defaultTimers, stream, WebSocketImpl } = {}) {
+  constructor({ api, fetchMids = fetchAllMids, intervalMs = DEFAULT_MONITOR_INTERVAL_MS, timers = defaultTimers, stream, WebSocketImpl, budget } = {}) {
     if (typeof api !== 'function') throw new Error('PositionMonitor needs the execution-service api');
     this.api = api;
     this.fetchMids = fetchMids;
@@ -171,7 +181,10 @@ export class PositionMonitor {
     this.timer = null;
     this.running = null;
     this.again = false;
-    this.stats = { heartbeats: 0, poll_ticks: 0, ws_ticks: 0, exits: 0, offline_heartbeats: 0, errors: 0 };
+    this.stats = { heartbeats: 0, poll_ticks: 0, ws_ticks: 0, exits: 0, offline_heartbeats: 0, errors: 0, rate_limited_heartbeats: 0 };
+    // Only the real network path reports budget health; injected test fetchers don't.
+    this.budget = budget !== undefined ? budget : (fetchMids === fetchAllMids ? sharedBudget() : null);
+    this.rateLimitedStreak = 0;
     this.stream = stream !== undefined ? stream : new HyperliquidTradeStream({
       WebSocketImpl: WebSocketImpl === undefined ? globalThis.WebSocket : WebSocketImpl,
       timers,
@@ -222,10 +235,17 @@ export class PositionMonitor {
     return this.running;
   }
 
+  /** Next heartbeat delay: the configured interval, spaced out (bounded)
+   *  while allMids is being rate limited. */
+  nextDelayMs() {
+    if (!this.rateLimitedStreak) return this.intervalMs;
+    return Math.min(Math.max(this.intervalMs, RATE_LIMITED_MAX_INTERVAL_MS), this.intervalMs * 2 ** Math.min(this.rateLimitedStreak, 4));
+  }
+
   schedule() {
     if (this.state !== 'ACTIVE') return;
     if (this.timer) this.timers.clearTimeout(this.timer);
-    this.timer = this.timers.setTimeout(() => { this.timer = null; return this.wake(); }, this.intervalMs);
+    this.timer = this.timers.setTimeout(() => { this.timer = null; return this.wake(); }, this.nextDelayMs());
   }
 
   async refreshOpen() {
@@ -261,8 +281,15 @@ export class PositionMonitor {
     let error = null;
     try {
       ({ mids, at } = await this.fetchMids());
+      this.rateLimitedStreak = 0;
     } catch (e) {
       error = `allMids: ${e.message}`;
+      if (isRateLimitError(e)) {
+        this.rateLimitedStreak += 1;
+        this.stats.rate_limited_heartbeats += 1;
+      } else {
+        this.rateLimitedStreak = 0;
+      }
     }
     if (this.state === 'STOPPED') return;
     const offline = [];
@@ -294,6 +321,8 @@ export class PositionMonitor {
       state: 'ACTIVE', mode: this.mode, ws_state: this.stream?.state ?? 'UNAVAILABLE', interval_ms: this.intervalMs,
       market_ok: offline.length === 0, error: offline.length ? (error || `no live mid for ${offline.join(', ')}`) : null,
       offline_instruments: offline, open_positions: trades.length, at_ms: Date.now(),
+      rate_limited: this.rateLimitedStreak > 0, next_heartbeat_ms: this.nextDelayMs(),
+      ...(this.budget ? { rate_limit: this.budget.health() } : {}),
     }).catch(() => {});
     this.schedule();
   }

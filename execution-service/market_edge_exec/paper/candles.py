@@ -69,44 +69,127 @@ def hyperliquid_fetcher(timeout_s: float = 8.0) -> CandleFetcher:
     return fetch
 
 
-class CachedCandleFetcher:
-    """Chart candles are the LOWEST-priority public-API use (after open-position
-    monitoring, reconciliation, discovery and shadow research), so:
-      - identical requests inside `ttl_s` are served from memory (an open
-        Trade Detail polls every ~10s; two views of one trade share a read);
-      - after an HTTP 429 the fetcher backs off for `cooldown_s` and reports
-        RATE_LIMITED_DEFERRED instead of adding to the pressure.
-    Display only -- nothing here feeds trading. Rows older than the TTL are
-    never served (a forming candle must not be shown as complete)."""
-
-    def __init__(self, fetcher: CandleFetcher, ttl_s: float = 15.0, cooldown_s: float = 60.0, clock=None):
+def _retry_after_s(error: Exception) -> Optional[float]:
+    """Retry-After (seconds or HTTP date) from an httpx HTTPStatusError, if any."""
+    response = getattr(error, "response", None)
+    value = response.headers.get("retry-after") if response is not None and hasattr(response, "headers") else None
+    if value in (None, ""):
+        return None
+    try:
+        return max(0.0, float(value))
+    except (TypeError, ValueError):
+        pass
+    try:
+        from email.utils import parsedate_to_datetime
         import time as _time
-        self._fetcher, self._ttl, self._cooldown = fetcher, ttl_s, cooldown_s
+        return max(0.0, parsedate_to_datetime(str(value)).timestamp() - _time.time())
+    except Exception:
+        return None
+
+
+class CachedCandleFetcher:
+    """Chart candles are the LOWEST-priority public-API use (P5, after open-
+    position monitoring, reconciliation, discovery and shadow research), so:
+
+      - only COMPLETED candles are cached: a candle whose interval has fully
+        elapsed can never change, so each (coin, interval) keeps those and a
+        repeat request only asks the exchange for the bars after the last
+        cached completed one (an open Trade Detail polling every ~10s reads
+        just the tail). The still-forming candle is never cached -- it is
+        always re-read, so it is never shown stale or as complete;
+      - after an HTTP 429 chart reads pause with exponential backoff + jitter
+        (or the server's Retry-After) and report RATE_LIMITED_DEFERRED
+        instead of adding to the pressure; a success resets the backoff.
+
+    Display only -- nothing here feeds sizing, triggers or the ledger, and a
+    cached candle is never replayed into the paper lifecycle."""
+
+    def __init__(self, fetcher: CandleFetcher, clock=None, wall_ms=None, base_backoff_s: float = 10.0,
+                 max_backoff_s: float = 300.0, rand=None, max_series: int = 64, cooldown_s: Optional[float] = None,
+                 ttl_s: Optional[float] = None):
+        import random as _random
+        import time as _time
+        self._fetcher = fetcher
         self._clock = clock or _time.monotonic
-        self._cache: dict = {}
+        self._wall_ms = wall_ms or (lambda: int(_time.time() * 1000))
+        self._base = float(cooldown_s if cooldown_s is not None else base_backoff_s)
+        self._max = float(max_backoff_s)
+        self._rand = rand or _random.random
+        self._max_series = max_series
+        self._series: dict = {}            # (coin, interval) -> {t: raw completed row}
         self._blocked_until = 0.0
+        self._consecutive_429 = 0
         self.calls = 0
+        self.stats = {"requests": 0, "http_429": 0, "deferred": 0, "bars_from_cache": 0, "last_429_wall_ms": None,
+                      "retry_after_seen": 0}
+
+    def _backoff_s(self) -> float:
+        cap = min(self._max, self._base * 2 ** (self._consecutive_429 - 1))
+        return cap / 2 + self._rand() * cap / 2
+
+    def health(self) -> dict:
+        now = self._clock()
+        blocked = now < self._blocked_until
+        return {"schema": "rate-limit-health/v1", "source": "execution-service chart candles", "priority": "P5_CHART_HISTORY",
+                "state": "BACKOFF" if blocked else "OK", "backoff_remaining_s": round(self._blocked_until - now, 3) if blocked else 0.0,
+                "consecutive_429": self._consecutive_429, "cached_series": len(self._series), **self.stats}
 
     def __call__(self, coin: str, interval: str, start_ms: int, end_ms: int) -> list:
         now = self._clock()
-        # an open trade's end is "now": bucket it to the TTL so repeated polls share one read
-        key = (coin, interval, start_ms, end_ms // max(1, int(self._ttl * 1000)))
-        hit = self._cache.get(key)
-        if hit and now - hit[0] <= self._ttl:
-            return hit[1]
         if now < self._blocked_until:
-            raise RuntimeError("RATE_LIMITED_DEFERRED (chart requests paused after HTTP 429)")
-        self.calls += 1
-        try:
-            rows = self._fetcher(coin, interval, start_ms, end_ms)
-        except Exception as error:
-            if "429" in str(error):
-                self._blocked_until = now + self._cooldown
-            raise
-        if len(self._cache) > 64:
-            self._cache.clear()
-        self._cache[key] = (now, rows)
-        return rows
+            self.stats["deferred"] += 1
+            raise RuntimeError(f"RATE_LIMITED_DEFERRED (chart requests paused after HTTP 429, {self._blocked_until - now:.0f}s left)")
+        step = INTERVAL_MS.get(interval)
+        if step is None:  # unknown interval: nothing cacheable, plain read
+            self.calls += 1
+            return self._fetcher(coin, interval, start_ms, end_ms)
+        key = (coin, interval)
+        series = self._series.get(key, {})
+        first = (start_ms // step) * step
+        t = first
+        while t in series and t <= end_ms:
+            t += step
+        cached = [series[b] for b in range(first, t, step)]
+        rows: list = []
+        if t <= end_ms:
+            self.calls += 1
+            self.stats["requests"] += 1
+            try:
+                rows = self._fetcher(coin, interval, t, end_ms)
+            except Exception as error:
+                if "429" in str(error):
+                    self._consecutive_429 += 1
+                    self.stats["http_429"] += 1
+                    self.stats["last_429_wall_ms"] = self._wall_ms()
+                    retry_after = _retry_after_s(error)
+                    if retry_after is not None:
+                        self.stats["retry_after_seen"] += 1
+                    self._blocked_until = now + (retry_after if retry_after is not None else self._backoff_s())
+                raise
+            self._consecutive_429 = 0
+            wall = self._wall_ms()
+            if key not in self._series and len(self._series) >= self._max_series:
+                self._series.clear()
+            series = self._series.setdefault(key, series)
+            for row in rows if isinstance(rows, list) else []:
+                try:
+                    bar = int(row["t"])
+                except (KeyError, TypeError, ValueError):
+                    continue
+                if bar + step <= wall:          # completed: immutable, safe to keep
+                    series[bar] = row
+            if len(series) > MAX_CANDLES + 1000:
+                for bar in sorted(series)[: len(series) - MAX_CANDLES]:
+                    del series[bar]
+        self.stats["bars_from_cache"] += len(cached)
+        fresh = rows if isinstance(rows, list) else []
+        fresh_times = set()
+        for row in fresh:
+            try:
+                fresh_times.add(int(row["t"]))
+            except (KeyError, TypeError, ValueError):
+                pass
+        return [row for row in cached if int(row["t"]) not in fresh_times] + fresh
 
 
 def trade_candles(trade: dict, interval: str, now_ms: int, fetcher: CandleFetcher) -> dict:

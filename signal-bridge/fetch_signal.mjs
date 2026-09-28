@@ -10,6 +10,7 @@
 // loop calls on Market Edge's own cadence (backend/wrangler.jsonc: every 5
 // minutes) -- it is not itself a scheduler.
 import { runLiveScan } from '../backend/scan-core.mjs';
+import { PRIORITY, sharedBudget } from './rate_limit.mjs';
 
 const EXECUTION_SERVICE_URL = process.env.EXECUTION_SERVICE_URL || 'http://localhost:8000';
 const EXECUTION_SERVICE_API_KEY = process.env.MARKET_EDGE_EXEC_API_KEY;
@@ -73,10 +74,19 @@ async function postSignal(signal) {
   return { status: response.status, body };
 }
 
+// The production scan's Hyperliquid reads go through the shared request
+// budget at DISCOVERY priority (P2): under rate-limit pressure they wait for
+// room behind open-position monitoring (P0) and reconciliation (P1), and a
+// read the budget cannot fit in time fails as HTTP 429 exactly like a real
+// one. scan-core itself is unmodified -- it only receives a different fetch.
+export function discoveryFetch(budget = sharedBudget()) {
+  return budget.fetchImplFor(PRIORITY.P2_DISCOVERY);
+}
+
 // includeResearch (research only): also return the full scan with every
 // candidate and the point-in-time candles, for shadow learning. The signal
 // itself is derived exactly as before.
-export async function runOnce({ fetchImpl = fetch, now = Date.now(), dryRun = false, includeResearch = false } = {}) {
+export async function runOnce({ fetchImpl = discoveryFetch(), now = Date.now(), dryRun = false, includeResearch = false } = {}) {
   const scan = await runLiveScan({ fetchImpl, now, includeResearch });
   const signal = bestTradeNowToAlphaSignal(scan);
   const extra = includeResearch ? { scan } : {};

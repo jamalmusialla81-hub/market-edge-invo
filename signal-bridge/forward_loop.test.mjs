@@ -135,6 +135,19 @@ test('runCycle adds no new risk when an open position has no readable market dat
   assert.ok(!calls.some((c) => c.path === '/paper/signal'));
 });
 
+test('a rate-limited scan defers discovery (no trade, not an ERROR); other scan failures still throw', async () => {
+  process.env.MARKET_EDGE_EXEC_API_KEY = 'k';
+  const calls = fakeService([]);
+  const metrics = emptyMetrics();
+  const out = await runCycle(0, metrics, { shadow: false, scan: async () => { throw new Error('HTTP 429 RATE_LIMITED_DEFERRED: P2_DISCOVERY metaAndAssetCtxs deferred (COOLDOWN_AFTER_429)'); } });
+  assert.equal(out.outcome, 'DEFERRED_RATE_LIMITED');
+  assert.equal(metrics.discovery_deferred_rate_limited, 1);
+  const noTrade = calls.find((c) => c.path === '/paper/no-trade');
+  assert.equal(noTrade.body.reason, 'DISCOVERY_DEFERRED_RATE_LIMITED');
+  assert.ok(!calls.some((c) => c.path === '/paper/signal'), 'nothing is traded on a deferred scan');
+  await assert.rejects(runCycle(1, emptyMetrics(), { shadow: false, scan: async () => { throw new Error('Invo returned no eligible perpetual instruments'); } }), /no eligible/);
+});
+
 test('fetchMid retries a transient failure, but not a missing coin', async () => {
   const { fetchMid } = await import('./market_data.mjs');
   let calls = 0;

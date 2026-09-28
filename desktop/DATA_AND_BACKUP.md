@@ -60,12 +60,29 @@ says so on the Backup & restore panel.
 Priority, highest first: open-position safety, reconciliation, discovery,
 shadow capture, delayed shadow resolution, chart convenience.
 
+Since #14 every Node-side Hyperliquid read goes through ONE shared request
+budget per process (`signal-bridge/rate_limit.mjs`) that enforces this order:
+P0 open-position monitor `allMids`, P1 open-trade candle backstop, P2
+discovery scan + entry mid, P3 research supplement scan, P4 delayed shadow
+resolution (P5, chart candles, lives in the execution-service). After a 429
+the budget starts a cooldown (exponential backoff with jitter, or the
+server's `Retry-After`): P0/P1 keep their own cadence, discovery waits it out
+(up to 90s, else the cycle is recorded as `DISCOVERY_DEFERRED_RATE_LIMITED`,
+not an error), and P3-P5 are skipped for the cooldown plus 60s. Identical
+concurrent requests share one HTTP call. Nothing is cached or re-served:
+every price is a fresh read or an error, and stale data still fails closed.
+Counters: `GET /system/rate-limit` (also under `rate_limit` in
+`GET /system/status`). Proactive weight pacing is available
+(`HYPERLIQUID_WEIGHT_PER_MINUTE`) but off by default until the weight model
+is calibrated against CI evidence. The desktop's own market probe backs off
+on 429 too (30s -> 60s -> 120s, or `Retry-After`) and keeps entries paused.
+
 | Source | Requests | Rate-limit behaviour |
 |---|---|---|
 | Open-position monitor | One websocket (`trades`, one subscription per open coin, reused, 30s ping, backoff reconnect) plus ONE batched `allMids` per 10s heartbeat for all open positions; idle with no positions | On failure the position is flagged MARKET_DATA_OFFLINE / POLL_ONLY; no crossing is ever inferred |
 | Reconciliation | Local only (execution-service) | n/a |
-| Discovery (5 min, unchanged) | Production scan: 1 `metaAndAssetCtxs` + ~5 Hyperliquid candle reads per market (about 40 markets) plus Binance/Coinbase 4h, 2 at a time; one `allMids` for the signal | Unchanged; retries 429 as before. Freshness gates unchanged |
+| Discovery (5 min, unchanged) | Production scan: 1 `metaAndAssetCtxs` + ~5 Hyperliquid candle reads per market (about 40 markets) plus Binance/Coinbase 4h, 2 at a time; one `allMids` for the signal | P2 in the shared budget: waits out a 429 cooldown (max 90s), otherwise deferred to the next cycle. Freshness gates unchanged |
 | Shadow capture | Zero extra requests for markets the scan already evaluated. Research-only supplement for approved research assets the scan missed: at most 1 asset per cycle by default (max 3), deterministic rotation, only venue-listed assets | Skipped entirely in any cycle whose production scan saw data failures |
 | Shadow resolution | Reuses the scan's own 5m candles; at most 2 extra candle reads per cycle for 48h/72h windows | Stops for the cycle on the first 429; windows stay pending, never filled from another venue |
-| Trade Detail chart | One candle read per trade and timeframe per 15s at most (in-memory cache); closed trades read once | 60s back-off after a 429, reported as RATE_LIMITED_DEFERRED; nothing is drawn in place of missing candles |
+| Trade Detail chart | Completed candles are kept in memory (immutable once their interval has elapsed); a repeat poll reads only the bars after them, so the forming candle is always re-read and never cached | Exponential back-off (10s doubling to 300s, or `Retry-After`) after a 429, reported as RATE_LIMITED_DEFERRED; nothing is drawn in place of missing candles |
 | Dashboard / screens | Local execution-service reads only | n/a |

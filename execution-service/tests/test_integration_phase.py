@@ -154,34 +154,103 @@ def test_gross_exposure_is_open_notional_over_equity_not_position_leverage(tmp_p
 
 
 # ---- chart candles: lowest-priority requests ---------------------------------
-def test_chart_candles_are_cached_and_back_off_after_429():
-    clock = [0.0]
+def _bars(start, end, step=300_000):
+    t = (start // step) * step
+    out = []
+    while t <= end:
+        out.append({"t": t, "o": 1, "h": 1, "l": 1, "c": 1, "v": 1})
+        t += step
+    return out
+
+
+def test_chart_candles_cache_only_completed_bars_and_refetch_the_tail():
+    """#14: a completed candle is immutable, so it may be kept; the still-forming
+    candle never is. A repeat poll only asks for the bars after the cache."""
+    step = 300_000
+    wall = [10 * step + 1000]                     # bar 10 is forming
     calls = []
 
     def fetcher(coin, interval, start, end):
-        calls.append((coin, interval, start, end))
-        if len(calls) == 2:
-            raise RuntimeError("Client error '429 Too Many Requests'")
-        return [{"t": start, "o": 1, "h": 1, "l": 1, "c": 1, "v": 1}]
+        calls.append((start, end))
+        return _bars(start, end)
 
-    f = CachedCandleFetcher(fetcher, ttl_s=15, cooldown_s=60, clock=lambda: clock[0])
-    f("ETH", "5m", 0, 10_000)
-    f("ETH", "5m", 0, 11_000)                         # same TTL bucket: served from memory
-    assert len(calls) == 1
-    clock[0] = 20.0
+    f = CachedCandleFetcher(fetcher, clock=lambda: 0.0, wall_ms=lambda: wall[0])
+    rows = f("ETH", "5m", 0, wall[0])
+    assert calls == [(0, wall[0])] and [r["t"] for r in rows] == [b * step for b in range(11)]
+    rows = f("ETH", "5m", 0, wall[0] + 5000)       # poll again: only the forming bar is re-read
+    assert calls[-1] == (10 * step, wall[0] + 5000)
+    assert [r["t"] for r in rows] == [b * step for b in range(11)], "no duplicate, no missing bar"
+    assert f.stats["bars_from_cache"] == 10
+    wall[0] = 12 * step + 10                       # two more bars completed
+    f("ETH", "5m", 0, wall[0])
+    assert calls[-1][0] == 10 * step, "bar 10 was forming last time, so it was not cached"
+    assert 10 * step in f._series[("ETH", "5m")] and 12 * step not in f._series[("ETH", "5m")]
+
+
+def test_chart_candles_back_off_exponentially_after_429_and_honour_retry_after():
+    clock = [0.0]
+    mode = ["429"]
+    calls = []
+
+    class Resp:
+        def __init__(self, headers):
+            self.headers = headers
+
+    class HTTP429(RuntimeError):
+        def __init__(self, retry_after=None):
+            super().__init__("Client error '429 Too Many Requests'")
+            self.response = Resp({"retry-after": retry_after} if retry_after else {})
+
+    def fetcher(coin, interval, start, end):
+        calls.append(start)
+        if mode[0] == "429":
+            raise HTTP429()
+        if mode[0] == "retry-after":
+            raise HTTP429("45")
+        return _bars(start, end)
+
+    f = CachedCandleFetcher(fetcher, clock=lambda: clock[0], wall_ms=lambda: 0, base_backoff_s=10, rand=lambda: 1.0)
     with pytest.raises(RuntimeError, match="429"):
-        f("ETH", "5m", 0, 40_000)
-    clock[0] = 30.0
+        f("ETH", "5m", 0, 10_000)
+    assert f.health()["state"] == "BACKOFF" and f.health()["backoff_remaining_s"] == 10
     with pytest.raises(RuntimeError, match="RATE_LIMITED_DEFERRED"):
-        f("ETH", "5m", 0, 50_000)                     # cooling down: no request made
-    assert len(calls) == 2
-    clock[0] = 81.0
-    f("ETH", "5m", 0, 90_000)
-    assert len(calls) == 3
+        f("ETH", "5m", 0, 10_000)                 # cooling down: no request made
+    assert len(calls) == 1
+    clock[0] = 10.5
+    with pytest.raises(RuntimeError, match="429"):
+        f("ETH", "5m", 0, 10_000)
+    assert f.health()["backoff_remaining_s"] == 20, "escalates"
+    clock[0] = 31.0
+    mode[0] = "retry-after"
+    with pytest.raises(RuntimeError, match="429"):
+        f("ETH", "5m", 0, 10_000)
+    assert f.health()["backoff_remaining_s"] == 45 and f.stats["retry_after_seen"] == 1
+    clock[0] = 77.0
+    mode[0] = "ok"
+    assert f("ETH", "5m", 0, 10_000)
+    assert f.health()["consecutive_429"] == 0 and f.health()["state"] == "OK"
     trade = {"coin": "ETH", "asset": "ETH", "opened_at_ms": 1_790_000_000_000, "closed_at_ms": None}
     blocked = CachedCandleFetcher(lambda *a: (_ for _ in ()).throw(RuntimeError("HTTP 429")), clock=lambda: 0.0)
     out = trade_candles(trade, "5m", 1_790_000_600_000, blocked)
     assert out["available"] is False and "429" in out["reason"] and out["candles"] == []
+
+
+def test_rate_limit_diagnostics_endpoints(tmp_path):
+    app = create_app(db_path=str(tmp_path / "rl.sqlite3"))
+    client = TestClient(app)
+    empty = client.get("/system/rate-limit", headers=HEADERS).json()
+    assert empty["node_budget"] is None and empty["chart_candles"]["priority"] == "P5_CHART_HISTORY"
+    assert client.post("/system/rate-limit", headers=HEADERS, json={"nope": 1}).status_code == 422
+    snap = {"schema": "rate-limit-health/v1", "state": "BACKOFF", "totals": {"http_429": 3}, "queue_depth": 2}
+    assert client.post("/system/rate-limit", headers=HEADERS, json=snap).json() == {"recorded": True}
+    view = client.get("/system/rate-limit", headers=HEADERS).json()
+    assert view["node_budget"]["totals"]["http_429"] == 3 and view["node_budget_age_s"] >= 0
+    # the monitor heartbeat can carry the same snapshot
+    client.post("/paper/monitor/heartbeat", headers=HEADERS, json={"state": "ACTIVE", "rate_limit": {**snap, "state": "OK"}})
+    status = client.get("/system/status", headers=HEADERS).json()
+    assert status["rate_limit"]["node_budget"]["state"] == "OK" and status["rate_limit"]["node_budget"]["source"] == "position-monitor"
+    assert "rate_limit" not in status["position_monitor"]
+    assert client.get("/system/rate-limit").status_code in (401, 403)
 
 
 # ---- shadow database backup / validation ------------------------------------

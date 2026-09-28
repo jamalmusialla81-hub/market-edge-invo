@@ -195,7 +195,7 @@ const EXECUTION_EVENTS: &[&str] = &[
     "paper_exit",
 ];
 const ERROR_EVENTS: &[&str] = &["backend_disconnect", "paper_exit_failed"];
-const WARN_EVENTS: &[&str] = &["STALE_MARKET_DATA", "NO_LIVE_MID"];
+const WARN_EVENTS: &[&str] = &["STALE_MARKET_DATA", "NO_LIVE_MID", "DISCOVERY_DEFERRED_RATE_LIMITED"];
 
 /// Classify one raw line from a child process. `stderr` is only a hint:
 /// the services log structured events to stderr as a matter of course.
@@ -225,6 +225,8 @@ pub fn classify(line: &str, stderr: bool) -> (Level, Option<String>) {
                 Level::Execution
             } else if outcome.starts_with("REJECTED") || outcome == "DUPLICATE" || outcome == "STALE" {
                 Level::Risk
+            } else if outcome == "DEFERRED_RATE_LIMITED" {
+                Level::Warn
             } else {
                 Level::Info
             };
@@ -315,7 +317,7 @@ impl LogStore {
                 t.next_cycle_at = None;
             }
             Some("NEXT_CYCLE_AT") => t.next_cycle_at = at,
-            Some("STALE_MARKET_DATA") | Some("NO_LIVE_MID") => {
+            Some("STALE_MARKET_DATA") | Some("NO_LIVE_MID") | Some("DISCOVERY_DEFERRED_RATE_LIMITED") => {
                 t.last_market_data_error = map.get("error").and_then(|v| v.as_str()).map(str::to_string);
                 t.last_market_data_error_at_ms = Some(now_ms());
             }
@@ -368,6 +370,8 @@ mod tests {
         assert_eq!(classify(r#"{"cycle":1,"outcome":"EXECUTED","reconciled":true}"#, false).0, Level::Execution);
         assert_eq!(classify(r#"{"cycle":1,"outcome":"REJECTED:DRAWDOWN_LIMIT_HIT","reconciled":true}"#, false).0, Level::Risk);
         assert_eq!(classify(r#"{"cycle":1,"outcome":"ERROR","error":"x"}"#, false).0, Level::Error);
+        assert_eq!(classify(r#"{"cycle":1,"outcome":"DEFERRED_RATE_LIMITED","reconciled":true}"#, false).0, Level::Warn);
+        assert_eq!(classify(r#"{"event":"DISCOVERY_DEFERRED_RATE_LIMITED","error":"HTTP 429"}"#, true).0, Level::Warn);
         assert_eq!(classify(r#"{"cycle":1,"outcome":"NO_VALID_CANDIDATE","reconciled":false}"#, false).0, Level::Error);
     }
 
