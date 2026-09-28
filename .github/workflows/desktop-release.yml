@@ -71,6 +71,11 @@ jobs:
           git merge-base --is-ancestor "$SHA" origin/main || { echo "$SHA is not on main"; exit 1; }
           VERSION=$(jq -r .version desktop/package.json)
           [ "$TAG" = "v$VERSION" ] || { echo "tag $TAG does not match app version $VERSION"; exit 1; }
+          # An unpublished draft for this tag is replaced (its assets were never
+          # public); a published release or an existing git tag is refused.
+          if gh release view "$TAG" --json isDraft -q .isDraft 2>/dev/null | grep -qx true && ! git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+            echo "replacing existing DRAFT release $TAG"; gh release delete "$TAG" --yes
+          fi
           if gh release view "$TAG" >/dev/null 2>&1 || git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
             echo "release or tag $TAG already exists"; exit 1
           fi
