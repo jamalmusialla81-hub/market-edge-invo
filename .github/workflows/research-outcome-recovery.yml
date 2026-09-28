@@ -1,4 +1,8 @@
-name: Historical Rank Outcome Recovery
+name: LEGACY (V1 INVALID) — Historical Rank Outcome Recovery
+
+# Resolves Coinbase-era data-gap rows with Binance proxy candles: the cross-venue
+# outcome substitution that made HISTORICAL-RANK-V1 INVALID_CONTAMINATED. Kept for history only:
+# no schedule; the workflow is also disabled in GitHub.
 
 on:
   workflow_dispatch:
@@ -8,8 +12,6 @@ on:
         required: false
         default: false
         type: boolean
-  schedule:
-    - cron: '5 0 * * *'
 
 permissions:
   contents: read

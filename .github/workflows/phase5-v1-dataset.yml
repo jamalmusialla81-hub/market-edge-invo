@@ -1,12 +1,10 @@
-name: Phase 5 — V1 Daily Dataset Expansion
+name: LEGACY (V1 INVALID) — Phase 5 — V1 Daily Dataset Expansion
+
+# HISTORICAL-RANK-V1 is INVALID_CONTAMINATED (see research/dataset-registry.js).
+# Kept for history only: no schedule; the workflow is also disabled in GitHub.
 
 on:
   workflow_dispatch:
-  schedule:
-    # One bounded batch per day remains well inside the D1 free-tier read
-    # budget.  It resumes itself from immutable V1 state; no GPT session is
-    # required after the initial dispatch.
-    - cron: '20 0 * * *'
 
 permissions:
   contents: read

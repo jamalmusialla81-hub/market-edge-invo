@@ -1,0 +1,107 @@
+name: Desktop release (publish installers from a green build)
+
+# Publishes the installers a green "Desktop app" run already built and
+# clean-machine-tested; nothing is rebuilt here, so the release carries the
+# exact bytes CI installed on a fresh machine. The release targets that run's
+# commit, which must be on main.
+#   run_id           id of a successful desktop-app.yml run on main
+#   tag              e.g. v0.1.0 (must match the app version; refused if it exists)
+#   include_windows  also publish the .exe/.msi from the same run
+#   prerelease       mark the release as a pre-release
+# Signing status is read from the run's own signing.txt and put in the notes;
+# nothing here claims signing the build did not have.
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: 'Successful Desktop app run on main to publish'
+        required: true
+      tag:
+        description: 'Release tag (vX.Y.Z, must match desktop/package.json version)'
+        required: true
+      include_windows:
+        description: 'Also publish the Windows .exe and .msi'
+        type: boolean
+        default: false
+      prerelease:
+        description: 'Mark as pre-release'
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RUN_ID: ${{ inputs.run_id }}
+      TAG: ${{ inputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check the run, the commit and the tag
+        id: check
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID" > run.json
+          jq -r '"\(.name) | \(.head_branch) | \(.status)/\(.conclusion) | \(.head_sha)"' run.json
+          [ "$(jq -r .path run.json)" = ".github/workflows/desktop-app.yml" ] || { echo "run is not a Desktop app run"; exit 1; }
+          [ "$(jq -r .conclusion run.json)" = "success" ] || { echo "run is not green"; exit 1; }
+          SHA=$(jq -r .head_sha run.json)
+          git merge-base --is-ancestor "$SHA" origin/main || { echo "$SHA is not on main"; exit 1; }
+          VERSION=$(jq -r .version desktop/package.json)
+          [ "$TAG" = "v$VERSION" ] || { echo "tag $TAG does not match app version $VERSION"; exit 1; }
+          if gh release view "$TAG" >/dev/null 2>&1 || git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+            echo "release or tag $TAG already exists"; exit 1
+          fi
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+      - uses: actions/download-artifact@v4
+        with:
+          name: installer-macos-arm64
+          path: dl/macos
+          run-id: ${{ inputs.run_id }}
+          github-token: ${{ github.token }}
+      - uses: actions/download-artifact@v4
+        if: inputs.include_windows
+        with:
+          name: installer-windows-x64
+          path: dl/windows
+          run-id: ${{ inputs.run_id }}
+          github-token: ${{ github.token }}
+      - name: Collect assets and checksums
+        id: assets
+        run: |
+          mkdir -p out
+          cp dl/macos/*.dmg out/
+          cp "dl/macos/Market Edge.app.tar.gz" "out/Market Edge_${TAG#v}_aarch64.app.tar.gz"
+          if [ -d dl/windows ]; then cp dl/windows/*.exe dl/windows/*.msi out/; fi
+          (cd out && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt)
+          echo "mac_signing=$(cat dl/macos/signing.txt 2>/dev/null || echo UNKNOWN)" >> "$GITHUB_OUTPUT"
+          echo "win_signing=$(cat dl/windows/signing.txt 2>/dev/null || echo NOT_PUBLISHED)" >> "$GITHUB_OUTPUT"
+          ls -la out
+      - name: Create the release
+        env:
+          SHA: ${{ steps.check.outputs.sha }}
+          MAC_SIGNING: ${{ steps.assets.outputs.mac_signing }}
+          WIN_SIGNING: ${{ steps.assets.outputs.win_signing }}
+          PRERELEASE: ${{ inputs.prerelease }}
+        run: |
+          NOTES=desktop/RELEASE_NOTES.md
+          { cat "$NOTES"; echo; echo "## Build provenance"; echo
+            echo "- Commit: \`$SHA\`"
+            echo "- Built and clean-machine tested by Desktop app run $RUN_ID"
+            echo "- macOS signing (from the build log): $MAC_SIGNING"
+            [ -d dl/windows ] && echo "- Windows signing (from the build log): $WIN_SIGNING"
+            echo; echo '```'; cat out/SHA256SUMS.txt; echo '```'
+            case "$MAC_SIGNING" in
+              *SKIPPED*|UNKNOWN) echo; echo "## macOS: this build is NOT signed or notarized"; echo
+                echo "The repository has no Apple Developer ID signing secrets yet, so macOS will block the first launch."
+                echo "After the first blocked launch, open System Settings > Privacy & Security and click **Open Anyway** for Market Edge, then confirm."
+                echo "A signed and notarized build will replace this one once signing is configured." ;;
+            esac; } > notes.md
+          FLAGS=""; [ "$PRERELEASE" = "true" ] && FLAGS="--prerelease"
+          gh release create "$TAG" out/* --target "$SHA" --title "Market Edge $TAG" --notes-file notes.md $FLAGS
