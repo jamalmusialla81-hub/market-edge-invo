@@ -23,7 +23,7 @@ from market_edge_exec.control.settings import BOUNDS as SETTINGS_BOUNDS, Control
 from market_edge_exec.domain.contracts import ContractError, ExecutionIntent
 from market_edge_exec.hummingbot.factory import build_hummingbot_client
 from market_edge_exec.nautilus.portfolio import NautilusPortfolio
-from market_edge_exec.paper.candles import hyperliquid_fetcher, trade_candles
+from market_edge_exec.paper.candles import CachedCandleFetcher, hyperliquid_fetcher, trade_candles
 from market_edge_exec.paper.engine import PaperEngine
 from market_edge_exec.paper.trade_detail import HINDSIGHT_FIELDS, build_trade_detail, monitor_status
 from market_edge_exec.paper.ledger import PaperLedger
@@ -112,7 +112,7 @@ def create_app(db_path: str = "market_edge_exec.sqlite3", hummingbot_mode: str =
     # the router, the ledger, the portfolio or risk -- it cannot place,
     # size, block or modify any paper trade.
     app.state.shadow = ShadowStore(shadow_db_path or shadow_default_path(db_path))
-    app.state.candle_fetcher = candle_fetcher or hyperliquid_fetcher()
+    app.state.candle_fetcher = candle_fetcher or CachedCandleFetcher(hyperliquid_fetcher())
     # Latest heartbeat from the open-position monitor (runtime only; the
     # per-position state it produces is persisted on the trades themselves).
     app.state.monitor = {"state": "NOT_REPORTED", "at_ms": None}
@@ -334,7 +334,12 @@ def create_app(db_path: str = "market_edge_exec.sqlite3", hummingbot_mode: str =
     @app.get("/paper/trade", dependencies=[Depends(require_api_key)])
     def trade_detail(trade_id: str):
         now_ms = int(time.time() * 1000)
-        return build_trade_detail(ledger, _trade_or_404(trade_id), now_ms, paper.monitor_max_price_age_s())
+        trade = _trade_or_404(trade_id)
+        try:  # research link is optional; a shadow-store problem never hides the trade
+            link = app.state.shadow.link_for_signal(trade["signal_id"])
+        except Exception:  # noqa: BLE001
+            link = None
+        return build_trade_detail(ledger, trade, now_ms, paper.monitor_max_price_age_s(), shadow_link=link)
 
     @app.get("/paper/trade/candles", dependencies=[Depends(require_api_key)])
     def trade_chart_candles(trade_id: str, interval: str = "5m"):
@@ -389,6 +394,9 @@ def create_app(db_path: str = "market_edge_exec.sqlite3", hummingbot_mode: str =
                 "total_pnl": totals["equity"] - totals["starting_equity"],
                 "drawdown_pct": max(0.0, (peak - totals["equity"]) / peak * 100) if peak else 0.0,
                 "exposure_pct": totals["open_notional"] / totals["equity"] * 100 if totals["equity"] else None,
+                # Gross exposure multiple (open notional / equity). Kept under its
+                # old key too for compatibility; it is NOT any position's leverage.
+                "gross_exposure_multiple": totals["open_notional"] / totals["equity"] if totals["equity"] else None,
                 "effective_leverage": totals["open_notional"] / totals["equity"] if totals["equity"] else None,
                 "execution_mode": "PAPER"}
 

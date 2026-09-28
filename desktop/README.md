@@ -87,7 +87,8 @@ Node, npm or repository.
 
 Nothing is written there. State lives in the OS app-data directory
 (`~/Library/Application Support/Market Edge/`, `%APPDATA%\Market Edge\`,
-`~/.local/share/Market Edge/`): `market_edge_paper.sqlite3`, `config.json`,
+`~/.local/share/Market Edge/`): `market_edge_paper.sqlite3`,
+`market_edge_shadow_research.sqlite3` (shadow learning, research only), `config.json`,
 `logs/{desktop,execution-service,forward-loop,reconciliation}.log` (rotated at
 5 MB, 5 kept) and `backups/`. Updating or reinstalling the app never touches it.
 
@@ -109,12 +110,15 @@ shows MARKET DATA OFFLINE and pauses new entries; only fresh prices lift that
 pause. The supervisor never lifts an operator's pause or a kill switch. If the
 app itself dies, the service notices its closed stdin and shuts down.
 
-About → EXPORT BACKUP / IMPORT BACKUP: a `.mebackup` zip of a consistent
-database snapshot plus non-secret settings, with a manifest (schema version,
-sha256, row counts). Import validates it (checksum, SQLite integrity, required
-tables, schema not newer) before anything changes, keeps the current database
-in `backups/`, restores, reconciles and leaves new entries paused. Keys stay in
-the keychain and are never exported. The same operations exist headless for
+About → EXPORT BACKUP / IMPORT BACKUP: a `.mebackup` zip (format v2) of
+consistent snapshots of the paper database AND the shadow research database,
+plus non-secret settings, with a manifest (schema versions, source commit,
+dataset versions, sha256, row counts). Import validates it (checksums, SQLite
+integrity, required tables, schemas not newer) before anything changes, keeps
+the current databases in `backups/`, restores, reconciles and leaves new
+entries paused. Keys stay in the keychain and are never exported. There is no
+cloud backup: nothing leaves the machine unless you copy the file yourself.
+Full data inventory and the public-API budget: [DATA_AND_BACKUP.md](DATA_AND_BACKUP.md). The same operations exist headless for
 support and tests: `--self-check`, `--export-backup F`, `--verify-backup F`,
 `--restore-backup F --confirm RESTORE` (refused while the app is running).
 

@@ -69,6 +69,46 @@ def hyperliquid_fetcher(timeout_s: float = 8.0) -> CandleFetcher:
     return fetch
 
 
+class CachedCandleFetcher:
+    """Chart candles are the LOWEST-priority public-API use (after open-position
+    monitoring, reconciliation, discovery and shadow research), so:
+      - identical requests inside `ttl_s` are served from memory (an open
+        Trade Detail polls every ~10s; two views of one trade share a read);
+      - after an HTTP 429 the fetcher backs off for `cooldown_s` and reports
+        RATE_LIMITED_DEFERRED instead of adding to the pressure.
+    Display only -- nothing here feeds trading. Rows older than the TTL are
+    never served (a forming candle must not be shown as complete)."""
+
+    def __init__(self, fetcher: CandleFetcher, ttl_s: float = 15.0, cooldown_s: float = 60.0, clock=None):
+        import time as _time
+        self._fetcher, self._ttl, self._cooldown = fetcher, ttl_s, cooldown_s
+        self._clock = clock or _time.monotonic
+        self._cache: dict = {}
+        self._blocked_until = 0.0
+        self.calls = 0
+
+    def __call__(self, coin: str, interval: str, start_ms: int, end_ms: int) -> list:
+        now = self._clock()
+        # an open trade's end is "now": bucket it to the TTL so repeated polls share one read
+        key = (coin, interval, start_ms, end_ms // max(1, int(self._ttl * 1000)))
+        hit = self._cache.get(key)
+        if hit and now - hit[0] <= self._ttl:
+            return hit[1]
+        if now < self._blocked_until:
+            raise RuntimeError("RATE_LIMITED_DEFERRED (chart requests paused after HTTP 429)")
+        self.calls += 1
+        try:
+            rows = self._fetcher(coin, interval, start_ms, end_ms)
+        except Exception as error:
+            if "429" in str(error):
+                self._blocked_until = now + self._cooldown
+            raise
+        if len(self._cache) > 64:
+            self._cache.clear()
+        self._cache[key] = (now, rows)
+        return rows
+
+
 def trade_candles(trade: dict, interval: str, now_ms: int, fetcher: CandleFetcher) -> dict:
     if interval not in INTERVAL_MS:
         return {"available": False, "reason": f"UNSUPPORTED_INTERVAL: {interval}", "candles": [], "intervals": list(INTERVAL_MS)}
