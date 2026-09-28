@@ -1,0 +1,11 @@
+{
+  "bundle": {
+    "resources": {
+      "bundle/execution-service/": "execution-service/",
+      "bundle/signal-bridge/": "signal-bridge/",
+      "bundle/runtime/": "runtime/",
+      "bundle/migrations/": "migrations/",
+      "bundle/config/": "config/"
+    }
+  }
+}

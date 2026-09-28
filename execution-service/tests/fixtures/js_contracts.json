@@ -1,0 +1,64 @@
+{
+  "AlphaSignal": {
+    "signal_id": "sig-1",
+    "asset": "BTC",
+    "direction": "long",
+    "timestamp": 1700000000000,
+    "entry": 60000,
+    "stop": 59000,
+    "targets": [
+      61000,
+      62000
+    ],
+    "quant_score": 82,
+    "strategy_id": "trend-continuation"
+  },
+  "RiskDecision": {
+    "signal_id": "sig-1",
+    "approved": true,
+    "approved_leverage": 5,
+    "max_position_notional": 12000,
+    "reason": null
+  },
+  "PortfolioDecision": {
+    "signal_id": "sig-1",
+    "quantity": 0.2,
+    "reduce_only": false
+  },
+  "ExecutionIntent": {
+    "signal_id": "sig-1",
+    "instrument": "BTC-PERP",
+    "side": "buy",
+    "quantity": 0.2,
+    "order_type": "MARKET",
+    "limit_price": 60000,
+    "stop": 59000,
+    "targets": [
+      61000,
+      62000
+    ],
+    "leverage": 5,
+    "reduce_only": false,
+    "time_in_force": "GTC",
+    "venue_preference": "NAUTILUS_NATIVE",
+    "strategy_id": "trend-continuation"
+  },
+  "ExecutionFill": {
+    "signal_id": "sig-1",
+    "fill_id": "fill-1",
+    "status": "FILLED",
+    "quantity_filled": 0.2,
+    "avg_price": 60005,
+    "fee": 1.2,
+    "backend": "NAUTILUS_NATIVE",
+    "timestamp": 1700000001000
+  },
+  "PositionSnapshot": {
+    "instrument": "BTC-PERP",
+    "quantity": 0.2,
+    "avg_entry": 60005,
+    "unrealized_pnl": 10,
+    "realized_pnl": 0,
+    "backend": "NAUTILUS_NATIVE"
+  }
+}

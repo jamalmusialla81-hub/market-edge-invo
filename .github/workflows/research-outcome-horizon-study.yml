@@ -1,0 +1,43 @@
+name: LEGACY (V1 INVALID) — Research — Outcome Horizon Study (read-only)
+
+# Measures how long frozen HISTORICAL-RANK-V1 candidates take to reach their
+# stop or TP2 at 24h/48h/72h/5d/7d.  It only SELECTs from D1 and reads the
+# public Binance USD-M archive; it ingests nothing and changes no dataset.
+# LEGACY: written for HISTORICAL-RANK-V1, which is INVALID_CONTAMINATED
+# (research/dataset-registry.js). Push triggers removed so it can never run
+# automatically; the script itself refuses any non-trainable dataset.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: research-outcome-horizon-study
+  cancel-in-progress: true
+
+jobs:
+  study:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CLOUDFLARE_ACCOUNT_ID: 8ea7796a8fb13ffb612245e8a08a55d6
+      MARKET_EDGE_D1_DATABASE_ID: 39a4082e-41a4-45e9-9b76-99cf10eaca01
+      HISTORICAL_RANK_ENGINE_VERSION: HISTORICAL-RANK-V1
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Unit tests for the horizon resolver
+        run: node research/historical-rank.test.js && node research/outcome-horizon-study.test.mjs
+      - name: Measure time-to-resolution from frozen candidates
+        run: node research/outcome-horizon-study.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: outcome-horizon-study-${{ github.run_id }}
+          path: outcome-horizon-study.json
+          if-no-files-found: warn
+          retention-days: 90

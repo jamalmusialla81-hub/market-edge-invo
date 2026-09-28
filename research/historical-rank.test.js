@@ -65,3 +65,15 @@ test('stale frozen snapshots are rejected before any candidate is written',()=>{
   assert.throws(()=>Rank.assertFresh({timeframes:{m5:{window_end:timestamp-86_400_000}}},timestamp),/STALE_SNAPSHOT_REJECTED/);
   assert.throws(()=>Rank.assertFresh({timeframes:{}},timestamp),/STALE_SNAPSHOT_REJECTED/);
 });
+
+test('a longer research horizon keeps geometry and stop-first ordering, and only adds later candles',()=>{
+  const timestamp=1_700_000_000_000,candidate={timestamp,valid_current_geometry:true,direction:'long',stop:95,rr:1.8,strategy:'TREND CONTINUATION'};
+  const bars=Rank.OUTCOME_BARS*3,rows=Array.from({length:bars},(_,index)=>({time:timestamp+index*Rank.BASE_MS,open:100,high:101,low:index===Rank.OUTCOME_BARS*2?90:99,close:100}));
+  const day=Rank.resolveCandidate(candidate,rows),longer=Rank.resolveCandidate(candidate,rows,bars);
+  assert.equal(day.STOP_HIT,false);
+  assert.equal(day.duration_bars,Rank.OUTCOME_BARS);
+  assert.equal(longer.STOP_HIT,true);
+  assert.equal(longer.duration_bars,Rank.OUTCOME_BARS*2+1);
+  assert.ok(longer.FINAL_R<-1);
+  assert.equal(Rank.resolveCandidate(candidate,rows.slice(0,Rank.OUTCOME_BARS*2),bars).status,'UNRESOLVED_DATA_GAP');
+});

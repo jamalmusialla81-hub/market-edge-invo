@@ -1,0 +1,76 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: hummingbot-postgres
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-hbot}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?set in your own .env}
+      - POSTGRES_DB=${POSTGRES_DB:-hummingbot_api}
+    volumes:
+      - hummingbot-postgres-data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  emqx:
+    # Pinned to a tag confirmed to exist on Docker Hub; "emqx/emqx:5" does not
+    # exist and broke the whole stack's pull in CI run 36237779430.
+    image: emqx/emqx:5.10.5
+    container_name: hummingbot-broker
+    environment:
+      - EMQX_DASHBOARD__DEFAULT_PASSWORD=${BROKER_DASHBOARD_PASSWORD:?set in your own .env}
+    restart: unless-stopped
+
+  hummingbot-api:
+    image: hummingbot/hummingbot-api:1.0.1
+    container_name: hummingbot-api
+    depends_on:
+      - postgres
+      - emqx
+    environment:
+      # Real Hummingbot API (hummingbot.org/hummingbot-api/) -- NOT Gateway.
+      # Gateway (port 15888) is DEX-only middleware; this is the officially
+      # documented surface for CEX control (Binance included). Paper/testnet
+      # only -- venue keys, once a testnet account exists, are supplied by
+      # whoever runs this compose file as env vars, never committed.
+      - USERNAME=${HUMMINGBOT_API_USERNAME:?set in your own .env}
+      - PASSWORD=${HUMMINGBOT_API_PASSWORD:?set in your own .env}
+      - CONFIG_PASSWORD=${HUMMINGBOT_CONFIG_PASSWORD:?set in your own .env}
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-hbot}:${POSTGRES_PASSWORD:?set in your own .env}@postgres:5432/${POSTGRES_DB:-hummingbot_api}
+      - BROKER_HOST=emqx
+      - BROKER_USERNAME=${BROKER_USERNAME:-hbot}
+      - BROKER_PASSWORD=${BROKER_PASSWORD:?set in your own .env}
+      - BINANCE_TESTNET_API_KEY=${BINANCE_TESTNET_API_KEY:-}
+      - BINANCE_TESTNET_API_SECRET=${BINANCE_TESTNET_API_SECRET:-}
+    ports:
+      - "8000:8000"
+    volumes:
+      # Same layout as the official compose (./bots:/hummingbot-api/bots).
+      # The API refuses to start without bots/credentials/master_account/;
+      # run ./setup_bots.sh once to create it.
+      - ./bots:/hummingbot-api/bots
+      # hummingbot-api orchestrates bot containers through the Docker daemon.
+      - /var/run/docker.sock:/var/run/docker.sock
+    restart: unless-stopped
+
+  bridge:
+    build: .
+    container_name: market-edge-hummingbot-bridge
+    ports:
+      - "8090:8090"
+    environment:
+      - BRIDGE_API_KEY=${HUMMINGBOT_BRIDGE_API_KEY:?set in your own .env}
+      - HUMMINGBOT_API_URL=http://hummingbot-api:8000
+      - HUMMINGBOT_API_USERNAME=${HUMMINGBOT_API_USERNAME:?set in your own .env}
+      - HUMMINGBOT_API_PASSWORD=${HUMMINGBOT_API_PASSWORD:?set in your own .env}
+      - HUMMINGBOT_ACCOUNT=${HUMMINGBOT_ACCOUNT:-market_edge}
+      - HUMMINGBOT_CONNECTOR=${HUMMINGBOT_CONNECTOR:-binance_perpetual_testnet}
+      - BRIDGE_DB_PATH=/data/bridge.sqlite3
+    volumes:
+      # signal_id -> Hummingbot order_id map; must survive bridge restarts.
+      - bridge-data:/data
+    depends_on:
+      - hummingbot-api
+    restart: unless-stopped
+
+volumes:
+  hummingbot-postgres-data:
+  bridge-data:

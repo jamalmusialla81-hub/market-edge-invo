@@ -1,0 +1,483 @@
+name: Execution Stack CI (Nautilus / Hummingbot, paper/testnet only)
+
+# Validates the execution-service/hummingbot-service stack in a clean
+# environment, since the sandboxed dev session hit two environment-specific
+# blockers: a native crash in nautilus_trader's BacktestEngine, and no
+# Docker daemon to run Hummingbot. This workflow does not touch production
+# Market Edge (quant-engine.js, replay-engine.js, backend/, customer-beta/).
+on:
+  workflow_dispatch:
+    inputs:
+      max_cycles:
+        description: 'Part I endurance harness only: number of forward-loop cycles to run (5-min cadence default => cycles*5min ~= wall-clock duration)'
+        default: '12'
+      cycle_interval_ms:
+        description: 'Part I endurance harness only: milliseconds between cycles (default matches the real Market Edge 5-minute scan cadence)'
+        default: '300000'
+      segments:
+        description: 'Endurance only: JSON list of sequential segments to run in this dispatch, e.g. [1,2] (each is one job of max_cycles)'
+        default: '[1]'
+      leverage_rotation:
+        description: 'Endurance only: requested paper leverage rotation; risk approves or walks it down per trade'
+        default: '1,2,3,5,10'
+  push:
+    branches: ['claude/**']
+    paths:
+      - 'execution-service/**'
+      - 'hummingbot-service/**'
+      - 'signal-bridge/**'
+      - '.github/workflows/execution-stack-ci.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  nautilus-matrix:
+    name: Nautilus (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.11', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install execution-service dependencies
+        working-directory: execution-service
+        run: |
+          python -m pip install --upgrade pip
+          pip install nautilus_trader fastapi "uvicorn[standard]" pydantic httpx pytest
+
+      - name: Environment report
+        working-directory: execution-service
+        run: python diagnostics/environment_report.py | tee environment_report.json
+
+      - name: Minimal crash repro (do not hide crashes)
+        id: repro
+        working-directory: execution-service
+        continue-on-error: true
+        run: |
+          set +e
+          python diagnostics/backtest_engine_crash_repro.py > repro.log 2>&1
+          code=$?
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          cat repro.log
+          if [ $code -eq 0 ] && grep -q "NO STRATEGY run complete, no crash" repro.log; then
+            echo "result=PASS" >> "$GITHUB_OUTPUT"
+          else
+            echo "result=FAIL" >> "$GITHUB_OUTPUT"
+          fi
+          exit 0
+
+      - name: Report minimal repro result
+        working-directory: execution-service
+        run: |
+          echo "MINIMAL_REPRO_RESULT=${{ steps.repro.outputs.result }} (exit_code=${{ steps.repro.outputs.exit_code }})"
+          echo '{"minimal_repro_result": "${{ steps.repro.outputs.result }}", "exit_code": "${{ steps.repro.outputs.exit_code }}"}' > repro_result.json
+
+      - name: Real BacktestEngine BTC/ETH long/short/reduce-only/cancel scenario
+        id: scenario
+        if: steps.repro.outputs.result == 'PASS'
+        working-directory: execution-service
+        continue-on-error: true
+        run: |
+          set +e
+          python diagnostics/real_backtest_scenarios.py > scenario.log 2>&1
+          code=$?
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          cat scenario.log
+          if [ $code -eq 0 ]; then echo "result=PASS" >> "$GITHUB_OUTPUT"; else echo "result=FAIL" >> "$GITHUB_OUTPUT"; fi
+          exit 0
+
+      - name: Skip note if minimal repro failed
+        if: steps.repro.outputs.result != 'PASS'
+        working-directory: execution-service
+        run: |
+          echo "Skipping real_backtest_scenarios.py - minimal repro did not pass in this environment (Python ${{ matrix.python-version }})." | tee scenario.log
+
+      - name: Existing execution-service test suite (Phase 2/3 bookkeeping paper route — always runs, independent of the engine crash)
+        working-directory: execution-service
+        # pipefail: without it the step reports tee's exit code and hides pytest failures
+        run: |
+          set -o pipefail
+          python -m pytest -q | tee pytest.log
+
+      - name: Upload Nautilus environment artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nautilus-report-py${{ matrix.python-version }}
+          path: |
+            execution-service/environment_report.json
+            execution-service/repro.log
+            execution-service/repro_result.json
+            execution-service/scenario.log
+            execution-service/real_backtest_scenarios.json
+            execution-service/pytest.log
+          if-no-files-found: warn
+          retention-days: 90
+
+  hummingbot-docker:
+    name: Hummingbot container + bridge (Docker)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Bring up the real Hummingbot API stack (postgres + EMQX + hummingbot-api) + bridge
+        # Gateway (port 15888) is DEX-only middleware, confirmed wrong for
+        # CEX control by Phase 4 research -- see hummingbot-service/README.md
+        # "Architecture correction". This brings up the officially documented
+        # surface instead: the separate Hummingbot API project.
+        working-directory: hummingbot-service
+        env:
+          HUMMINGBOT_CONFIG_PASSWORD: ci-paper-only
+          HUMMINGBOT_BRIDGE_API_KEY: ci-bridge-key
+          POSTGRES_PASSWORD: ci-postgres-only
+          BROKER_DASHBOARD_PASSWORD: ci-broker-only
+          BROKER_PASSWORD: ci-broker-only
+          HUMMINGBOT_API_USERNAME: ci-hb-api
+          HUMMINGBOT_API_PASSWORD: ci-hb-api-password
+        run: |
+          echo "--- official hummingbot-api compose file, saved to diff our stack against ---"
+          curl -sSfL https://raw.githubusercontent.com/hummingbot/hummingbot-api/main/docker-compose.yml -o official_hummingbot_api_compose.yml || echo "could not fetch official compose file"
+          cat official_hummingbot_api_compose.yml || true
+          ./setup_bots.sh
+          docker compose up -d
+          echo "Waiting up to 120s for hummingbot-api to answer GET / ..."
+          for i in $(seq 1 60); do curl -sf -m 3 http://localhost:8000/ >/dev/null && echo "hummingbot-api up after ~$((i*2))s" && break; sleep 2; done
+          docker compose ps -a
+
+      - name: Health check every container + save the live OpenAPI contract
+        id: health
+        working-directory: hummingbot-service
+        continue-on-error: true
+        run: |
+          set +e
+          echo "--- hummingbot-api container status ---"
+          docker inspect -f '{{.State.Status}}' hummingbot-api || echo "hummingbot-api container not found"
+          echo "--- postgres/emqx container status ---"
+          docker inspect -f '{{.State.Status}}' hummingbot-postgres || echo "postgres container not found"
+          docker inspect -f '{{.State.Status}}' hummingbot-broker || echo "broker container not found"
+          echo "--- hummingbot-api liveness (GET / needs no auth per docs) ---"
+          curl -sS -m 10 http://localhost:8000/ | tee hummingbot_api_health.json
+          echo "--- live OpenAPI contract, saved so bridge/hummingbot_api_client.py's field-name"
+          echo "    mapping (currently best-effort, see its own docstring) can be verified/corrected"
+          echo "    against the real schema in a follow-up pass, not guessed at again ---"
+          curl -sS -m 10 http://localhost:8000/openapi.json | tee hummingbot_api_openapi.json
+          echo "--- source of the RUNNING API (response shapes are undeclared in openapi.json) ---"
+          docker cp hummingbot-api:/hummingbot-api/routers upstream_routers
+          docker cp hummingbot-api:/hummingbot-api/services upstream_services
+          tar czf hummingbot_api_upstream_src.tgz upstream_routers upstream_services && ls -la hummingbot_api_upstream_src.tgz
+          echo "--- bridge health (talks to hummingbot-api, not Gateway) ---"
+          curl -sS -m 10 http://localhost:8090/health | tee bridge_health.json
+          bridge_code=$?
+          echo "bridge_health_exit_code=$bridge_code" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Collect container logs (always, even on failure)
+        if: always()
+        working-directory: hummingbot-service
+        env:
+          HUMMINGBOT_CONFIG_PASSWORD: ci-paper-only
+          HUMMINGBOT_BRIDGE_API_KEY: ci-bridge-key
+          POSTGRES_PASSWORD: ci-postgres-only
+          BROKER_DASHBOARD_PASSWORD: ci-broker-only
+          BROKER_PASSWORD: ci-broker-only
+          HUMMINGBOT_API_USERNAME: ci-hb-api
+          HUMMINGBOT_API_PASSWORD: ci-hb-api-password
+        run: |
+          docker compose logs hummingbot-api > hummingbot_api_container.log 2>&1 || true
+          docker compose logs bridge > bridge_container.log 2>&1 || true
+          docker compose logs postgres > postgres_container.log 2>&1 || true
+          docker compose logs emqx > emqx_container.log 2>&1 || true
+          echo "--- hummingbot-api container log ---"
+          cat hummingbot_api_container.log
+          echo "--- bridge container log ---"
+          cat bridge_container.log
+
+      - name: Verify real mode is what's selected (never a silent mock fallback)
+        working-directory: execution-service
+        run: |
+          python -m pip install --quiet nautilus_trader httpx pytest fastapi "uvicorn[standard]"
+          set -o pipefail
+          python -m pytest tests/test_hummingbot_real_client.py -q | tee real_client_ci.log
+
+      - name: Part 5 — end-to-end testnet flow (PASS or SKIPPED_NOT_CONFIGURED)
+        working-directory: execution-service
+        env:
+          BINANCE_TESTNET_API_KEY: ${{ secrets.BINANCE_TESTNET_API_KEY }}
+          BINANCE_TESTNET_API_SECRET: ${{ secrets.BINANCE_TESTNET_API_SECRET }}
+          HUMMINGBOT_BRIDGE_URL: http://localhost:8090
+          HUMMINGBOT_BRIDGE_API_KEY: ci-bridge-key
+          PYTHONPATH: .
+        run: python diagnostics/end_to_end_testnet_flow.py | tee e2e_testnet.json
+
+      - name: Verify client against the LIVE Hummingbot API schema (fails the job on mismatch)
+        if: always()
+        working-directory: hummingbot-service
+        env:
+          HUMMINGBOT_API_URL: http://localhost:8000
+          HUMMINGBOT_API_USERNAME: ci-hb-api
+          HUMMINGBOT_API_PASSWORD: ci-hb-api-password
+        run: |
+          python -m pip install --quiet httpx
+          code=0; python verify_openapi.py > hummingbot_api_verification.json || code=$?
+          python -c "import json;r=json.load(open('hummingbot_api_verification.json'));print(json.dumps({k:r.get(k) for k in ('verdict','api_version','path_count','authenticated_reads_ok','client_schema_ok','error','account_lifecycle')},indent=2));[print(x['method'],x['path'],'OK' if x['ok'] else x['problems']) for x in r.get('client_requests',[])];[print('GET',x['path'],x.get('status')) for x in r.get('read_probes',[])]"
+          exit $code
+
+      - name: Tear down
+        if: always()
+        working-directory: hummingbot-service
+        env:
+          HUMMINGBOT_CONFIG_PASSWORD: ci-paper-only
+          HUMMINGBOT_BRIDGE_API_KEY: ci-bridge-key
+          POSTGRES_PASSWORD: ci-postgres-only
+          BROKER_DASHBOARD_PASSWORD: ci-broker-only
+          BROKER_PASSWORD: ci-broker-only
+          HUMMINGBOT_API_USERNAME: ci-hb-api
+          HUMMINGBOT_API_PASSWORD: ci-hb-api-password
+        run: docker compose down -v || true
+
+      - name: Upload Hummingbot/bridge artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hummingbot-docker-report
+          path: |
+            hummingbot-service/bridge_health.json
+            hummingbot-service/hummingbot_api_health.json
+            hummingbot-service/hummingbot_api_openapi.json
+            hummingbot-service/hummingbot_api_verification.json
+            hummingbot-service/hummingbot_api_upstream_src.tgz
+            hummingbot-service/official_hummingbot_api_compose.yml
+            hummingbot-service/hummingbot_api_container.log
+            hummingbot-service/bridge_container.log
+            hummingbot-service/postgres_container.log
+            hummingbot-service/emqx_container.log
+            execution-service/real_client_ci.log
+            execution-service/e2e_testnet.json
+          if-no-files-found: warn
+          retention-days: 90
+
+  binance-testnet:
+    name: Binance USDT-M Futures Testnet connectivity (conditional on secrets)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install deps
+        run: python -m pip install --quiet httpx
+
+      - name: Testnet connectivity check (or SKIPPED_NOT_CONFIGURED)
+        env:
+          BINANCE_TESTNET_API_KEY: ${{ secrets.BINANCE_TESTNET_API_KEY }}
+          BINANCE_TESTNET_API_SECRET: ${{ secrets.BINANCE_TESTNET_API_SECRET }}
+        run: |
+          python execution-service/diagnostics/binance_testnet_connectivity.py | tee testnet_report.json
+
+      - name: Upload testnet report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: binance-testnet-report
+          path: testnet_report.json
+          if-no-files-found: warn
+          retention-days: 90
+
+  node-tests:
+    name: Node production test suite (must stay green — proves no production impact)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm test
+
+  signal-bridge-e2e:
+    name: Part E — real Market Edge signal into paper execution-service (end to end)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install execution-service dependencies
+        working-directory: execution-service
+        run: |
+          python -m pip install --upgrade pip
+          pip install fastapi "uvicorn[standard]" pydantic httpx nautilus_trader
+
+      - name: Signal-bridge unit tests (pure logic, no network)
+        run: node --test signal-bridge/forward_loop.test.mjs
+
+      - name: Start the paper execution-service in the background
+        working-directory: execution-service
+        env:
+          MARKET_EDGE_EXEC_API_KEY: ci-signal-bridge-key
+        run: |
+          nohup python -m uvicorn market_edge_exec.api.app:create_app --factory --host 127.0.0.1 --port 8000 > uvicorn.log 2>&1 &
+          for i in $(seq 1 20); do curl -sf http://127.0.0.1:8000/health && break; sleep 1; done
+          curl -sf http://127.0.0.1:8000/health | tee health.json
+
+      - name: Dry-run the real signal fetch (proves live Market Edge scan -> AlphaSignal mapping, no execution)
+        id: dryrun
+        continue-on-error: true
+        run: |
+          set +e
+          node signal-bridge/fetch_signal.mjs --dry-run > dry_run_result.json 2> dry_run_result.log
+          echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+          cat dry_run_result.json dry_run_result.log
+
+      - name: Real end-to-end signal -> paper execution (only if the dry run found a real candidate)
+        if: steps.dryrun.outputs.exit_code == '0'
+        env:
+          MARKET_EDGE_EXEC_API_KEY: ci-signal-bridge-key
+          EXECUTION_SERVICE_URL: http://127.0.0.1:8000
+        run: |
+          node signal-bridge/fetch_signal.mjs | tee e2e_signal_result.json
+          echo "--- resulting paper positions ---"
+          curl -sS -H "X-API-Key: ci-signal-bridge-key" http://127.0.0.1:8000/positions | tee positions.json
+
+      - name: Part F smoke test — forward loop runs a few real bounded cycles (not the full endurance run)
+        env:
+          MARKET_EDGE_EXEC_API_KEY: ci-signal-bridge-key
+          EXECUTION_SERVICE_URL: http://127.0.0.1:8000
+          MAX_CYCLES: 3
+          CYCLE_INTERVAL_MS: 15000
+        run: |
+          node --input-type=module -e "import('./signal-bridge/market_data.mjs').then(async (m) => { for (const c of ['BTC', 'ETH', 'NEAR']) { try { console.log('live mid', c, JSON.stringify(await m.fetchMid(c))); } catch (e) { console.log('live mid FAILED', c, e.message, e.cause?.message || ''); } } })"
+          node signal-bridge/forward_loop.mjs | tee forward_loop_result.log
+
+      - name: Server log
+        if: always()
+        run: cat execution-service/uvicorn.log || true
+
+      - name: Upload signal-bridge artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: signal-bridge-e2e-report
+          path: |
+            dry_run_result.json
+            dry_run_result.log
+            e2e_signal_result.json
+            forward_loop_result.log
+            positions.json
+            execution-service/health.json
+            execution-service/uvicorn.log
+          if-no-files-found: warn
+          retention-days: 90
+
+  endurance-harness:
+    name: Forward-paper endurance segment ${{ matrix.segment }} (manual trigger; persistent state via cache)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    timeout-minutes: 360
+    # One writer at a time: overlapping segments would race on the saved state.
+    concurrency:
+      group: paper-session-v1
+      cancel-in-progress: false
+    strategy:
+      fail-fast: false
+      max-parallel: 1  # segments run one after another, each continuing the last one's state
+      matrix:
+        segment: ${{ fromJSON(github.event.inputs.segments || '[1]') }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install execution-service dependencies
+        working-directory: execution-service
+        run: |
+          python -m pip install --upgrade pip
+          pip install fastapi "uvicorn[standard]" pydantic httpx nautilus_trader
+
+      # paper-session-v1 is the persistent forward-paper account. Endurance
+      # segment 1 (run 36237547517, endurance-state-* cache) ran through the
+      # pre-ledger path and is deliberately not continued: it had no equity
+      # accounting and its ENA stack came from the exposure bug.
+      - name: Restore the persistent paper session (account, trades, signal and idempotency history)
+        uses: actions/cache/restore@v4
+        id: restore-state
+        with:
+          path: execution-service/paper_session.sqlite3
+          key: paper-session-v1-${{ github.run_id }}-${{ matrix.segment }}
+          restore-keys: |
+            paper-session-v1-
+
+      - name: Report what state this segment starts from
+        run: |
+          echo "restored_key=${{ steps.restore-state.outputs.cache-matched-key }}"
+          ls -la execution-service/paper_session.sqlite3 2>/dev/null || echo "no prior state: starting a new paper account"
+
+      - name: Start the paper execution-service against the persisted DB
+        working-directory: execution-service
+        env:
+          MARKET_EDGE_EXEC_API_KEY: ci-endurance-key
+          EXECUTION_SERVICE_DB_PATH: paper_session.sqlite3
+        run: |
+          nohup python run_server.py > uvicorn.log 2>&1 &
+          for i in $(seq 1 20); do curl -sf http://127.0.0.1:8000/health && break; sleep 1; done
+          curl -sf http://127.0.0.1:8000/health
+
+      - name: Run the forward-paper loop
+        env:
+          MARKET_EDGE_EXEC_API_KEY: ci-endurance-key
+          EXECUTION_SERVICE_URL: http://127.0.0.1:8000
+          MAX_CYCLES: ${{ github.event.inputs.max_cycles || '12' }}
+          CYCLE_INTERVAL_MS: ${{ github.event.inputs.cycle_interval_ms || '300000' }}
+          LEVERAGE_ROTATION: ${{ github.event.inputs.leverage_rotation || '1,2,3,5,10' }}
+          SEGMENT_NAME: run-${{ github.run_id }}-seg-${{ matrix.segment }}
+        run: node signal-bridge/forward_loop.mjs | tee endurance_loop.log
+
+      - name: Final report, positions, orders, reconciliation
+        if: always()
+        run: |
+          curl -sS -H "X-API-Key: ci-endurance-key" http://127.0.0.1:8000/paper/report | tee execution-service/paper_report.json
+          curl -sS -H "X-API-Key: ci-endurance-key" http://127.0.0.1:8000/positions | tee execution-service/final_positions.json
+          curl -sS -H "X-API-Key: ci-endurance-key" http://127.0.0.1:8000/orders > execution-service/final_orders.json
+          curl -sS -X POST -H "X-API-Key: ci-endurance-key" http://127.0.0.1:8000/reconcile | tee execution-service/final_reconcile.json
+
+      - name: Server log
+        if: always()
+        run: tail -n 400 execution-service/uvicorn.log || true
+
+      - name: Save the paper session for the next segment
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: execution-service/paper_session.sqlite3
+          key: paper-session-v1-${{ github.run_id }}-${{ matrix.segment }}
+
+      - name: Upload endurance artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: paper-session-${{ github.run_id }}-seg-${{ matrix.segment }}
+          path: |
+            endurance_loop.log
+            execution-service/paper_report.json
+            execution-service/paper_session.sqlite3
+            execution-service/final_positions.json
+            execution-service/final_orders.json
+            execution-service/final_reconcile.json
+            execution-service/uvicorn.log
+          if-no-files-found: warn
+          retention-days: 90
