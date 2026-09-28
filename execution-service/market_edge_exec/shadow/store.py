@@ -161,6 +161,18 @@ class ShadowStore:
             conn.execute("INSERT OR IGNORE INTO shadow_meta VALUES ('schema_version', ?)", (str(C.SHADOW_SCHEMA_VERSION),))
             conn.commit()
 
+    def versions(self) -> dict:
+        """Version identifiers for the About screen / bug reports. The schema
+        version is read from this database's own shadow_meta (not assumed
+        from code); the label, classification and dataset identifiers are
+        the ones this build writes on every new row."""
+        with closing(self._connect()) as conn:
+            row = conn.execute("SELECT value FROM shadow_meta WHERE key='schema_version'").fetchone()
+        return {"shadow_schema_version": int(row["value"]) if row else None,
+                "supported_shadow_schema_version": C.SHADOW_SCHEMA_VERSION,
+                "label_version": C.LABEL_VERSION, "classification_version": C.CLASSIFICATION_VERSION,
+                "datasets_written": [C.DATASET_RAW, C.DATASET_RESOLVED, C.DATASET_PAPER_EXECUTED]}
+
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.path, timeout=30)
         conn.row_factory = sqlite3.Row
