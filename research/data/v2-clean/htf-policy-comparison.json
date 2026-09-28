@@ -1,0 +1,39 @@
+{
+ "scope": "development scans only (< holdout dev cutoff), (scan, asset) pairs where BOTH policies pass integrity gates",
+ "pairs": 379,
+ "coverage": {
+  "bothPass": 379,
+  "strictOnly": 0,
+  "nativeOnly": 2764,
+  "neither": 445
+ },
+ "bars": {
+  "h4WindowIdentical": 0.8970976253298153,
+  "d1WindowIdentical": 0.7229551451187335,
+  "lastH4CloseRelDiffMedian": 0,
+  "lastH4CloseRelDiffMax": 0,
+  "lastD1CloseRelDiffMedian": 0,
+  "lastD1CloseRelDiffMax": 0,
+  "lastD1VolumeRelDiffMedian": 4.440892098500626e-16
+ },
+ "disagreement": {
+  "h4StructureTrend": 0,
+  "h4EmaBias": 0,
+  "d1StructureTrend": 0,
+  "d1EmaBias": 0,
+  "h4Regime": 0,
+  "d1MacroRegime": 0,
+  "setupSet": 0,
+  "candidateScoreChanged": 0,
+  "candidateScoreMeanAbsDiff": 0,
+  "scanTopPickChanged": 0
+ },
+ "denominators": {
+  "pairs": 379,
+  "commonCandidates": 69,
+  "scansWithTwoPlusCandidatesUnderBoth": 15,
+  "pairsWithAnySetupStrict": 63,
+  "pairsWithAnySetupNative": 63
+ },
+ "regimeTransitions": {}
+}

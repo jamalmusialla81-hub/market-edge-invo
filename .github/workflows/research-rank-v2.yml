@@ -1,0 +1,51 @@
+name: Research — Rank V2 suite (read-only)
+
+# Research only.  SELECT-only D1 access with a hard read budget, public Binance
+# archives for context, no Worker ingest token, no writes of any kind, and the
+# sealed Phase 5 holdout is filtered out in SQL before any row is read.
+on:
+  workflow_dispatch:
+  push:
+    branches: [claude/clever-faraday-y12d11]
+    paths:
+      - research/rank-research-v2.js
+      - research/rank-research-v2.test.js
+      - research/run-rank-research-v2.mjs
+      - .github/workflows/research-rank-v2.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: research-rank-v2
+  cancel-in-progress: true
+
+jobs:
+  research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: 8ea7796a8fb13ffb612245e8a08a55d6
+      MARKET_EDGE_D1_DATABASE_ID: 39a4082e-41a4-45e9-9b76-99cf10eaca01
+      HISTORICAL_RANK_ENGINE_VERSION: HISTORICAL-RANK-V2-CLEAN
+      RANK_V2_D1_READ_BUDGET: '300000'
+      RANK_V2_REPORT: rank-research-v2-report.json
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Synthetic safety and signal-recovery tests
+        run: node research/rank-research-v2.test.js
+      - name: Walk-forward rank research on the development period only
+        run: node research/run-rank-research-v2.mjs | tee rank-research-v2-summary.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rank-research-v2-${{ github.run_id }}
+          path: |
+            rank-research-v2-report.json
+            rank-research-v2-summary.json
+          if-no-files-found: warn
+          retention-days: 90
