@@ -104,21 +104,33 @@ function candidateFields(c) {
 const geometryComplete = (f) => Boolean(f.direction && [f.entry, f.stop, f.tp1, f.tp2, f.rr1].every(Number.isFinite));
 const same = (a, b) => a.direction === b.direction && (a.strategy || null) === (b.strategy || null);
 
+export const SCOPE_PRODUCTION = 'PRODUCTION_SCAN';
+// Research-only evaluation of approved research assets the production scan
+// did not cover (research_universe.mjs). Never submitted, never ranked
+// against production.
+export const SCOPE_RESEARCH_SUPPLEMENT = 'RESEARCH_SUPPLEMENT';
+export const OUTSIDE_PRODUCTION_UNIVERSE = 'OUTSIDE_PRODUCTION_UNIVERSE';
+
 // execution: {decision, reason, signal_id, trade} as the paper execution-service
 // answered for the one submitted selection this cycle (or NO_SIGNAL).
-export function buildShadowPayload(result, execution, { observationIntervalMs = null } = {}) {
+// scope RESEARCH_SUPPLEMENT: `result.scan` is a research-only evaluation; its
+// cross-market context is taken from the production scan (crossMarketContext),
+// and nothing in it is a production pick or can be submitted.
+export function buildShadowPayload(result, execution, { observationIntervalMs = null, scope = SCOPE_PRODUCTION, crossMarketContext = null, assetCtxs = null } = {}) {
   const scan = result?.scan;
   const research = scan?.research;
   if (!scan || !research) return null;
+  const supplement = scope === SCOPE_RESEARCH_SUPPLEMENT;
   const decisionTs = Number(scan.scannedAt);
-  const scanId = scan.scanId || `scan-unavailable-${decisionTs}`;
-  const ranked = new Map((scan.rankedOpportunities || []).map((r) => [r.asset, r]));
-  const best = scan.bestTradeNow || null;
-  const submittedId = execution?.decision && execution.decision !== 'NO_SIGNAL' ? result.signal?.signal_id || null : null;
+  const scanId = supplement ? `research-${scan.scanId || `scan-unavailable-${decisionTs}`}` : scan.scanId || `scan-unavailable-${decisionTs}`;
+  const ranked = new Map(supplement ? [] : (scan.rankedOpportunities || []).map((r) => [r.asset, r]));
+  const best = supplement ? null : scan.bestTradeNow || null;
+  const submittedId = !supplement && execution?.decision && execution.decision !== 'NO_SIGNAL' ? result.signal?.signal_id || null : null;
+  const ctxs = assetCtxs || research.assetCtxs || {};
 
   const featuresBySymbol = {};
   for (const m of research.markets) featuresBySymbol[m.symbol] = marketFeatures(m.timeframes);
-  const cross = crossMarket(featuresBySymbol);
+  const cross = supplement && crossMarketContext ? crossMarketContext : crossMarket(featuresBySymbol);
 
   // Every candidate in the scan, ranked research-only by Quant score.
   const perMarket = research.markets.map((m) => {
@@ -140,22 +152,23 @@ export function buildShadowPayload(result, execution, { observationIntervalMs = 
       max_price_disagreement: round(num(m.maxPriceDisagreement)), matching_feeds: m.matchingFeeds ?? null,
     };
     const rankedRow = ranked.get(m.symbol);
-    const productionState = rankedRow?.market_geometry === 'COMPLETE' ? 'RANKED_WITH_GEOMETRY' : 'NO_TRADE';
-    const common = { market, features: featuresBySymbol[m.symbol], cross_market: cross, derivatives: derivatives(research.assetCtxs?.[m.symbol]),
-      regime: pick.regime || rankedRow?.regime || null, provenance: { generator_version: GENERATOR_VERSION, feature_version: FEATURE_VERSION, scan_id: scanId } };
+    const productionState = supplement ? OUTSIDE_PRODUCTION_UNIVERSE : rankedRow?.market_geometry === 'COMPLETE' ? 'RANKED_WITH_GEOMETRY' : 'NO_TRADE';
+    const common = { market, features: featuresBySymbol[m.symbol], cross_market: cross, derivatives: derivatives(ctxs[m.symbol]),
+      regime: pick.regime || rankedRow?.regime || null, provenance: { generator_version: GENERATOR_VERSION, feature_version: FEATURE_VERSION, scan_id: scanId, scan_scope: scope } };
     observations.push({ kind: 'MARKET_STATE', asset: m.symbol, coin: m.symbol, production_state: productionState,
       decision: { ...common, production: { rank: rankedRow?.rank ?? null, verdict: rankedRow?.strict_verdict ?? null, entry_status: rankedRow?.entry_status ?? null, candidates: cands.length } } });
     const withinAsset = [...cands].sort((a, b) => (b.quant_score ?? -1) - (a.quant_score ?? -1));
     for (const c of cands) {
-      const isPick = Boolean(pick.direction && same(c, pick));
+      const assetPick = Boolean(pick.direction && same(c, pick));
+      const isPick = !supplement && assetPick;
       const isBest = Boolean(best && best.asset === m.symbol && same(c, { direction: best.direction, strategy: best.strategy }));
       const submitted = Boolean(submittedId && isBest);
-      const notSubmitted = !isPick ? 'NOT_ASSET_PICK' : !geometryComplete(c) ? 'INCOMPLETE_GEOMETRY'
+      const notSubmitted = supplement ? OUTSIDE_PRODUCTION_UNIVERSE : !isPick ? 'NOT_ASSET_PICK' : !geometryComplete(c) ? 'INCOMPLETE_GEOMETRY'
         : submittedId ? 'RANK_BELOW_SELECTED' : 'NO_SIGNAL_THIS_SCAN';
       observations.push({
         kind: 'CANDIDATE', asset: m.symbol, coin: m.symbol, production_state: productionState, submitted,
         not_submitted_reason: submitted ? null : notSubmitted,
-        decision: { ...common, candidate: { ...c, is_production_pick: isPick, is_best_trade_now: isBest,
+        decision: { ...common, candidate: { ...c, is_production_pick: isPick, is_generator_asset_pick: assetPick, is_best_trade_now: isBest,
           production_rank: isPick ? rankedRow?.rank ?? null : null, within_asset_rank: withinAsset.indexOf(c) + 1,
           scan_candidate_rank: scanOrder.findIndex((x) => x.symbol === m.symbol && x.c === c) + 1,
           geometry_complete: geometryComplete(c), model_score: isPick ? num(rankedRow?.ml_score) ?? c.model_score : c.model_score } },
@@ -163,10 +176,11 @@ export function buildShadowPayload(result, execution, { observationIntervalMs = 
     }
   }
   return {
-    scan: { scan_id: scanId, decision_ts: decisionTs, scan_status: scan.status || null, n_markets: research.markets.length,
-      submitted_signal_id: submittedId, execution: execution || { decision: 'NO_SIGNAL' }, observation_interval_ms: observationIntervalMs,
+    scan: { scan_id: scanId, decision_ts: decisionTs, scan_status: scan.status || null, n_markets: research.markets.length, scan_scope: scope,
+      submitted_signal_id: submittedId, execution: supplement ? { decision: 'NOT_APPLICABLE', reason: OUTSIDE_PRODUCTION_UNIVERSE } : execution || { decision: 'NO_SIGNAL' },
+      observation_interval_ms: observationIntervalMs,
       generator_version: GENERATOR_VERSION, feature_version: FEATURE_VERSION,
-      model_version: best?.ml?.model_id || 'QUANT_ONLY', failures: research.failures || [], universe: scan.universe || null, cross_market: cross },
+      model_version: supplement ? 'QUANT_ONLY' : best?.ml?.model_id || 'QUANT_ONLY', failures: research.failures || [], universe: scan.universe || null, cross_market: cross },
     observations,
   };
 }

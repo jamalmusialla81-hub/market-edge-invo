@@ -25,7 +25,9 @@
 // *requested* paper leverage; risk decides what is actually approved.
 import { runOnce, toInstrument } from './fetch_signal.mjs';
 import { fetchCompletedCandles, fetchMid, MARKET_PRICE_SOURCE } from './market_data.mjs';
-import { buildShadowPayload, executionFromCycle, scanCandlesByCoin } from './shadow_capture.mjs';
+import { buildShadowPayload, executionFromCycle, scanCandlesByCoin, SCOPE_RESEARCH_SUPPLEMENT } from './shadow_capture.mjs';
+import { supplementMarkets, supplementPerCycle, supplementPlan } from './research_universe.mjs';
+import { runLiveScan } from '../backend/scan-core.mjs';
 import { monitorIntervalMs, PositionMonitor } from './position_monitor.mjs';
 
 // The DISCOVERY cadence (scan -> rank -> maybe open). Unchanged: 5 minutes.
@@ -44,6 +46,11 @@ const SEGMENT = process.env.SEGMENT_NAME || `local-${Date.now()}`;
 const SHADOW_ENABLED = process.env.SHADOW_LEARNING !== '0';
 const SHADOW_EVERY_N_CYCLES = Math.max(1, Number(process.env.SHADOW_EVERY_N_CYCLES || 1));
 const SHADOW_EXTRA_FETCH_PER_CYCLE = Math.max(0, Number(process.env.SHADOW_EXTRA_FETCH_PER_CYCLE ?? 2));
+// Approved research assets the production scan did not evaluate are observed
+// research-only on a deterministic rotation (research_universe.mjs); bounded
+// to SHADOW_SUPPLEMENT_PER_CYCLE (default 1, max 3) assets per cycle.
+const SHADOW_SUPPLEMENT_PER_CYCLE = supplementPerCycle(process.env.SHADOW_SUPPLEMENT_PER_CYCLE);
+const isRateLimited = (error) => /\b429\b/.test(String(error?.message || error));
 
 // Graceful stop: the current cycle always finishes (its mark/signal/reconcile
 // calls are each one committed backend transaction), then the loop ends its
@@ -137,18 +144,39 @@ export async function advanceOpenTrades(metrics, { candles = fetchCompletedCandl
 // Any error is logged and swallowed -- paper execution never depends on it.
 export async function shadowObserve(cycle, result, outcome, posted, deps = {}) {
   if (!result?.scan?.research) return null;
-  const { candles = fetchCompletedCandles, intervalMs = CYCLE_INTERVAL_MS, extraFetches = SHADOW_EXTRA_FETCH_PER_CYCLE } = deps;
+  const { candles = fetchCompletedCandles, intervalMs = CYCLE_INTERVAL_MS, extraFetches = SHADOW_EXTRA_FETCH_PER_CYCLE,
+    researchScan = runLiveScan, supplementCount = SHADOW_SUPPLEMENT_PER_CYCLE } = deps;
   const out = { recorded: 0, resolved: 0, errors: 0 };
+  let production = null;
   try {
-    const payload = buildShadowPayload(result, executionFromCycle(outcome, result, posted), { observationIntervalMs: intervalMs * SHADOW_EVERY_N_CYCLES });
-    if (payload) out.recorded = (await api('POST', '/shadow/scan', payload)).body?.inserted || 0;
+    production = buildShadowPayload(result, executionFromCycle(outcome, result, posted), { observationIntervalMs: intervalMs * SHADOW_EVERY_N_CYCLES });
+    if (production) out.recorded = (await api('POST', '/shadow/scan', production)).body?.inserted || 0;
   } catch (error) {
     out.errors += 1;
     console.error(JSON.stringify({ event: 'SHADOW_RECORD_FAILED', cycle, error: error.message }));
   }
+  // Research-only supplement: approved research assets this scan did not
+  // evaluate, a few per cycle, same frozen generator, never submitted.
+  const extraCandles = {};
+  const plan = supplementPlan(result.scan, cycle, supplementCount);
+  out.supplement = { selected: plan.selected, skipped: plan.skipped, not_on_venue: plan.notOnVenue, recorded: 0 };
+  if (plan.selected.length) {
+    try {
+      const scan = await researchScan({ markets: supplementMarkets(plan.selected), includeResearch: true, now: Date.now() });
+      const payload = buildShadowPayload({ scan }, null, { observationIntervalMs: intervalMs * SHADOW_EVERY_N_CYCLES, scope: SCOPE_RESEARCH_SUPPLEMENT,
+        crossMarketContext: production?.scan?.cross_market ?? null, assetCtxs: result.scan.research.assetCtxs });
+      if (payload) out.supplement.recorded = (await api('POST', '/shadow/scan', payload)).body?.inserted || 0;
+      Object.assign(extraCandles, scanCandlesByCoin({ scan }));
+      out.supplement.failures = scan?.research?.failures || [];
+    } catch (error) {
+      out.errors += 1;
+      out.supplement.error = error.message;
+      console.error(JSON.stringify({ event: 'SHADOW_SUPPLEMENT_FAILED', cycle, assets: plan.selected, error: error.message }));
+    }
+  }
   try {
     const pending = (await api('GET', '/shadow/pending')).body?.pending || [];
-    const fromScan = scanCandlesByCoin(result);
+    const fromScan = { ...extraCandles, ...scanCandlesByCoin(result) };
     let fetched = 0;
     for (const { coin, since_ms: since } of pending) {
       let rows = fromScan[coin];
@@ -157,6 +185,9 @@ export async function shadowObserve(cycle, result, outcome, posted, deps = {}) {
         fetched += 1;
         try { rows = await candles(coin, since, { now: Date.now() }); } catch (error) {
           console.error(JSON.stringify({ event: 'SHADOW_CANDLES_UNAVAILABLE', coin, error: error.message }));
+          // Delayed resolution is the lowest priority: on a rate limit, stop
+          // asking this cycle (windows stay pending and are retried later).
+          if (isRateLimited(error)) { out.deferred_rate_limited = true; break; }
           continue;   // no fallback: the window stays pending
         }
       }

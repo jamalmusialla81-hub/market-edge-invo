@@ -24,6 +24,19 @@ const DATASETS = Object.freeze({
     approvedAt: '2026-09-27',
     reason: 'Separate version, approved 2026-09-27. 5m/15m/1h strictly from Coinbase spot 5m (no fill, fail closed); 4h from native Coinbase spot 1h and 1d from native Coinbase spot daily candles, point-in-time only. Never mixed with strict V2-CLEAN rows.'
   }),
+  // Dataset-expansion v1 (research/dataset-expansion/): the original six
+  // assets plus ADA, AERO, AVAX, BCH, DOT, HBAR, LINK, ONDO, UNI, XLM under the
+  // same frozen NATIVE-HTF generator and labels. A SEPARATE version: the
+  // original NATIVE-HTF dataset above is not overwritten or mixed. Built
+  // offline in CI, development window only (the sealed holdout is not read).
+  'HISTORICAL-RANK-V2-CLEAN-NATIVE-HTF-EXPANDED': Object.freeze({
+    status: 'ACTIVE',
+    trainable: true,
+    developmentOnly: true,
+    approvedAt: '2026-09-28',
+    reason: 'Separate expanded version (16 assets, 609 development choice scans). Reproduces the 1,362 stored NATIVE-HTF development rows byte-exact. Research measurement only: the placebo gate still fails, so nothing trained on it may be promoted.',
+    evidence: 'research/dataset-expansion/README.md; research/dataset-expansion/reports/dataset-manifest.json; CI run 36377309789'
+  }),
   // Forward shadow learning (desktop execution-service, research-only SQLite
   // file). Collected continuously; NOT trainable until the labels and the
   // diagnostic classifications have been validated and a grouped (cluster /

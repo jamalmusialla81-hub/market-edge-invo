@@ -140,5 +140,20 @@ untouched.
   500 bars, so up to `SHADOW_EXTRA_FETCH_PER_CYCLE` (default 2) extra Hyperliquid
   candle requests are made per cycle. The 24h-and-shorter windows reuse the
   scan's candles, which costs no extra requests.
-- **Backups.** The shadow store is not included in the desktop backup
-  export.
+- **Backups.** Since the final integration phase the shadow store IS in the
+  desktop backup (format v2, consistent online snapshot, validated on
+  restore); see desktop/DATA_AND_BACKUP.md. There is no cloud copy.
+- **Research universe.** Shadow capture observes every market the production
+  scan evaluates. Approved research assets it did not evaluate (the 16-asset
+  `HISTORICAL-RANK-V2-CLEAN-NATIVE-HTF-EXPANDED` universe,
+  signal-bridge/research_universe.mjs) are observed research-only on a
+  deterministic rotation, at most `SHADOW_SUPPLEMENT_PER_CYCLE` (default 1,
+  max 3) per cycle, only if the venue lists them, and never in a cycle whose
+  production scan saw data failures. Those rows are stamped
+  `OUTSIDE_PRODUCTION_UNIVERSE`, can never be submitted, and do not change
+  the production trading universe.
+- **Trade Detail link.** An executed paper trade links to its observation by
+  `signal_id` (`forward_paper_executed`); Trade Detail shows the observation
+  id and resolved/pending horizons, and its hindsight overlay uses the
+  observation's post-outcome record only after the trade closed and the 72h
+  window resolved.
