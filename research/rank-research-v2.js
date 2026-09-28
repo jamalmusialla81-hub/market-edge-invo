@@ -404,7 +404,7 @@ function trainModel(name, trainRows, trainFeatures, families, options = {}) {
   if (name === 'GBM_FINAL_R' || name.startsWith('LAMBDARANK')) {
     const mode = name === 'GBM_FINAL_R' ? 'regression' : 'lambdarank', target = name.endsWith('TP1') ? 'tp1' : 'y';
     const probe = gbmFit(inner.X, inner[target], inner.groupIds, {mode, rounds: 200, validation: {X: outer.X, y: outer[target], groupIds: outer.groupIds}}); tuned.rounds = probe.rounds;
-    const m = gbmFit(full.X, full[target], full.groupIds, {mode, rounds: probe.rounds}); return {tuned, cols, predict: featurePredict(X => m.predict(X))};
+    const m = gbmFit(full.X, full[target], full.groupIds, {mode, rounds: probe.rounds}); return {tuned, cols, splits: splitCounts(m.trees, cols), predict: featurePredict(X => m.predict(X))};
   }
   if (name === 'CONV1D_MTF') {
     const withinTarget = data => demeanWithinGroups(data.rows.map(() => [0]), data.y, data.groupIds).yd;
@@ -415,6 +415,8 @@ function trainModel(name, trainRows, trainFeatures, families, options = {}) {
   }
   throw new Error(`Unknown model ${name}`);
 }
+// Split counts per feature column (diagnostic only; does not affect scores).
+function splitCounts(trees, cols) { const out = {}; const walk = node => { if (node.value !== undefined) return; out[cols[node.feature]] = (out[cols[node.feature]] || 0) + 1; walk(node.left); walk(node.right); }; trees.forEach(walk); return out; }
 function tune(grid, score) { let best = grid[0], bestScore = -Infinity; for (const value of grid) { const result = score(value); if (result > bestScore + 1e-9) { best = value; bestScore = result; } } return best; }
 function zscore(values) { const m = mean(values) ?? 0, d = std(values) || 1; return values.map(value => (value - m) / d); }
 function fusionModel(trainRows, trainFeatures, families) {
@@ -432,16 +434,16 @@ function scoreModel(name, trainRows, trainFeatures, testRows, testFeatures, fami
   if (name === 'RANDOM') return {scores: testRows.map(() => 0), tuned: {}};        // all tied => exact expected value of a random pick
   if (name === 'CURRENT_QUANT') return {scores: testRows.map(row => row.quant_score), tuned: {}};
   if (name === 'FUSION') { const m = fusionModel(trainRows, trainFeatures, families); return {scores: m.predict(data), tuned: m.tuned}; }
-  const m = trainModel(name, trainRows, trainFeatures, families); return {scores: m.predict(data), tuned: m.tuned, weights: m.weights, cols: m.cols};
+  const m = trainModel(name, trainRows, trainFeatures, families); return {scores: m.predict(data), tuned: m.tuned, weights: m.weights, cols: m.cols, splits: m.splits};
 }
 function walkForward(rows, featureRows, {models = MODEL_NAMES, families = ENGINEERED, folds = 5} = {}) {
   const featureById = new Map(rows.map((row, i) => [row.candidate_id, featureRows[i]])), plan = walkForwardFolds(groupByScan(rows), {folds}), result = Object.fromEntries(models.map(name => [name, {oosRows: [], oosScores: [], folds: []}]));
   for (const fold of plan) {
     const trainRows = fold.train.flat(), testRows = fold.test.flat(), trainF = trainRows.map(row => featureById.get(row.candidate_id)), testF = testRows.map(row => featureById.get(row.candidate_id));
     for (const name of models) {
-      const {scores, tuned} = scoreModel(name, trainRows, trainF, testRows, testF, families), selected = picks(testRows, scores);
+      const {scores, tuned, splits} = scoreModel(name, trainRows, trainF, testRows, testF, families), selected = picks(testRows, scores);
       result[name].oosRows.push(...testRows); result[name].oosScores.push(...scores);
-      result[name].folds.push({fold: fold.fold, trainScans: fold.train.length, testScans: fold.test.length, purgedScans: fold.purged, testStart: new Date(fold.testStartMs).toISOString().slice(0, 10), testEnd: new Date(fold.testEndMs).toISOString().slice(0, 10), tuned, meanR016: summarise(selected).meanR});
+      result[name].folds.push({fold: fold.fold, trainScans: fold.train.length, testScans: fold.test.length, purgedScans: fold.purged, testStart: new Date(fold.testStartMs).toISOString().slice(0, 10), testEnd: new Date(fold.testEndMs).toISOString().slice(0, 10), tuned, splits, meanR016: summarise(selected).meanR});
     }
   }
   return {plan: plan.map(fold => ({fold: fold.fold, train: fold.train.length, test: fold.test.length, purged: fold.purged})), models: result};

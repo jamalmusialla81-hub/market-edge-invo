@@ -320,3 +320,19 @@ Added (stricter only; nothing above is relaxed):
   and reported as such.
 - Placebo runs are null calibration, not selection trials; they are counted
   and reported separately (5 × 19 × 2 = 190 placebo model fits).
+
+### A2 — 2026-09-28, before any real-data OOS run: placebo for combinations
+
+Reason: the same null calibration (3 synthetic random-walk worlds, K = 19)
+gave 0 of 15 single-family placebo p-values ≤ 0.05 (minimum 0.20), so the
+A1 gate is not anti-conservative; but in one world the un-gated
+`BASE + ALL` combination reached RETAIN under the original rule on pure
+noise. Combinations therefore get the same placebo gate: all of the arm's
+new family blocks are permuted jointly with one permutation per seed
+(K = 19), and the A1 thresholds apply. Placebo fits become 9 × 19 × 2 = 342.
+Also recorded from the calibration: WEAK SIGNAL was assigned to 1–5 of 9
+arms per pure-noise world, so WEAK SIGNAL is not distinguishable from noise
+at this sample size and will be reported that way.
+Clarification of A1 wording: a family is stepped down until its level's own
+placebo requirement holds (RETAIN ≤ 0.05, PROMISING ≤ 0.20), so a RETAIN with
+placebo p = 0.3 ends at WEAK SIGNAL, not PROMISING.
