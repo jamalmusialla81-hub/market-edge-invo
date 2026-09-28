@@ -99,7 +99,10 @@ jobs:
 
       - name: Existing execution-service test suite (Phase 2/3 bookkeeping paper route — always runs, independent of the engine crash)
         working-directory: execution-service
-        run: python -m pytest -q | tee pytest.log
+        # pipefail: without it the step reports tee's exit code and hides pytest failures
+        run: |
+          set -o pipefail
+          python -m pytest -q | tee pytest.log
 
       - name: Upload Nautilus environment artifacts
         if: always()
@@ -201,6 +204,7 @@ jobs:
         working-directory: execution-service
         run: |
           python -m pip install --quiet nautilus_trader httpx pytest fastapi "uvicorn[standard]"
+          set -o pipefail
           python -m pytest tests/test_hummingbot_real_client.py -q | tee real_client_ci.log
 
       - name: Part 5 — end-to-end testnet flow (PASS or SKIPPED_NOT_CONFIGURED)

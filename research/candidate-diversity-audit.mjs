@@ -8,6 +8,7 @@
 import Rank from './historical-rank.js';
 import Replay from '../replay-engine.js';
 import Quant from '../quant-engine.js';
+import Registry from './dataset-registry.js';
 
 const CF=process.env.CLOUDFLARE_API_TOKEN||'',ACCOUNT=process.env.CLOUDFLARE_ACCOUNT_ID||'8ea7796a8fb13ffb612245e8a08a55d6',DATABASE=process.env.MARKET_EDGE_D1_DATABASE_ID||'39a4082e-41a4-45e9-9b76-99cf10eaca01',ENGINE=process.env.HISTORICAL_RANK_ENGINE_VERSION||'HISTORICAL-RANK-V1',REPORT=process.env.CANDIDATE_AUDIT_REPORT||'candidate-diversity-audit.json';
 const finite=value=>Number.isFinite(Number(value))?Number(value):null;
@@ -111,7 +112,9 @@ async function missDiagnosis(scanTimestamps){
   return {assetTimeframesChecked:scansChecked,topClosestMissGates:[...tally.entries()].sort((a,b)=>b[1]-a[1]).map(([gate,count])=>({gate,count})),perAsset};
 }
 
-async function run(){
+async function run(){// Legacy V1 research: HISTORICAL-RANK-V1 is INVALID_CONTAMINATED (stale inputs). Refuse any
+// invalid or unregistered dataset generation before reading a single row.
+Registry.assertTrainable(ENGINE);
   const persisted=await persistedDensity();
   const diagnosis=await missDiagnosis(persisted.scanTimestamps);
   const report={

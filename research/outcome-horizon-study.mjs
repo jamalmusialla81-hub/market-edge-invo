@@ -8,6 +8,7 @@ import {writeFileSync} from 'node:fs';
 import Rank from './historical-rank.js';
 import {archiveCsv} from './recover-historical-rank-outcomes.mjs';
 import Recovery from './outcome-recovery.js';
+import Registry from './dataset-registry.js';
 
 const CF=process.env.CLOUDFLARE_API_TOKEN||'',ACCOUNT=process.env.CLOUDFLARE_ACCOUNT_ID||'8ea7796a8fb13ffb612245e8a08a55d6',DB=process.env.MARKET_EDGE_D1_DATABASE_ID||'39a4082e-41a4-45e9-9b76-99cf10eaca01',ENGINE=process.env.HISTORICAL_RANK_ENGINE_VERSION||'HISTORICAL-RANK-V1',REPORT=process.env.HORIZON_STUDY_REPORT||'outcome-horizon-study.json';
 const HOURS=[24,48,72,120,168],BARS_PER_HOUR=3_600_000/Rank.BASE_MS,MAX_BARS=HOURS.at(-1)*BARS_PER_HOUR;
@@ -43,7 +44,9 @@ function horizonSummary(results,hours){
   return {hours,evaluable:evaluable.length,insufficient_future_data:results.length-evaluable.length,natural_exit_rate:ratio(natural,evaluable.length),first_touch_tp1_or_sl_rate:ratio(firstTouch,evaluable.length),stop_hit_rate:ratio(stop,evaluable.length),tp1_hit_rate:ratio(tp1,evaluable.length),tp2_hit_rate:ratio(tp2,evaluable.length),timeout_rate:ratio(evaluable.length-natural,evaluable.length),mean_final_r:mean(targets.map(t=>t.FINAL_R)),median_final_r:quantile(targets.map(t=>t.FINAL_R),.5)};
 }
 
-async function run(){
+async function run(){// Legacy V1 research: HISTORICAL-RANK-V1 is INVALID_CONTAMINATED (stale inputs). Refuse any
+// invalid or unregistered dataset generation before reading a single row.
+Registry.assertTrainable(ENGINE);
   const rows=await d1(`SELECT c.candidate_id,c.scan_id,c.asset,c.direction,c.strategy,c.entry,c.stop,c.rr,c.quant_score,c.targets_json,s.scan_timestamp FROM historical_scan_candidates c JOIN historical_scan_snapshots s ON s.scan_id=c.scan_id WHERE c.valid_current_geometry=1 AND s.engine_version=? ORDER BY s.scan_timestamp,c.candidate_id`,[ENGINE]);
   const scans=[...new Map(rows.map(row=>[row.scan_id,Number(row.scan_timestamp)])).values()].sort((a,b)=>a-b);
   const candles=new Map(),sources={};

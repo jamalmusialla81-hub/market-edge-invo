@@ -1,20 +1,15 @@
-name: Research — V1 Horizon Training (read-only inputs, no D1 writes)
+name: LEGACY (V1 INVALID) — Research — V1 Horizon Training (read-only inputs, no D1 writes)
 
 # Runs the frozen-horizon, fixed-cutoff V1 rank experiment
 # (research/v1-epoch-training.mjs). It only SELECTs from D1 and reads the
 # public Binance USD-M archive; it ingests one immutable research report to
 # the research pipeline and never writes to historical_scan_candidates or
 # any production table. Branch-only until reviewed for the daily job.
+# LEGACY: written for HISTORICAL-RANK-V1, which is INVALID_CONTAMINATED
+# (research/dataset-registry.js). Push triggers removed so it can never run
+# automatically; the script itself refuses any non-trainable dataset.
 on:
   workflow_dispatch:
-  push:
-    branches: ['claude/**']
-    paths:
-      - 'research/v1-epoch-training.mjs'
-      - 'research/v0-epoch-training.mjs'
-      - 'research/outcome-horizon-study.mjs'
-      - 'research/historical-rank.js'
-      - '.github/workflows/research-v1-horizon-training.yml'
 
 permissions:
   contents: read

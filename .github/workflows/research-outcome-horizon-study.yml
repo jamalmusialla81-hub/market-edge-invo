@@ -1,16 +1,13 @@
-name: Research — Outcome Horizon Study (read-only)
+name: LEGACY (V1 INVALID) — Research — Outcome Horizon Study (read-only)
 
 # Measures how long frozen HISTORICAL-RANK-V1 candidates take to reach their
 # stop or TP2 at 24h/48h/72h/5d/7d.  It only SELECTs from D1 and reads the
 # public Binance USD-M archive; it ingests nothing and changes no dataset.
+# LEGACY: written for HISTORICAL-RANK-V1, which is INVALID_CONTAMINATED
+# (research/dataset-registry.js). Push triggers removed so it can never run
+# automatically; the script itself refuses any non-trainable dataset.
 on:
   workflow_dispatch:
-  push:
-    branches: ['claude/**']
-    paths:
-      - 'research/outcome-horizon-study.mjs'
-      - 'research/historical-rank.js'
-      - '.github/workflows/research-outcome-horizon-study.yml'
 
 permissions:
   contents: read

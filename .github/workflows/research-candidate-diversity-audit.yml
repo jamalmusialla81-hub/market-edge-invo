@@ -1,17 +1,15 @@
-name: Research — Candidate Diversity Audit (read-only, Phase A)
+name: LEGACY (V1 INVALID) — Research — Candidate Diversity Audit (read-only, Phase A)
 
 # Measures candidates-per-scan density, asset participation, invalidation
 # reasons, and (via a read-only replay through already-exported
 # quant-engine.js / replay-engine.js functions) the closest-miss gate for
 # scans where an asset produced zero candidates. SELECTs only; writes
 # nothing to D1 and changes no production scoring or geometry.
+# LEGACY: written for HISTORICAL-RANK-V1, which is INVALID_CONTAMINATED
+# (research/dataset-registry.js). Push triggers removed so it can never run
+# automatically; the script itself refuses any non-trainable dataset.
 on:
   workflow_dispatch:
-  push:
-    branches: ['claude/**']
-    paths:
-      - 'research/candidate-diversity-audit.mjs'
-      - '.github/workflows/research-candidate-diversity-audit.yml'
 
 permissions:
   contents: read

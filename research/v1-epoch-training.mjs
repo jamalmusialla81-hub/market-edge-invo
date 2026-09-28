@@ -12,6 +12,7 @@ import Rank from './historical-rank.js';
 import Recovery from './outcome-recovery.js';
 import {symbolCandles, lowerBound} from './outcome-horizon-study.mjs';
 import {trainConv, trainLogistic, trainPairwiseRanker, trainStumps, trainMtfRidge, selectionMetrics} from './v0-epoch-training.mjs';
+import Registry from './dataset-registry.js';
 
 const CF=process.env.CLOUDFLARE_API_TOKEN||'',RESEARCH_TOKEN=process.env.MARKET_EDGE_RESEARCH_TOKEN||'',ACCOUNT=process.env.CLOUDFLARE_ACCOUNT_ID||'8ea7796a8fb13ffb612245e8a08a55d6',DATABASE=process.env.MARKET_EDGE_D1_DATABASE_ID||'39a4082e-41a4-45e9-9b76-99cf10eaca01',API=(process.env.MARKET_EDGE_API||'https://market-edge-ai.jakob-market-edge.workers.dev').replace(/\/$/,'');
 const ENGINE=process.env.HISTORICAL_RANK_ENGINE_VERSION||'HISTORICAL-RANK-V1';
@@ -165,7 +166,9 @@ function evaluateSplit(train,validation,test,label){
   return {models,withUncertainty,withCosts,buckets,bestModel:ranked[0]?.[0]||null};
 }
 
-async function run(){
+async function run(){// Legacy V1 research: HISTORICAL-RANK-V1 is INVALID_CONTAMINATED (stale inputs). Refuse any
+// invalid or unregistered dataset generation before reading a single row.
+Registry.assertTrainable(ENGINE);
   const rows=await buildRows();
   if(rows.length<MIN_RESOLVED){const status={status:'V1 TRAINING BLOCKED',resolvedRankable:rows.length,required:MIN_RESOLVED,horizonHours:HORIZON_HOURS};console.log(JSON.stringify(status));return status;}
   const split=fixedSplit(rows),folds=walkForwardFolds(rows);
