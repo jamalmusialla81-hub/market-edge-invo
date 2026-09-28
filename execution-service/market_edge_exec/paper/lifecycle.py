@@ -78,6 +78,41 @@ def advance(direction: str, entry: float, stop: float, tp1: Optional[float], tp2
     return events
 
 
+def evaluate_tick(direction: str, entry: float, stop: float, tp1: Optional[float], tp2: Optional[float],
+                  remaining_qty: float, original_qty: float, tp1_hit: bool, opened_at_ms: int,
+                  price: float, at_ms: int, max_hold_ms: int = MAX_HOLD_MS) -> list[ExitEvent]:
+    """Position-management triggers for ONE observed live price (a trade print
+    from the exchange stream, or a polled mid). Same geometry, same order of
+    checks and same 50/50 split as advance(), but it only ever judges the
+    price it was given: it never assumes a path between two observations.
+
+    Fills: TP1/TP2 are resting limits, so they fill at their level. A stop is
+    a stop-market: if the observed price is already through the level (a gap,
+    or a poll that sampled after the crossing), the fill is the observed price
+    -- the conservative choice -- never the better stop level."""
+    events: list[ExitEvent] = []
+    long = direction == "long"
+    side = exit_side(direction)
+    qty_left = remaining_qty
+    if qty_left <= 0:
+        return events
+    active_stop = entry if tp1_hit else stop
+    if (price <= active_stop) if long else (price >= active_stop):
+        kind = "BREAKEVEN_STOP" if tp1_hit else "STOP"
+        return [ExitEvent(kind, qty_left, active_stop, slipped(price, side), at_ms)]
+    if not tp1_hit and tp1 is not None and (price >= tp1 if long else price <= tp1):
+        tp1_hit = True
+        part = min(round(original_qty * TP1_FRACTION, 8), qty_left)
+        events.append(ExitEvent("TP1", part, tp1, slipped(tp1, side), at_ms))
+        qty_left -= part
+    if tp1_hit and qty_left > 0 and tp2 is not None and (price >= tp2 if long else price <= tp2):
+        events.append(ExitEvent("TP2", qty_left, tp2, slipped(tp2, side), at_ms))
+        return events
+    if qty_left > 0 and at_ms - opened_at_ms >= max_hold_ms:
+        events.append(ExitEvent("TIMEOUT", qty_left, price, slipped(price, side), at_ms))
+    return events
+
+
 def pnl(direction: str, entry_fill: float, exit_fill: float, quantity: float) -> float:
     return (exit_fill - entry_fill) * quantity if direction == "long" else (entry_fill - exit_fill) * quantity
 

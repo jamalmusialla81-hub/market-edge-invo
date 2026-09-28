@@ -1,0 +1,4633 @@
+{
+ "status": "DATASET_EXPANSION_V1_COMPLETE",
+ "meta": {
+  "synthetic": false,
+  "ciRunId": "36377309789",
+  "gitSha": "2b0370776ae495f3450bc65000554fb767011002",
+  "generatedAt": "2026-09-28T04:49:56.553Z",
+  "frozenFiles": {
+   "quant-engine.js": "5a407644da29102d7734e8df238b51f8e7f91957ae626c328a8f461cbc6dec79",
+   "replay-engine.js": "3de128d23227d8e94be8be831ad0210641175c0ba4e4a730c7b118cb759b2dfd",
+   "research/historical-rank.js": "10f4d5d763cffdec7923a6f83c01f4101fa02860a9d2c587998a7b6b360a9ba6",
+   "research/historical-rank-v2-clean.js": "b822d103c55547718e6a2892ef4f9da4a901b93e7933a475a8cb86706a1fce49",
+   "research/candle-sequence.js": "37bb747447b317f85598c2bd579226e09d84c752a25bc827f16491cfec7d4484",
+   "research/rank-research-v2.js": "af273b5cb307207a4058f45bbf86b83ff3eb684a21d811b0f0057e72ef892965"
+  }
+ },
+ "readOnly": true,
+ "productionInfluence": "NONE",
+ "preregistration": "research/dataset-expansion/PREREGISTRATION.md",
+ "holdout": {
+  "id": "PHASE5-V1-HOLDOUT-2025-12-01",
+  "startMs": 1764547200000,
+  "devCutoffMs": 1763539200000,
+  "rule": "scan_timestamp >= startMs is holdout; development uses scan_timestamp < devCutoffMs only; consumption is one-shot with a pre-registered model hash",
+  "moved": false,
+  "outcomesRead": false,
+  "oldCountsOnly": {
+   "total": 1259,
+   "development": 1109,
+   "holdout": 150
+  },
+  "expandedCountsOnly": {
+   "scansWithCandidates": 113,
+   "choiceScans": 82,
+   "rankableCandidates": 358,
+   "gridScans": 299,
+   "outcomesRead": 0
+  }
+ },
+ "universe": {
+  "oldAssets": [
+   "BTC",
+   "ETH",
+   "SOL",
+   "XRP",
+   "DOGE",
+   "LTC"
+  ],
+  "newCandidatesFetched": [
+   "AAVE",
+   "ADA",
+   "AERO",
+   "AVAX",
+   "BCH",
+   "BONK",
+   "DOT",
+   "HBAR",
+   "ICP",
+   "JASMY",
+   "LINK",
+   "ONDO",
+   "TIA",
+   "UNI",
+   "XLM"
+  ],
+  "included": [
+   "BTC",
+   "ETH",
+   "SOL",
+   "XRP",
+   "DOGE",
+   "LTC",
+   "ADA",
+   "AERO",
+   "AVAX",
+   "BCH",
+   "DOT",
+   "HBAR",
+   "LINK",
+   "ONDO",
+   "UNI",
+   "XLM"
+  ],
+  "added": [
+   "ADA",
+   "AERO",
+   "AVAX",
+   "BCH",
+   "DOT",
+   "HBAR",
+   "LINK",
+   "ONDO",
+   "UNI",
+   "XLM"
+  ],
+  "rejected": [
+   {
+    "asset": "AAVE",
+    "reason": "NOT_USABLE: F1_5mCoverage"
+   },
+   {
+    "asset": "BONK",
+    "reason": "NOT_USABLE: F1_5mCoverage"
+   },
+   {
+    "asset": "ICP",
+    "reason": "NOT_USABLE: F1_5mCoverage"
+   },
+   {
+    "asset": "JASMY",
+    "reason": "NOT_USABLE: F1_5mCoverage"
+   },
+   {
+    "asset": "TIA",
+    "reason": "BELOW_MIN_DEV_CANDIDATES (18 < 30)"
+   }
+  ],
+  "perAsset": {
+   "BTC": {
+    "symbol": "BTC",
+    "product": "BTC-USD",
+    "firstValidDate": "2021-09-01",
+    "lastValidDate": "2026-09-26",
+    "coverage5m": 0.9995,
+    "coverageNative1h": 0.9997,
+    "coverageDaily": 1,
+    "missingMonths": [],
+    "majorGaps": [
+     "2026-05-08T01:20 6.4h"
+    ],
+    "liquidity": null,
+    "listing": "joins at first eligible scan 2022-05-20",
+    "archiveIssues": {
+     "invalidOhlc": 0,
+     "offGrid": 0,
+     "future": 0,
+     "duplicates": 0,
+     "conflictingDuplicates": 0,
+     "nonMonotonicInput": 531351
+    },
+    "usable": true,
+    "usabilityFailed": [],
+    "devCandidates": 220,
+    "devEligibleScans": 1109,
+    "pointInTime": true,
+    "included": true,
+    "reason": "EXISTING_UNIVERSE"
+   },
+   "ETH": {
+    "symbol": "ETH",
+    "product": "ETH-USD",
+    "firstValidDate": "2021-09-01",
+    "lastValidDate": "2026-09-26",
+    "coverage5m": 0.9995,
+    "coverageNative1h": 0.9997,
+    "coverageDaily": 1,
+    "missingMonths": [],
+    "majorGaps": [
+     "2026-05-08T01:20 6.5h"
+    ],
+    "liquidity": null,
+    "listing": "joins at first eligible scan 2022-05-20",
+    "archiveIssues": {
+     "invalidOhlc": 0,
+     "offGrid": 0,
+     "future": 0,
+     "duplicates": 0,
+     "conflictingDuplicates": 0,
+     "nonMonotonicInput": 531343
+    },
+    "usable": true,
+    "usabilityFailed": [],
+    "devCandidates": 236,
+    "devEligibleScans": 1074,
+    "pointInTime": true,
+    "included": true,
+    "reason": "EXISTING_UNIVERSE"
+   },
+   "SOL": {
+    "symbol": "SOL",
+    "product": "SOL-USD",
+    "firstValidDate": "2021-09-01",
+    "lastValidDate": "2026-09-26",
+    "coverage5m": 0.9995,
+    "coverageNative1h": 0.9997,
+    "coverageDaily": 1,
+    "missingMonths": [],
+    "majorGaps": [
+     "2026-05-08T01:20 6.5h"
+    ],
+    "liquidity": null,
+    "listing": "joins at first eligible scan 2022-05-20",
+    "archiveIssues": {
+     "invalidOhlc": 0,
+     "offGrid": 0,
+     "future": 0,
+     "duplicates": 0,
+     "conflictingDuplicates": 0,
+     "nonMonotonicInput": 531327
+    },
+    "usable": true,
+    "usabilityFailed": [],
+    "devCandidates": 246,
+    "devEligibleScans": 1066,
+    "pointInTime": true,
+    "included": true,
+    "reason": "EXISTING_UNIVERSE"
+   },
+   "XRP": {
+    "symbol": "XRP",
+    "product": "XRP-USD",
+    "firstValidDate": "2023-07-13",
+    "lastValidDate": "2026-09-26",
+    "coverage5m": 0.9994,
+    "coverageNative1h": 0.9996,
+    "coverageDaily": 1,
+    "missingMonths": [],
+    "majorGaps": [
+     "2026-05-08T01:20 6.5h"
+    ],
+    "liquidity": null,
+    "listing": "joins at first eligible scan 2024-03-29",
+    "archiveIssues": {
+     "invalidOhlc": 0,
+     "offGrid": 0,
+     "future": 0,
+     "duplicates": 0,
+     "conflictingDuplicates": 0,
+     "nonMonotonicInput": 335966
+    },
+    "usable": true,
+    "usabilityFailed": [],
+    "devCandidates": 112,
+    "devEligibleScans": 515,
+    "pointInTime": true,
+    "included": true,
+    "reason": "EXISTING_UNIVERSE"
+   },
+   "DOGE": {
+    "symbol": "DOGE",
+    "product": "DOGE-USD",
+    "firstValidDate": "2021-09-01",
+    "lastValidDate": "2026-09-26",
+    "coverage5m": 0.9995,
+    "coverageNative1h": 0.9997,
+    "coverageDaily": 1,
+    "missingMonths": [],
+    "majorGaps": [
+     "2025-10-25T15:10 6.0h",
+     "2026-05-08T01:20 6.5h"
+    ],
+    "liquidity": null,
+    "listing": "joins at first eligible scan 2022-05-20",
+    "archiveIssues": {
+     "invalidOhlc": 0,
+     "offGrid": 0,
+     "future": 0,
+     "duplicates": 0,
+     "conflictingDuplicates": 0,
+     "nonMonotonicInput": 531325
+    },
+    "usable": true,
+    "usabilityFailed": [],
+    "devCandidates": 261,
+    "devEligibleScans": 1063,
+    "pointInTime": true,
+    "included": true,
+    "reason": "EXISTING_UNIVERSE"
+   },
+   "LTC": {
+    "symbol": "LTC",
+    "product": "LTC-USD",
+    "firstValidDate": "2021-09-01",
+    "lastValidDate": "2026-09-26",
+    "coverage5m": 0.9995,
+    "coverageNative1h": 0.9997,
+    "coverageDaily": 1,
+    "missingMonths": [],
+    "majorGaps": [
+     "2026-05-08T01:20 6.5h"
+    ],
+    "liquidity": null,
+    "listing": "joins at first eligible scan 2022-05-20",
+    "archiveIssues": {
+     "invalidOhlc": 0,
+     "offGrid": 0,
+     "future": 0,
+     "duplicates": 0,
+     "conflictingDuplicates": 0,
+     "nonMonotonicInput": 531327
+    },
+    "usable": true,
+    "usabilityFailed": [],
+    "devCandidates": 290,
+    "devEligibleScans": 1055,
+    "pointInTime": true,
+    "included": true,
+    "reason": "EXISTING_UNIVERSE"
+   },
+   "AAVE": {
+    "symbol": "AAVE",
+    "product": "AAVE-USD",
+    "firstValidDate": "2021-09-01",
+    "lastValidDate": "2026-09-26",
+    "coverage5m": 0.9871,
+    "coverageNative1h": 0.9997,
+    "coverageDaily": 1,
+    "missingMonths": [
+     "2023-05",
+     "2023-06",
+     "2023-08",
+     "2023-09",
+     "2024-05"
+    ],
+    "majorGaps": [
+     "2026-05-08T01:20 6.6h"
+    ],
+    "liquidity": {
+     "medianDailyNotionalUsd": 7050003.6313,
+     "lowNotionalDayShare": 0.0058
+    },
+    "listing": "joins at first eligible scan 2022-05-21",
+    "archiveIssues": {
+     "invalidOhlc": 0,
+     "offGrid": 0,
+     "future": 0,
+     "duplicates": 0,
+     "conflictingDuplicates": 0,
+     "nonMonotonicInput": 524691
+    },
+    "usable": false,
+    "usabilityFailed": [
+     "F1_5mCoverage"
+    ],
+    "devCandidates": 63,
+    "devEligibleScans": 311,
+    "pointInTime": true,
+    "included": false,
+    "reason": "NOT_USABLE: F1_5mCoverage"
+   },
+   "ADA": {
+    "symbol": "ADA",
+    "product": "ADA-USD",
+    "firstValidDate": "2021-09-01",
+    "lastValidDate": "2026-09-26",
+    "coverage5m": 0.9994,
+    "coverageNative1h": 0.9997,
+    "coverageDaily": 1,
+    "missingMonths": [],
+    "majorGaps": [
+     "2026-05-08T01:20 6.5h"
+    ],
+    "liquidity": {
+     "medianDailyNotionalUsd": 24672225.6486,
+     "lowNotionalDayShare": 0
+    },
+    "listing": "joins at first eligible scan 2022-05-30",
+    "archiveIssues": {
+     "invalidOhlc": 0,
+     "offGrid": 0,
+     "future": 0,
+     "duplicates": 0,
+     "conflictingDuplicates": 0,
+     "nonMonotonicInput": 531276
+    },
+    "usable": true,
+    "usabilityFailed": [],
+    "devCandidates": 229,
+    "devEligibleScans": 957,
+    "pointInTime": true,
+    "included": true,
+    "reason": "USABLE_AND_MIN_HISTORY"
+   },
+   "AERO": {
+    "symbol": "AERO",
+    "product": "AERO-USD",
+    "firstValidDate": "2024-02-06",
+    "lastValidDate": "2026-09-26",
+    "coverage5m": 0.9907,
+    "coverageNative1h": 0.9995,
+    "coverageDaily": 1,
+    "missingMonths": [],
+    "majorGaps": [
+     "2026-05-08T01:15 6.6h"
+    ],
+    "liquidity": {
+     "medianDailyNotionalUsd": 8602027.5205,
+     "lowNotionalDayShare": 0.0046
+    },
+    "listing": "joins at first eligible scan 2024-11-14",
+    "archiveIssues": {
+     "invalidOhlc": 0,
+     "offGrid": 0,
+     "future": 0,
+     "duplicates": 0,
+     "conflictingDuplicates": 0,
+     "nonMonotonicInput": 273921
+    },
+    "usable": true,
+    "usabilityFailed": [],
+    "devCandidates": 40,
+    "devEligibleScans": 137,
+    "pointInTime": true,
+    "included": true,
+    "reason": "USABLE_AND_MIN_HISTORY"
+   },
+   "AVAX": {
+    "symbol": "AVAX",
+    "product": "AVAX-USD",
+    "firstValidDate": "2021-09-30",
+    "lastValidDate": "2026-09-26",
+    "coverage5m": 0.9929,
+    "coverageNative1h": 0.9997,
+    "coverageDaily": 1,
+    "missingMonths": [
+     "2023-09",
+     "2023-10",
+     "2026-07"
+    ],
+    "majorGaps": [
+     "2026-05-08T01:20 6.5h"
+    ],
+    "liquidity": {
+     "medianDailyNotionalUsd": 16607237.4748,
+     "lowNotionalDayShare": 0.0013
+    },
+    "listing": "joins at first eligible scan 2022-06-17",
+    "archiveIssues": {
+     "invalidOhlc": 0,
+     "offGrid": 0,
+     "future": 0,
+     "duplicates": 0,
+     "conflictingDuplicates": 0,
+     "nonMonotonicInput": 519325
+    },
+    "usable": true,
+    "usabilityFailed": [],
+    "devCandidates": 136,
+    "devEligibleScans": 734,
+    "pointInTime": true,
+    "included": true,
+    "reason": "USABLE_AND_MIN_HISTORY"
+   },
+   "BCH": {
+    "symbol": "BCH",
+    "product": "BCH-USD",
+    "firstValidDate": "2021-09-01",
+    "lastValidDate": "2026-09-26",
+    "coverage5m": 0.9992,
+    "coverageNative1h": 0.9997,
+    "coverageDaily": 1,
+    "missingMonths": [],
+    "majorGaps": [
+     "2026-05-08T01:20 6.5h"
+    ],
+    "liquidity": {
+     "medianDailyNotionalUsd": 5570087.6993,
+     "lowNotionalDayShare": 0
+    },
+    "listing": "joins at first eligible scan 2022-05-20",
+    "archiveIssues": {
+     "invalidOhlc": 0,
+     "offGrid": 0,
+     "future": 0,
+     "duplicates": 0,
+     "conflictingDuplicates": 0,
+     "nonMonotonicInput": 531180
+    },
+    "usable": true,
+    "usabilityFailed": [],
+    "devCandidates": 143,
+    "devEligibleScans": 642,
+    "pointInTime": true,
+    "included": true,
+    "reason": "USABLE_AND_MIN_HISTORY"
+   },
+   "BONK": {
+    "symbol": "BONK",
+    "product": "BONK-USD",
+    "firstValidDate": "2023-12-14",
+    "lastValidDate": "2026-09-26",
+    "coverage5m": 0.9762,
+    "coverageNative1h": 0.9996,
+    "coverageDaily": 1,
+    "missingMonths": [
+     "2026-04",
+     "2026-05",
+     "2026-06",
+     "2026-07",
+     "2026-08",
+     "2026-09"
+    ],
+    "majorGaps": [
+     "2025-10-25T15:05 6.1h",
+     "2026-05-08T01:15 6.6h"
+    ],
+    "liquidity": {
+     "medianDailyNotionalUsd": 23998120.8019,
+     "lowNotionalDayShare": 0
+    },
+    "listing": "joins at first eligible scan 2024-08-30",
+    "archiveIssues": {
+     "invalidOhlc": 0,
+     "offGrid": 0,
+     "future": 0,
+     "duplicates": 0,
+     "conflictingDuplicates": 0,
+     "nonMonotonicInput": 285015
+    },
+    "usable": false,
+    "usabilityFailed": [
+     "F1_5mCoverage"
+    ],
+    "devCandidates": 72,
+    "devEligibleScans": 314,
+    "pointInTime": true,
+    "included": false,
+    "reason": "NOT_USABLE: F1_5mCoverage"
+   },
+   "DOT": {
+    "symbol": "DOT",
+    "product": "DOT-USD",
+    "firstValidDate": "2021-09-01",
+    "lastValidDate": "2026-09-26",
+    "coverage5m": 0.9944,
+    "coverageNative1h": 0.9997,
+    "coverageDaily": 1,
+    "missingMonths": [
+     "2026-07"
+    ],
+    "majorGaps": [
+     "2026-05-08T01:20 6.5h"
+    ],
+    "liquidity": {
+     "medianDailyNotionalUsd": 7711577.0332,
+     "lowNotionalDayShare": 0
+    },
+    "listing": "joins at first eligible scan 2022-05-30",
+    "archiveIssues": {
+     "invalidOhlc": 0,
+     "offGrid": 0,
+     "future": 0,
+     "duplicates": 0,
+     "conflictingDuplicates": 0,
+     "nonMonotonicInput": 528628
+    },
+    "usable": true,
+    "usabilityFailed": [],
+    "devCandidates": 166,
+    "devEligibleScans": 777,
+    "pointInTime": true,
+    "included": true,
+    "reason": "USABLE_AND_MIN_HISTORY"
+   },
+   "HBAR": {
+    "symbol": "HBAR",
+    "product": "HBAR-USD",
+    "firstValidDate": "2022-10-13",
+    "lastValidDate": "2026-09-26",
+    "coverage5m": 0.9982,
+    "coverageNative1h": 0.9995,
+    "coverageDaily": 1,
+    "missingMonths": [],
+    "majorGaps": [
+     "2026-05-08T01:20 6.5h"
+    ],
+    "liquidity": {
+     "medianDailyNotionalUsd": 6136861.506,
+     "lowNotionalDayShare": 0.0062
+    },
+    "listing": "joins at first eligible scan 2023-08-31",
+    "archiveIssues": {
+     "invalidOhlc": 0,
+     "offGrid": 0,
+     "future": 0,
+     "duplicates": 0,
+     "conflictingDuplicates": 0,
+     "nonMonotonicInput": 413834
+    },
+    "usable": true,
+    "usabilityFailed": [],
+    "devCandidates": 111,
+    "devEligibleScans": 475,
+    "pointInTime": true,
+    "included": true,
+    "reason": "USABLE_AND_MIN_HISTORY"
+   },
+   "ICP": {
+    "symbol": "ICP",
+    "product": "ICP-USD",
+    "firstValidDate": "2021-09-01",
+    "lastValidDate": "2026-09-26",
+    "coverage5m": 0.9887,
+    "coverageNative1h": 0.9994,
+    "coverageDaily": 1,
+    "missingMonths": [
+     "2023-08",
+     "2023-09",
+     "2023-10"
+    ],
+    "majorGaps": [
+     "2026-05-08T01:20 15.9h"
+    ],
+    "liquidity": {
+     "medianDailyNotionalUsd": 5206377.7056,
+     "lowNotionalDayShare": 0.0058
+    },
+    "listing": "joins at first eligible scan 2022-05-20",
+    "archiveIssues": {
+     "invalidOhlc": 0,
+     "offGrid": 0,
+     "future": 0,
+     "duplicates": 0,
+     "conflictingDuplicates": 0,
+     "nonMonotonicInput": 525573
+    },
+    "usable": false,
+    "usabilityFailed": [
+     "F1_5mCoverage"
+    ],
+    "devCandidates": 47,
+    "devEligibleScans": 201,
+    "pointInTime": true,
+    "included": false,
+    "reason": "NOT_USABLE: F1_5mCoverage"
+   },
+   "JASMY": {
+    "symbol": "JASMY",
+    "product": "JASMY-USD",
+    "firstValidDate": "2021-10-07",
+    "lastValidDate": "2026-09-26",
+    "coverage5m": 0.9481,
+    "coverageNative1h": 0.9996,
+    "coverageDaily": 1,
+    "missingMonths": [
+     "2023-09",
+     "2023-10",
+     "2024-01",
+     "2025-10",
+     "2025-11",
+     "2025-12",
+     "2026-01",
+     "2026-02",
+     "2026-03",
+     "2026-04",
+     "2026-05",
+     "2026-06",
+     "2026-07",
+     "2026-08",
+     "2026-09"
+    ],
+    "majorGaps": [
+     "2025-10-25T15:00 6.2h",
+     "2026-05-08T01:20 6.5h"
+    ],
+    "liquidity": {
+     "medianDailyNotionalUsd": 5617803.5298,
+     "lowNotionalDayShare": 0.0126
+    },
+    "listing": "joins at first eligible scan 2022-06-24",
+    "archiveIssues": {
+     "invalidOhlc": 0,
+     "offGrid": 0,
+     "future": 0,
+     "duplicates": 0,
+     "conflictingDuplicates": 0,
+     "nonMonotonicInput": 493882
+    },
+    "usable": false,
+    "usabilityFailed": [
+     "F1_5mCoverage"
+    ],
+    "devCandidates": 64,
+    "devEligibleScans": 249,
+    "pointInTime": true,
+    "included": false,
+    "reason": "NOT_USABLE: F1_5mCoverage"
+   },
+   "LINK": {
+    "symbol": "LINK",
+    "product": "LINK-USD",
+    "firstValidDate": "2021-09-01",
+    "lastValidDate": "2026-09-26",
+    "coverage5m": 0.9994,
+    "coverageNative1h": 0.9997,
+    "coverageDaily": 1,
+    "missingMonths": [],
+    "majorGaps": [
+     "2026-05-08T01:20 6.5h"
+    ],
+    "liquidity": {
+     "medianDailyNotionalUsd": 23073843.0418,
+     "lowNotionalDayShare": 0
+    },
+    "listing": "joins at first eligible scan 2022-05-30",
+    "archiveIssues": {
+     "invalidOhlc": 0,
+     "offGrid": 0,
+     "future": 0,
+     "duplicates": 0,
+     "conflictingDuplicates": 0,
+     "nonMonotonicInput": 531304
+    },
+    "usable": true,
+    "usabilityFailed": [],
+    "devCandidates": 206,
+    "devEligibleScans": 908,
+    "pointInTime": true,
+    "included": true,
+    "reason": "USABLE_AND_MIN_HISTORY"
+   },
+   "ONDO": {
+    "symbol": "ONDO",
+    "product": "ONDO-USD",
+    "firstValidDate": "2024-01-22",
+    "lastValidDate": "2026-09-26",
+    "coverage5m": 0.9991,
+    "coverageNative1h": 0.9996,
+    "coverageDaily": 1,
+    "missingMonths": [],
+    "majorGaps": [
+     "2026-05-08T01:20 6.5h"
+    ],
+    "liquidity": {
+     "medianDailyNotionalUsd": 17502035.788,
+     "lowNotionalDayShare": 0
+    },
+    "listing": "joins at first eligible scan 2024-10-08",
+    "archiveIssues": {
+     "invalidOhlc": 0,
+     "offGrid": 0,
+     "future": 0,
+     "duplicates": 0,
+     "conflictingDuplicates": 0,
+     "nonMonotonicInput": 280550
+    },
+    "usable": true,
+    "usabilityFailed": [],
+    "devCandidates": 69,
+    "devEligibleScans": 342,
+    "pointInTime": true,
+    "included": true,
+    "reason": "USABLE_AND_MIN_HISTORY"
+   },
+   "TIA": {
+    "symbol": "TIA",
+    "product": "TIA-USD",
+    "firstValidDate": "2023-11-01",
+    "lastValidDate": "2026-09-26",
+    "coverage5m": 0.9914,
+    "coverageNative1h": 0.9996,
+    "coverageDaily": 1,
+    "missingMonths": [
+     "2026-08"
+    ],
+    "majorGaps": [
+     "2025-10-25T15:05 6.1h",
+     "2026-05-08T01:20 6.5h"
+    ],
+    "liquidity": {
+     "medianDailyNotionalUsd": 6124277.6734,
+     "lowNotionalDayShare": 0.0013
+    },
+    "listing": "joins at first eligible scan 2024-11-24",
+    "archiveIssues": {
+     "invalidOhlc": 0,
+     "offGrid": 0,
+     "future": 0,
+     "duplicates": 0,
+     "conflictingDuplicates": 0,
+     "nonMonotonicInput": 301709
+    },
+    "usable": true,
+    "usabilityFailed": [],
+    "devCandidates": 18,
+    "devEligibleScans": 108,
+    "pointInTime": true,
+    "included": false,
+    "reason": "BELOW_MIN_DEV_CANDIDATES (18 < 30)"
+   },
+   "UNI": {
+    "symbol": "UNI",
+    "product": "UNI-USD",
+    "firstValidDate": "2021-09-01",
+    "lastValidDate": "2026-09-26",
+    "coverage5m": 0.9908,
+    "coverageNative1h": 0.9997,
+    "coverageDaily": 1,
+    "missingMonths": [
+     "2023-09",
+     "2023-10"
+    ],
+    "majorGaps": [
+     "2026-05-08T01:15 6.6h"
+    ],
+    "liquidity": {
+     "medianDailyNotionalUsd": 5281053.5346,
+     "lowNotionalDayShare": 0.0084
+    },
+    "listing": "joins at first eligible scan 2022-05-20",
+    "archiveIssues": {
+     "invalidOhlc": 0,
+     "offGrid": 0,
+     "future": 0,
+     "duplicates": 0,
+     "conflictingDuplicates": 0,
+     "nonMonotonicInput": 526712
+    },
+    "usable": true,
+    "usabilityFailed": [],
+    "devCandidates": 81,
+    "devEligibleScans": 315,
+    "pointInTime": true,
+    "included": true,
+    "reason": "USABLE_AND_MIN_HISTORY"
+   },
+   "XLM": {
+    "symbol": "XLM",
+    "product": "XLM-USD",
+    "firstValidDate": "2021-09-01",
+    "lastValidDate": "2026-09-26",
+    "coverage5m": 0.9995,
+    "coverageNative1h": 0.9997,
+    "coverageDaily": 1,
+    "missingMonths": [],
+    "majorGaps": [
+     "2026-05-08T01:20 6.5h"
+    ],
+    "liquidity": {
+     "medianDailyNotionalUsd": 10552301.5826,
+     "lowNotionalDayShare": 0
+    },
+    "listing": "joins at first eligible scan 2022-05-20",
+    "archiveIssues": {
+     "invalidOhlc": 0,
+     "offGrid": 0,
+     "future": 0,
+     "duplicates": 0,
+     "conflictingDuplicates": 0,
+     "nonMonotonicInput": 531310
+    },
+    "usable": true,
+    "usabilityFailed": [],
+    "devCandidates": 223,
+    "devEligibleScans": 1050,
+    "pointInTime": true,
+    "included": true,
+    "reason": "USABLE_AND_MIN_HISTORY"
+   }
+  },
+  "screen": {
+   "usdProducts": 488,
+   "passed": 15,
+   "failureCounts": {
+    "S5_liquidity": 354,
+    "S3_history": 199,
+    "S1_activeSpot": 95,
+    "S6_noStructuralBreak": 4,
+    "S2_notPeggedOrWrapped": 96,
+    "S4_dailyCoverage": 77
+   }
+  }
+ },
+ "diversityValue": {
+  "ADA": {
+   "candidates": 229,
+   "candidateScans": 203,
+   "newChoiceScans": 80,
+   "newChoiceShare": 0.3941,
+   "scansWithNoOldCandidate": 41,
+   "turnsIntoChoice": 57,
+   "addsNewDirection": 20,
+   "addsNewStrategy": 41,
+   "overlapWithOldAnyCandidate": 0.798,
+   "overlapWithOldSameDirection": 0.7044,
+   "directions": {
+    "short": 118,
+    "long": 111
+   },
+   "strategies": {
+    "TREND CONTINUATION": 156,
+    "BREAKOUT + RETEST": 37,
+    "MOMENTUM CONTINUATION": 12,
+    "LIQUIDITY-SWEEP REVERSAL": 20,
+    "MEAN REVERSION": 4
+   }
+  },
+  "AERO": {
+   "candidates": 40,
+   "candidateScans": 35,
+   "newChoiceScans": 16,
+   "newChoiceShare": 0.4571,
+   "scansWithNoOldCandidate": 10,
+   "turnsIntoChoice": 11,
+   "addsNewDirection": 5,
+   "addsNewStrategy": 6,
+   "overlapWithOldAnyCandidate": 0.7143,
+   "overlapWithOldSameDirection": 0.5714,
+   "directions": {
+    "short": 23,
+    "long": 17
+   },
+   "strategies": {
+    "TREND CONTINUATION": 29,
+    "LIQUIDITY-SWEEP REVERSAL": 4,
+    "BREAKOUT + RETEST": 1,
+    "MOMENTUM CONTINUATION": 5,
+    "MEAN REVERSION": 1
+   }
+  },
+  "AVAX": {
+   "candidates": 136,
+   "candidateScans": 117,
+   "newChoiceScans": 39,
+   "newChoiceShare": 0.3333,
+   "scansWithNoOldCandidate": 32,
+   "turnsIntoChoice": 28,
+   "addsNewDirection": 13,
+   "addsNewStrategy": 21,
+   "overlapWithOldAnyCandidate": 0.7265,
+   "overlapWithOldSameDirection": 0.6325,
+   "directions": {
+    "long": 65,
+    "short": 71
+   },
+   "strategies": {
+    "LIQUIDITY-SWEEP REVERSAL": 22,
+    "TREND CONTINUATION": 78,
+    "MOMENTUM CONTINUATION": 10,
+    "BREAKOUT + RETEST": 19,
+    "MEAN REVERSION": 7
+   }
+  },
+  "BCH": {
+   "candidates": 143,
+   "candidateScans": 127,
+   "newChoiceScans": 43,
+   "newChoiceShare": 0.3386,
+   "scansWithNoOldCandidate": 33,
+   "turnsIntoChoice": 30,
+   "addsNewDirection": 11,
+   "addsNewStrategy": 24,
+   "overlapWithOldAnyCandidate": 0.7402,
+   "overlapWithOldSameDirection": 0.6614,
+   "directions": {
+    "short": 80,
+    "long": 63
+   },
+   "strategies": {
+    "MEAN REVERSION": 4,
+    "TREND CONTINUATION": 79,
+    "LIQUIDITY-SWEEP REVERSAL": 29,
+    "BREAKOUT + RETEST": 26,
+    "MOMENTUM CONTINUATION": 5
+   }
+  },
+  "DOT": {
+   "candidates": 166,
+   "candidateScans": 145,
+   "newChoiceScans": 64,
+   "newChoiceShare": 0.4414,
+   "scansWithNoOldCandidate": 35,
+   "turnsIntoChoice": 47,
+   "addsNewDirection": 12,
+   "addsNewStrategy": 28,
+   "overlapWithOldAnyCandidate": 0.7586,
+   "overlapWithOldSameDirection": 0.6828,
+   "directions": {
+    "short": 75,
+    "long": 91
+   },
+   "strategies": {
+    "TREND CONTINUATION": 105,
+    "LIQUIDITY-SWEEP REVERSAL": 15,
+    "MOMENTUM CONTINUATION": 12,
+    "BREAKOUT + RETEST": 28,
+    "MEAN REVERSION": 6
+   }
+  },
+  "HBAR": {
+   "candidates": 111,
+   "candidateScans": 93,
+   "newChoiceScans": 27,
+   "newChoiceShare": 0.2903,
+   "scansWithNoOldCandidate": 27,
+   "turnsIntoChoice": 20,
+   "addsNewDirection": 6,
+   "addsNewStrategy": 16,
+   "overlapWithOldAnyCandidate": 0.7097,
+   "overlapWithOldSameDirection": 0.6559,
+   "directions": {
+    "short": 68,
+    "long": 43
+   },
+   "strategies": {
+    "TREND CONTINUATION": 71,
+    "BREAKOUT + RETEST": 13,
+    "LIQUIDITY-SWEEP REVERSAL": 11,
+    "MOMENTUM CONTINUATION": 10,
+    "MEAN REVERSION": 6
+   }
+  },
+  "LINK": {
+   "candidates": 206,
+   "candidateScans": 178,
+   "newChoiceScans": 65,
+   "newChoiceShare": 0.3652,
+   "scansWithNoOldCandidate": 42,
+   "turnsIntoChoice": 49,
+   "addsNewDirection": 19,
+   "addsNewStrategy": 30,
+   "overlapWithOldAnyCandidate": 0.764,
+   "overlapWithOldSameDirection": 0.6685,
+   "directions": {
+    "short": 92,
+    "long": 114
+   },
+   "strategies": {
+    "TREND CONTINUATION": 118,
+    "BREAKOUT + RETEST": 36,
+    "MOMENTUM CONTINUATION": 12,
+    "LIQUIDITY-SWEEP REVERSAL": 28,
+    "MEAN REVERSION": 12
+   }
+  },
+  "ONDO": {
+   "candidates": 69,
+   "candidateScans": 57,
+   "newChoiceScans": 25,
+   "newChoiceShare": 0.4386,
+   "scansWithNoOldCandidate": 10,
+   "turnsIntoChoice": 21,
+   "addsNewDirection": 4,
+   "addsNewStrategy": 11,
+   "overlapWithOldAnyCandidate": 0.8246,
+   "overlapWithOldSameDirection": 0.7895,
+   "directions": {
+    "short": 37,
+    "long": 32
+   },
+   "strategies": {
+    "BREAKOUT + RETEST": 7,
+    "LIQUIDITY-SWEEP REVERSAL": 13,
+    "TREND CONTINUATION": 42,
+    "MOMENTUM CONTINUATION": 5,
+    "MEAN REVERSION": 2
+   }
+  },
+  "TIA": {
+   "candidates": 18,
+   "candidateScans": 17,
+   "newChoiceScans": 7,
+   "newChoiceShare": 0.4118,
+   "scansWithNoOldCandidate": 4,
+   "turnsIntoChoice": 3,
+   "addsNewDirection": 4,
+   "addsNewStrategy": 2,
+   "overlapWithOldAnyCandidate": 0.7647,
+   "overlapWithOldSameDirection": 0.5294,
+   "directions": {
+    "short": 13,
+    "long": 5
+   },
+   "strategies": {
+    "TREND CONTINUATION": 10,
+    "BREAKOUT + RETEST": 5,
+    "LIQUIDITY-SWEEP REVERSAL": 2,
+    "MEAN REVERSION": 1
+   }
+  },
+  "UNI": {
+   "candidates": 81,
+   "candidateScans": 70,
+   "newChoiceScans": 23,
+   "newChoiceShare": 0.3286,
+   "scansWithNoOldCandidate": 13,
+   "turnsIntoChoice": 16,
+   "addsNewDirection": 10,
+   "addsNewStrategy": 15,
+   "overlapWithOldAnyCandidate": 0.8143,
+   "overlapWithOldSameDirection": 0.6857,
+   "directions": {
+    "short": 41,
+    "long": 40
+   },
+   "strategies": {
+    "MEAN REVERSION": 4,
+    "TREND CONTINUATION": 47,
+    "MOMENTUM CONTINUATION": 8,
+    "BREAKOUT + RETEST": 16,
+    "LIQUIDITY-SWEEP REVERSAL": 6
+   }
+  },
+  "XLM": {
+   "candidates": 223,
+   "candidateScans": 198,
+   "newChoiceScans": 74,
+   "newChoiceShare": 0.3737,
+   "scansWithNoOldCandidate": 37,
+   "turnsIntoChoice": 52,
+   "addsNewDirection": 23,
+   "addsNewStrategy": 36,
+   "overlapWithOldAnyCandidate": 0.8131,
+   "overlapWithOldSameDirection": 0.7071,
+   "directions": {
+    "short": 120,
+    "long": 103
+   },
+   "strategies": {
+    "LIQUIDITY-SWEEP REVERSAL": 27,
+    "TREND CONTINUATION": 149,
+    "BREAKOUT + RETEST": 32,
+    "MEAN REVERSION": 6,
+    "MOMENTUM CONTINUATION": 9
+   }
+  }
+ },
+ "dataset": {
+  "dataset_version": "HISTORICAL-RANK-V2-CLEAN-NATIVE-HTF-EXPANDED",
+  "generator_policy": "HISTORICAL-RANK-V2-CLEAN-NATIVE-HTF",
+  "label_version": "outcome-strict-v1",
+  "holdout": {
+   "id": "PHASE5-V1-HOLDOUT-2025-12-01",
+   "startMs": 1764547200000,
+   "devCutoffMs": 1763539200000,
+   "rule": "scan_timestamp >= startMs is holdout; development uses scan_timestamp < devCutoffMs only; consumption is one-shot with a pre-registered model hash"
+  },
+  "development_only": true,
+  "assets": [
+   "BTC",
+   "ETH",
+   "SOL",
+   "XRP",
+   "DOGE",
+   "LTC",
+   "ADA",
+   "AERO",
+   "AVAX",
+   "BCH",
+   "DOT",
+   "HBAR",
+   "LINK",
+   "ONDO",
+   "UNI",
+   "XLM"
+  ],
+  "candidates": 2796,
+  "scans": 856,
+  "candidates_sha256": "33dab8016e17f137149f3653326d2b52c682672fc667dd54372afc47552112a4",
+  "snapshots_sha256": "2c934347b492a6e5b5db6fdb67ef8c23fab620a116ea4db41fd32914ff72ac3e",
+  "per_asset": {
+   "UNI": 81,
+   "DOGE": 267,
+   "BCH": 148,
+   "ETH": 236,
+   "LTC": 290,
+   "XLM": 228,
+   "BTC": 220,
+   "SOL": 248,
+   "DOT": 166,
+   "LINK": 206,
+   "ADA": 232,
+   "AVAX": 136,
+   "HBAR": 113,
+   "XRP": 116,
+   "ONDO": 69,
+   "AERO": 40
+  },
+  "frozen_files_sha256": {
+   "quant-engine.js": "5a407644da29102d7734e8df238b51f8e7f91957ae626c328a8f461cbc6dec79",
+   "replay-engine.js": "3de128d23227d8e94be8be831ad0210641175c0ba4e4a730c7b118cb759b2dfd",
+   "research/historical-rank.js": "10f4d5d763cffdec7923a6f83c01f4101fa02860a9d2c587998a7b6b360a9ba6",
+   "research/historical-rank-v2-clean.js": "b822d103c55547718e6a2892ef4f9da4a901b93e7933a475a8cb86706a1fce49",
+   "research/candle-sequence.js": "37bb747447b317f85598c2bd579226e09d84c752a25bc827f16491cfec7d4484",
+   "research/rank-research-v2.js": "af273b5cb307207a4058f45bbf86b83ff3eb684a21d811b0f0057e72ef892965"
+  },
+  "archive": {
+   "old": {
+    "artifact_run": "36313185824",
+    "manifest": "research/data/v2-clean/candle-manifest.json"
+   },
+   "new": {
+    "ADA": {
+     "months": 61,
+     "content_sha256": "7cc4609f22a145f8399e77cbb9ff83bbcba6253e07ee8e1e9fc4802efaacab5f"
+    },
+    "AERO": {
+     "months": 61,
+     "content_sha256": "3656b222d33610db184288f9c15e7640d617a70cfc2064331a6772750c3dafd4"
+    },
+    "AVAX": {
+     "months": 61,
+     "content_sha256": "58c517923581f095ef5e5fcf65326de6e75c3f7c012f8ecbfef9bd6a9b898394"
+    },
+    "BCH": {
+     "months": 61,
+     "content_sha256": "263a30f9e13b73c9a892bd1cafaaa34dcab69764491f5da1d40aadbf9a52f3aa"
+    },
+    "DOT": {
+     "months": 61,
+     "content_sha256": "4fb7feeaff3d2a639f74c42789077d09144012a7b22df64a9a69703a66f45abb"
+    },
+    "HBAR": {
+     "months": 61,
+     "content_sha256": "098c67f774bc7bc69c30d18b829415af8ba171bff2955946dd02ed77c1af0916"
+    },
+    "LINK": {
+     "months": 61,
+     "content_sha256": "f4e33cb4ae1ba950f4f810f8b19c093e788e8f37503908847fdf6a83a51cbd01"
+    },
+    "ONDO": {
+     "months": 61,
+     "content_sha256": "98d2bff12872077c42e93f0b1fd3450d64fc0dc97276114d02fabbf0461bb3f8"
+    },
+    "UNI": {
+     "months": 61,
+     "content_sha256": "8e84e3144afd6851d3c45771083636b0bae928f536358a776689c1723dc728b3"
+    },
+    "XLM": {
+     "months": 61,
+     "content_sha256": "db9df3c19b715801118f668284b185796251d4608b2983e81cb8dd29d14c8160"
+    }
+   }
+  },
+  "generation": {
+   "candidatesAll": 2796,
+   "rankable": 2769,
+   "resolved": 2754,
+   "unresolved": {
+    "OUTCOME_CANDLE_MISSING": 15
+   },
+   "scansWithCandidate": 856
+  },
+  "parse": {
+   "OLD": {
+    "scanGroups": 659,
+    "choiceScans": 359,
+    "candidates": 1362,
+    "droppedStale": 0,
+    "droppedOther": 0
+   },
+   "EXPANDED": {
+    "scanGroups": 852,
+    "choiceScans": 609,
+    "candidates": 2754,
+    "droppedStale": 0,
+    "droppedOther": 42
+   }
+  }
+ },
+ "reproduction": {
+  "oldRows": 1362,
+  "matched": 1362,
+  "mismatches": 0,
+  "extraInExpanded": 0,
+  "examples": [],
+  "pass": true
+ },
+ "leakage": {
+  "noRowAtOrAfterDevCutoff": true,
+  "featuresCloseAtScan": true,
+  "labelWindowStartsAtScan": true,
+  "labelWindowBeforeHoldout": true,
+  "featureNamesPreEntry": true,
+  "pointInTimeRegeneration": {
+   "BTC": {
+    "sampled": 12,
+    "compared": 13,
+    "mismatches": 0
+   },
+   "ETH": {
+    "sampled": 12,
+    "compared": 13,
+    "mismatches": 0
+   },
+   "SOL": {
+    "sampled": 12,
+    "compared": 17,
+    "mismatches": 0
+   },
+   "XRP": {
+    "sampled": 12,
+    "compared": 14,
+    "mismatches": 0
+   },
+   "DOGE": {
+    "sampled": 12,
+    "compared": 15,
+    "mismatches": 0
+   },
+   "LTC": {
+    "sampled": 12,
+    "compared": 13,
+    "mismatches": 0
+   },
+   "ADA": {
+    "sampled": 12,
+    "compared": 13,
+    "mismatches": 0
+   },
+   "AERO": {
+    "sampled": 12,
+    "compared": 14,
+    "mismatches": 0
+   },
+   "AVAX": {
+    "sampled": 12,
+    "compared": 14,
+    "mismatches": 0
+   },
+   "BCH": {
+    "sampled": 12,
+    "compared": 14,
+    "mismatches": 0
+   },
+   "DOT": {
+    "sampled": 12,
+    "compared": 13,
+    "mismatches": 0
+   },
+   "HBAR": {
+    "sampled": 12,
+    "compared": 13,
+    "mismatches": 0
+   },
+   "LINK": {
+    "sampled": 12,
+    "compared": 13,
+    "mismatches": 0
+   },
+   "ONDO": {
+    "sampled": 12,
+    "compared": 16,
+    "mismatches": 0
+   },
+   "UNI": {
+    "sampled": 12,
+    "compared": 15,
+    "mismatches": 0
+   },
+   "XLM": {
+    "sampled": 12,
+    "compared": 12,
+    "mismatches": 0
+   }
+  },
+  "holdoutNeverResolved": "holdout and embargo scans are counted in the generator and never stored or resolved",
+  "d1": "SELECT-only, scan_timestamp < devCutoff in SQL",
+  "pass": true
+ },
+ "diversity": {
+  "OLD": {
+   "developmentScans": 659,
+   "choiceScans": 359,
+   "candidates": 1362,
+   "candidatesInChoiceScans": 1062,
+   "assets": {
+    "ETH": 236,
+    "DOGE": 260,
+    "LTC": 290,
+    "SOL": 246,
+    "BTC": 218,
+    "XRP": 112
+   },
+   "candidatesPerChoiceScan": {
+    "median": 3,
+    "p25": 2,
+    "p75": 3,
+    "max": 12,
+    "mean": 2.9582,
+    "histogram": {
+     "2": 174,
+     "3": 99,
+     "4": 44,
+     "5": 25,
+     "6": 11,
+     "7": 2,
+     "8+": 4
+    },
+    "shareExactly2": 0.4847
+   },
+   "assetsPerChoiceScan": {
+    "mean": 2.4652,
+    "median": 2
+   },
+   "directionsPerChoiceScan": {
+    "mean": 1.3482,
+    "shareBothDirections": 0.3482
+   },
+   "strategiesPerChoiceScan": {
+    "mean": 1.7465,
+    "shareOneStrategyOnly": 0.3872
+   },
+   "top2": {
+    "sameDirection": 0.805,
+    "sameAsset": 0.1866,
+    "sameStrategy": 0.5571
+   },
+   "withinScanOutcomeCorrelation": {
+    "crossAssetAllPairs": {
+     "pairs": 1153,
+     "correlation": 0.2436
+    },
+    "crossAssetSameDirection": {
+     "pairs": 862,
+     "correlation": 0.4889
+    },
+    "betweenScanVarianceShare": 0.497
+   },
+   "withinScanOutcomeDispersion": {
+    "medianSd": 0.6559,
+    "medianRange": 1.1348
+   }
+  },
+  "EXPANDED": {
+   "developmentScans": 852,
+   "choiceScans": 609,
+   "candidates": 2754,
+   "candidatesInChoiceScans": 2511,
+   "assets": {
+    "DOGE": 260,
+    "ETH": 236,
+    "BCH": 140,
+    "UNI": 77,
+    "LTC": 290,
+    "XLM": 222,
+    "SOL": 246,
+    "BTC": 218,
+    "ADA": 229,
+    "DOT": 165,
+    "LINK": 205,
+    "AVAX": 135,
+    "HBAR": 111,
+    "XRP": 112,
+    "ONDO": 69,
+    "AERO": 39
+   },
+   "candidatesPerChoiceScan": {
+    "median": 3,
+    "p25": 2,
+    "p75": 5,
+    "max": 20,
+    "mean": 4.1232,
+    "histogram": {
+     "2": 206,
+     "3": 114,
+     "4": 105,
+     "5": 56,
+     "6": 47,
+     "7": 23,
+     "8+": 58
+    },
+    "shareExactly2": 0.3383
+   },
+   "assetsPerChoiceScan": {
+    "mean": 3.5353,
+    "median": 3
+   },
+   "directionsPerChoiceScan": {
+    "mean": 1.399,
+    "shareBothDirections": 0.399
+   },
+   "strategiesPerChoiceScan": {
+    "mean": 1.844,
+    "shareOneStrategyOnly": 0.3711
+   },
+   "top2": {
+    "sameDirection": 0.8144,
+    "sameAsset": 0.1199,
+    "sameStrategy": 0.5961
+   },
+   "withinScanOutcomeCorrelation": {
+    "crossAssetAllPairs": {
+     "pairs": 5702,
+     "correlation": 0.2726
+    },
+    "crossAssetSameDirection": {
+     "pairs": 4305,
+     "correlation": 0.4732
+    },
+    "betweenScanVarianceShare": 0.4361
+   },
+   "withinScanOutcomeDispersion": {
+    "medianSd": 0.7616,
+    "medianRange": 1.5742
+   }
+  }
+ },
+ "redundancy": {
+  "perAsset": {
+   "BTC": {
+    "level": "MEDIUM",
+    "nearestByDailyReturn": {
+     "asset": "ETH",
+     "dailyReturnCorr": 0.8363,
+     "sameDirectionOutcomeCorr": 0.7109,
+     "activationJaccard": 0.1935
+    },
+    "maxSameDirectionOutcomeCorr": {
+     "asset": "ETH",
+     "corr": 0.7109,
+     "pairs": 73
+    },
+    "meanDailyReturnCorr": 0.6696,
+    "meanActivationJaccard": 0.127
+   },
+   "ETH": {
+    "level": "MEDIUM",
+    "nearestByDailyReturn": {
+     "asset": "BTC",
+     "dailyReturnCorr": 0.8363,
+     "sameDirectionOutcomeCorr": 0.7109,
+     "activationJaccard": 0.1935
+    },
+    "maxSameDirectionOutcomeCorr": {
+     "asset": "BTC",
+     "corr": 0.7109,
+     "pairs": 73
+    },
+    "meanDailyReturnCorr": 0.6969,
+    "meanActivationJaccard": 0.139
+   },
+   "SOL": {
+    "level": "MEDIUM",
+    "nearestByDailyReturn": {
+     "asset": "AVAX",
+     "dailyReturnCorr": 0.7479,
+     "sameDirectionOutcomeCorr": 0.4933,
+     "activationJaccard": 0.1047
+    },
+    "maxSameDirectionOutcomeCorr": {
+     "asset": "DOGE",
+     "corr": 0.6631,
+     "pairs": 72
+    },
+    "meanDailyReturnCorr": 0.6293,
+    "meanActivationJaccard": 0.1282
+   },
+   "XRP": {
+    "level": "MEDIUM",
+    "nearestByDailyReturn": {
+     "asset": "XLM",
+     "dailyReturnCorr": 0.7734,
+     "sameDirectionOutcomeCorr": 0.8193,
+     "activationJaccard": 0.1462
+    },
+    "maxSameDirectionOutcomeCorr": {
+     "asset": "XLM",
+     "corr": 0.8193,
+     "pairs": 53
+    },
+    "meanDailyReturnCorr": 0.5938,
+    "meanActivationJaccard": 0.1042
+   },
+   "DOGE": {
+    "level": "MEDIUM",
+    "nearestByDailyReturn": {
+     "asset": "ETH",
+     "dailyReturnCorr": 0.7219,
+     "sameDirectionOutcomeCorr": 0.4294,
+     "activationJaccard": 0.1983
+    },
+    "maxSameDirectionOutcomeCorr": {
+     "asset": "HBAR",
+     "corr": 0.693,
+     "pairs": 54
+    },
+    "meanDailyReturnCorr": 0.6361,
+    "meanActivationJaccard": 0.1475
+   },
+   "LTC": {
+    "level": "MEDIUM",
+    "nearestByDailyReturn": {
+     "asset": "DOT",
+     "dailyReturnCorr": 0.7402,
+     "sameDirectionOutcomeCorr": 0.4956,
+     "activationJaccard": 0.1343
+    },
+    "maxSameDirectionOutcomeCorr": {
+     "asset": "UNI",
+     "corr": 0.6464,
+     "pairs": 21
+    },
+    "meanDailyReturnCorr": 0.6392,
+    "meanActivationJaccard": 0.1315
+   },
+   "ADA": {
+    "level": "MEDIUM",
+    "nearestByDailyReturn": {
+     "asset": "DOT",
+     "dailyReturnCorr": 0.7784,
+     "sameDirectionOutcomeCorr": 0.6572,
+     "activationJaccard": 0.1605
+    },
+    "maxSameDirectionOutcomeCorr": {
+     "asset": "HBAR",
+     "corr": 0.8168,
+     "pairs": 36
+    },
+    "meanDailyReturnCorr": 0.6825,
+    "meanActivationJaccard": 0.1393
+   },
+   "AERO": {
+    "level": "LOW",
+    "nearestByDailyReturn": {
+     "asset": "ETH",
+     "dailyReturnCorr": 0.5815,
+     "sameDirectionOutcomeCorr": null,
+     "activationJaccard": 0.0531
+    },
+    "maxSameDirectionOutcomeCorr": null,
+    "meanDailyReturnCorr": 0.4819,
+    "meanActivationJaccard": 0.0466
+   },
+   "AVAX": {
+    "level": "MEDIUM",
+    "nearestByDailyReturn": {
+     "asset": "DOT",
+     "dailyReturnCorr": 0.7736,
+     "sameDirectionOutcomeCorr": 0.5064,
+     "activationJaccard": 0.1255
+    },
+    "maxSameDirectionOutcomeCorr": {
+     "asset": "ADA",
+     "corr": 0.7669,
+     "pairs": 46
+    },
+    "meanDailyReturnCorr": 0.6654,
+    "meanActivationJaccard": 0.105
+   },
+   "BCH": {
+    "level": "MEDIUM",
+    "nearestByDailyReturn": {
+     "asset": "LTC",
+     "dailyReturnCorr": 0.7068,
+     "sameDirectionOutcomeCorr": 0.4815,
+     "activationJaccard": 0.1287
+    },
+    "maxSameDirectionOutcomeCorr": {
+     "asset": "LINK",
+     "corr": 0.7118,
+     "pairs": 37
+    },
+    "meanDailyReturnCorr": 0.5879,
+    "meanActivationJaccard": 0.1096
+   },
+   "DOT": {
+    "level": "MEDIUM",
+    "nearestByDailyReturn": {
+     "asset": "LINK",
+     "dailyReturnCorr": 0.7872,
+     "sameDirectionOutcomeCorr": 0.6017,
+     "activationJaccard": 0.163
+    },
+    "maxSameDirectionOutcomeCorr": {
+     "asset": "ETH",
+     "corr": 0.6985,
+     "pairs": 40
+    },
+    "meanDailyReturnCorr": 0.6992,
+    "meanActivationJaccard": 0.1124
+   },
+   "HBAR": {
+    "level": "MEDIUM",
+    "nearestByDailyReturn": {
+     "asset": "DOT",
+     "dailyReturnCorr": 0.6367,
+     "sameDirectionOutcomeCorr": 0.3874,
+     "activationJaccard": 0.1023
+    },
+    "maxSameDirectionOutcomeCorr": {
+     "asset": "ADA",
+     "corr": 0.8168,
+     "pairs": 36
+    },
+    "meanDailyReturnCorr": 0.5536,
+    "meanActivationJaccard": 0.0868
+   },
+   "LINK": {
+    "level": "MEDIUM",
+    "nearestByDailyReturn": {
+     "asset": "DOT",
+     "dailyReturnCorr": 0.7872,
+     "sameDirectionOutcomeCorr": 0.6017,
+     "activationJaccard": 0.163
+    },
+    "maxSameDirectionOutcomeCorr": {
+     "asset": "HBAR",
+     "corr": 0.7342,
+     "pairs": 23
+    },
+    "meanDailyReturnCorr": 0.6776,
+    "meanActivationJaccard": 0.1348
+   },
+   "ONDO": {
+    "level": "MEDIUM",
+    "nearestByDailyReturn": {
+     "asset": "LINK",
+     "dailyReturnCorr": 0.6544,
+     "sameDirectionOutcomeCorr": 0.4928,
+     "activationJaccard": 0.1038
+    },
+    "maxSameDirectionOutcomeCorr": {
+     "asset": "ADA",
+     "corr": 0.6569,
+     "pairs": 23
+    },
+    "meanDailyReturnCorr": 0.5763,
+    "meanActivationJaccard": 0.08
+   },
+   "UNI": {
+    "level": "MEDIUM",
+    "nearestByDailyReturn": {
+     "asset": "ETH",
+     "dailyReturnCorr": 0.7401,
+     "sameDirectionOutcomeCorr": -0.0863,
+     "activationJaccard": 0.0843
+    },
+    "maxSameDirectionOutcomeCorr": {
+     "asset": "DOGE",
+     "corr": 0.6784,
+     "pairs": 22
+    },
+    "meanDailyReturnCorr": 0.6182,
+    "meanActivationJaccard": 0.0745
+   },
+   "XLM": {
+    "level": "MEDIUM",
+    "nearestByDailyReturn": {
+     "asset": "XRP",
+     "dailyReturnCorr": 0.7734,
+     "sameDirectionOutcomeCorr": 0.8193,
+     "activationJaccard": 0.1462
+    },
+    "maxSameDirectionOutcomeCorr": {
+     "asset": "XRP",
+     "corr": 0.8193,
+     "pairs": 53
+    },
+    "meanDailyReturnCorr": 0.6065,
+    "meanActivationJaccard": 0.1378
+   }
+  },
+  "pairs": {
+   "BTC|ETH": {
+    "dailyReturnCorr": 0.8363,
+    "overlapDays": 1539,
+    "candidateOutcomeCorr": 0.4763,
+    "candidatePairs": 93,
+    "sameDirectionOutcomeCorr": 0.7109,
+    "sameDirectionPairs": 73,
+    "activationJaccard": 0.1935
+   },
+   "BTC|SOL": {
+    "dailyReturnCorr": 0.7133,
+    "overlapDays": 1539,
+    "candidateOutcomeCorr": 0.1606,
+    "candidatePairs": 88,
+    "sameDirectionOutcomeCorr": 0.6213,
+    "sameDirectionPairs": 60,
+    "activationJaccard": 0.1758
+   },
+   "BTC|XRP": {
+    "dailyReturnCorr": 0.5935,
+    "overlapDays": 859,
+    "candidateOutcomeCorr": -0.0736,
+    "candidatePairs": 34,
+    "sameDirectionOutcomeCorr": 0.017,
+    "sameDirectionPairs": 27,
+    "activationJaccard": 0.0996
+   },
+   "BTC|DOGE": {
+    "dailyReturnCorr": 0.7152,
+    "overlapDays": 1539,
+    "candidateOutcomeCorr": 0.3206,
+    "candidatePairs": 89,
+    "sameDirectionOutcomeCorr": 0.5001,
+    "sameDirectionPairs": 64,
+    "activationJaccard": 0.192
+   },
+   "BTC|LTC": {
+    "dailyReturnCorr": 0.69,
+    "overlapDays": 1539,
+    "candidateOutcomeCorr": 0.375,
+    "candidatePairs": 77,
+    "sameDirectionOutcomeCorr": 0.4774,
+    "sameDirectionPairs": 56,
+    "activationJaccard": 0.1538
+   },
+   "BTC|DOT": {
+    "dailyReturnCorr": 0.7203,
+    "overlapDays": 1539,
+    "candidateOutcomeCorr": 0.0417,
+    "candidatePairs": 39,
+    "sameDirectionOutcomeCorr": 0.2581,
+    "sameDirectionPairs": 26,
+    "activationJaccard": 0.1
+   },
+   "BTC|HBAR": {
+    "dailyReturnCorr": 0.5543,
+    "overlapDays": 1132,
+    "candidateOutcomeCorr": 0.1484,
+    "candidatePairs": 23,
+    "sameDirectionOutcomeCorr": null,
+    "sameDirectionPairs": 19,
+    "activationJaccard": 0.0623
+   },
+   "BTC|LINK": {
+    "dailyReturnCorr": 0.7007,
+    "overlapDays": 1539,
+    "candidateOutcomeCorr": 0.1679,
+    "candidatePairs": 66,
+    "sameDirectionOutcomeCorr": 0.3284,
+    "sameDirectionPairs": 43,
+    "activationJaccard": 0.1508
+   },
+   "BTC|ONDO": {
+    "dailyReturnCorr": 0.6035,
+    "overlapDays": 666,
+    "candidateOutcomeCorr": 0.5856,
+    "candidatePairs": 20,
+    "sameDirectionOutcomeCorr": null,
+    "sameDirectionPairs": 16,
+    "activationJaccard": 0.0628
+   },
+   "BTC|UNI": {
+    "dailyReturnCorr": 0.6495,
+    "overlapDays": 1539,
+    "candidateOutcomeCorr": -0.0565,
+    "candidatePairs": 32,
+    "sameDirectionOutcomeCorr": 0.0117,
+    "sameDirectionPairs": 24,
+    "activationJaccard": 0.1144
+   },
+   "BTC|XLM": {
+    "dailyReturnCorr": 0.6147,
+    "overlapDays": 1539,
+    "candidateOutcomeCorr": 0.1629,
+    "candidatePairs": 75,
+    "sameDirectionOutcomeCorr": 0.3347,
+    "sameDirectionPairs": 52,
+    "activationJaccard": 0.1726
+   },
+   "ETH|SOL": {
+    "dailyReturnCorr": 0.7282,
+    "overlapDays": 1539,
+    "candidateOutcomeCorr": 0.3554,
+    "candidatePairs": 85,
+    "sameDirectionOutcomeCorr": 0.6374,
+    "sameDirectionPairs": 61,
+    "activationJaccard": 0.169
+   },
+   "ETH|XRP": {
+    "dailyReturnCorr": 0.6013,
+    "overlapDays": 859,
+    "candidateOutcomeCorr": 0.0545,
+    "candidatePairs": 44,
+    "sameDirectionOutcomeCorr": 0.2791,
+    "sameDirectionPairs": 36,
+    "activationJaccard": 0.1051
+   },
+   "ETH|LTC": {
+    "dailyReturnCorr": 0.7223,
+    "overlapDays": 1539,
+    "candidateOutcomeCorr": 0.0836,
+    "candidatePairs": 113,
+    "sameDirectionOutcomeCorr": 0.3463,
+    "sameDirectionPairs": 76,
+    "activationJaccard": 0.1901
+   },
+   "ETH|HBAR": {
+    "dailyReturnCorr": 0.5682,
+    "overlapDays": 1132,
+    "candidateOutcomeCorr": -0.0931,
+    "candidatePairs": 40,
+    "sameDirectionOutcomeCorr": 0.1433,
+    "sameDirectionPairs": 32,
+    "activationJaccard": 0.0919
+   },
+   "ETH|LINK": {
+    "dailyReturnCorr": 0.7605,
+    "overlapDays": 1539,
+    "candidateOutcomeCorr": 0.27,
+    "candidatePairs": 76,
+    "sameDirectionOutcomeCorr": 0.3782,
+    "sameDirectionPairs": 60,
+    "activationJaccard": 0.1581
+   },
+   "ETH|ONDO": {
+    "dailyReturnCorr": 0.645,
+    "overlapDays": 666,
+    "candidateOutcomeCorr": 0.18,
+    "candidatePairs": 29,
+    "sameDirectionOutcomeCorr": 0.2179,
+    "sameDirectionPairs": 21,
+    "activationJaccard": 0.0741
+   },
+   "ETH|UNI": {
+    "dailyReturnCorr": 0.7401,
+    "overlapDays": 1539,
+    "candidateOutcomeCorr": -0.0539,
+    "candidatePairs": 32,
+    "sameDirectionOutcomeCorr": -0.0863,
+    "sameDirectionPairs": 25,
+    "activationJaccard": 0.0843
+   },
+   "ETH|XLM": {
+    "dailyReturnCorr": 0.6297,
+    "overlapDays": 1539,
+    "candidateOutcomeCorr": 0.0127,
+    "candidatePairs": 90,
+    "sameDirectionOutcomeCorr": 0.1842,
+    "sameDirectionPairs": 61,
+    "activationJaccard": 0.1829
+   },
+   "SOL|XRP": {
+    "dailyReturnCorr": 0.5567,
+    "overlapDays": 859,
+    "candidateOutcomeCorr": 0.2314,
+    "candidatePairs": 43,
+    "sameDirectionOutcomeCorr": 0.3372,
+    "sameDirectionPairs": 39,
+    "activationJaccard": 0.1064
+   },
+   "SOL|UNI": {
+    "dailyReturnCorr": 0.6107,
+    "overlapDays": 1539,
+    "candidateOutcomeCorr": -0.3713,
+    "candidatePairs": 37,
+    "sameDirectionOutcomeCorr": -0.4406,
+    "sameDirectionPairs": 25,
+    "activationJaccard": 0.0736
+   },
+   "SOL|XLM": {
+    "dailyReturnCorr": 0.5602,
+    "overlapDays": 1539,
+    "candidateOutcomeCorr": 0.1634,
+    "candidatePairs": 92,
+    "sameDirectionOutcomeCorr": 0.325,
+    "sameDirectionPairs": 71,
+    "activationJaccard": 0.1826
+   },
+   "DOGE|ETH": {
+    "dailyReturnCorr": 0.7219,
+    "overlapDays": 1539,
+    "candidateOutcomeCorr": 0.1709,
+    "candidatePairs": 103,
+    "sameDirectionOutcomeCorr": 0.4294,
+    "sameDirectionPairs": 78,
+    "activationJaccard": 0.1983
+   },
+   "DOGE|SOL": {
+    "dailyReturnCorr": 0.6231,
+    "overlapDays": 1539,
+    "candidateOutcomeCorr": 0.3554,
+    "candidatePairs": 89,
+    "sameDirectionOutcomeCorr": 0.6631,
+    "sameDirectionPairs": 72,
+    "activationJaccard": 0.1846
+   },
+   "DOGE|XRP": {
+    "dailyReturnCorr": 0.6058,
+    "overlapDays": 859,
+    "candidateOutcomeCorr": 0.2017,
+    "candidatePairs": 45,
+    "sameDirectionOutcomeCorr": 0.3902,
+    "sameDirectionPairs": 38,
+    "activationJaccard": 0.0997
+   },
+   "DOGE|LTC": {
+    "dailyReturnCorr": 0.6441,
+    "overlapDays": 1539,
+    "candidateOutcomeCorr": 0.3571,
+    "candidatePairs": 118,
+    "sameDirectionOutcomeCorr": 0.604,
+    "sameDirectionPairs": 89,
+    "activationJaccard": 0.198
+   },
+   "DOGE|DOT": {
+    "dailyReturnCorr": 0.6945,
+    "overlapDays": 1539,
+    "candidateOutcomeCorr": 0.3666,
+    "candidatePairs": 77,
+    "sameDirectionOutcomeCorr": 0.5864,
+    "sameDirectionPairs": 62,
+    "activationJaccard": 0.171
+   },
+   "DOGE|HBAR": {
+    "dailyReturnCorr": 0.5218,
+    "overlapDays": 1132,
+    "candidateOutcomeCorr": 0.5936,
+    "candidatePairs": 58,
+    "sameDirectionOutcomeCorr": 0.693,
+    "sameDirectionPairs": 54,
+    "activationJaccard": 0.1143
+   },
+   "DOGE|LINK": {
+    "dailyReturnCorr": 0.6466,
+    "overlapDays": 1539,
+    "candidateOutcomeCorr": 0.4614,
+    "candidatePairs": 99,
+    "sameDirectionOutcomeCorr": 0.6142,
+    "sameDirectionPairs": 78,
+    "activationJaccard": 0.1928
+   },
+   "DOGE|ONDO": {
+    "dailyReturnCorr": 0.6157,
+    "overlapDays": 666,
+    "candidateOutcomeCorr": 0.1522,
+    "candidatePairs": 37,
+    "sameDirectionOutcomeCorr": 0.3155,
+    "sameDirectionPairs": 30,
+    "activationJaccard": 0.0781
+   },
+   "DOGE|UNI": {
+    "dailyReturnCorr": 0.6314,
+    "overlapDays": 1539,
+    "candidateOutcomeCorr": 0.1534,
+    "candidatePairs": 31,
+    "sameDirectionOutcomeCorr": 0.6784,
+    "sameDirectionPairs": 22,
+    "activationJaccard": 0.0795
+   },
+   "DOGE|XLM": {
+    "dailyReturnCorr": 0.591,
+    "overlapDays": 1539,
+    "candidateOutcomeCorr": 0.1513,
+    "candidatePairs": 93,
+    "sameDirectionOutcomeCorr": 0.28,
+    "sameDirectionPairs": 71,
+    "activationJaccard": 0.1785
+   },
+   "LTC|SOL": {
+    "dailyReturnCorr": 0.6086,
+    "overlapDays": 1539,
+    "candidateOutcomeCorr": 0.1323,
+    "candidatePairs": 82,
+    "sameDirectionOutcomeCorr": 0.302,
+    "sameDirectionPairs": 54,
+    "activationJaccard": 0.1429
+   },
+   "LTC|XRP": {
+    "dailyReturnCorr": 0.6434,
+    "overlapDays": 859,
+    "candidateOutcomeCorr": 0.3117,
+    "candidatePairs": 50,
+    "sameDirectionOutcomeCorr": 0.5401,
+    "sameDirectionPairs": 39,
+    "activationJaccard": 0.0994
+   },
+   "LTC|ONDO": {
+    "dailyReturnCorr": 0.5166,
+    "overlapDays": 666,
+    "candidateOutcomeCorr": 0.4254,
+    "candidatePairs": 25,
+    "sameDirectionOutcomeCorr": 0.6012,
+    "sameDirectionPairs": 20,
+    "activationJaccard": 0.0508
+   },
+   "LTC|UNI": {
+    "dailyReturnCorr": 0.6425,
+    "overlapDays": 1539,
+    "candidateOutcomeCorr": 0.2303,
+    "candidatePairs": 31,
+    "sameDirectionOutcomeCorr": 0.6464,
+    "sameDirectionPairs": 21,
+    "activationJaccard": 0.0669
+   },
+   "LTC|XLM": {
+    "dailyReturnCorr": 0.6462,
+    "overlapDays": 1539,
+    "candidateOutcomeCorr": 0.3444,
+    "candidatePairs": 105,
+    "sameDirectionOutcomeCorr": 0.59,
+    "sameDirectionPairs": 75,
+    "activationJaccard": 0.2
+   },
+   "ADA|BTC": {
+    "dailyReturnCorr": 0.7161,
+    "overlapDays": 1539,
+    "candidateOutcomeCorr": 0.2472,
+    "candidatePairs": 81,
+    "sameDirectionOutcomeCorr": 0.4261,
+    "sameDirectionPairs": 60,
+    "activationJaccard": 0.1696
+   },
+   "ADA|ETH": {
+    "dailyReturnCorr": 0.7408,
+    "overlapDays": 1539,
+    "candidateOutcomeCorr": 0.2792,
+    "candidatePairs": 98,
+    "sameDirectionOutcomeCorr": 0.546,
+    "sameDirectionPairs": 73,
+    "activationJaccard": 0.2006
+   },
+   "ADA|SOL": {
+    "dailyReturnCorr": 0.6945,
+    "overlapDays": 1539,
+    "candidateOutcomeCorr": 0.2614,
+    "candidatePairs": 88,
+    "sameDirectionOutcomeCorr": 0.4625,
+    "sameDirectionPairs": 68,
+    "activationJaccard": 0.1695
+   },
+   "ADA|XRP": {
+    "dailyReturnCorr": 0.7334,
+    "overlapDays": 859,
+    "candidateOutcomeCorr": 0.3022,
+    "candidatePairs": 36,
+    "sameDirectionOutcomeCorr": 0.6471,
+    "sameDirectionPairs": 27,
+    "activationJaccard": 0.0896
+   },
+   "ADA|DOGE": {
+    "dailyReturnCorr": 0.6981,
+    "overlapDays": 1539,
+    "candidateOutcomeCorr": 0.1171,
+    "candidatePairs": 111,
+    "sameDirectionOutcomeCorr": 0.201,
+    "sameDirectionPairs": 92,
+    "activationJaccard": 0.2023
+   },
+   "ADA|LTC": {
+    "dailyReturnCorr": 0.6841,
+    "overlapDays": 1539,
+    "candidateOutcomeCorr": 0.0928,
+    "candidatePairs": 105,
+    "sameDirectionOutcomeCorr": 0.396,
+    "sameDirectionPairs": 78,
+    "activationJaccard": 0.1969
+   },
+   "ADA|AERO": {
+    "dailyReturnCorr": 0.5127,
+    "overlapDays": 651,
+    "candidateOutcomeCorr": null,
+    "candidatePairs": 15,
+    "sameDirectionOutcomeCorr": null,
+    "sameDirectionPairs": 11,
+    "activationJaccard": 0.0349
+   },
+   "ADA|AVAX": {
+    "dailyReturnCorr": 0.7312,
+    "overlapDays": 1510,
+    "candidateOutcomeCorr": 0.6089,
+    "candidatePairs": 58,
+    "sameDirectionOutcomeCorr": 0.7669,
+    "sameDirectionPairs": 46,
+    "activationJaccard": 0.1393
+   },
+   "ADA|BCH": {
+    "dailyReturnCorr": 0.6185,
+    "overlapDays": 1539,
+    "candidateOutcomeCorr": 0.4935,
+    "candidatePairs": 51,
+    "sameDirectionOutcomeCorr": 0.7057,
+    "sameDirectionPairs": 39,
+    "activationJaccard": 0.1085
+   },
+   "ADA|DOT": {
+    "dailyReturnCorr": 0.7784,
+    "overlapDays": 1539,
+    "candidateOutcomeCorr": 0.3844,
+    "candidatePairs": 65,
+    "sameDirectionOutcomeCorr": 0.6572,
+    "sameDirectionPairs": 56,
+    "activationJaccard": 0.1605
+   },
+   "ADA|HBAR": {
+    "dailyReturnCorr": 0.6021,
+    "overlapDays": 1132,
+    "candidateOutcomeCorr": 0.5541,
+    "candidatePairs": 43,
+    "sameDirectionOutcomeCorr": 0.8168,
+    "sameDirectionPairs": 36,
+    "activationJaccard": 0.0923
+   },
+   "ADA|LINK": {
+    "dailyReturnCorr": 0.7432,
+    "overlapDays": 1539,
+    "candidateOutcomeCorr": 0.4752,
+    "candidatePairs": 79,
+    "sameDirectionOutcomeCorr": 0.5617,
+    "sameDirectionPairs": 65,
+    "activationJaccard": 0.1838
+   },
+   "ADA|ONDO": {
+    "dailyReturnCorr": 0.6052,
+    "overlapDays": 666,
+    "candidateOutcomeCorr": 0.5731,
+    "candidatePairs": 30,
+    "sameDirectionOutcomeCorr": 0.6569,
+    "sameDirectionPairs": 23,
+    "activationJaccard": 0.0788
+   },
+   "ADA|UNI": {
+    "dailyReturnCorr": 0.6676,
+    "overlapDays": 1539,
+    "candidateOutcomeCorr": -0.0057,
+    "candidatePairs": 27,
+    "sameDirectionOutcomeCorr": 0.3273,
+    "sameDirectionPairs": 20,
+    "activationJaccard": 0.076
+   },
+   "ADA|XLM": {
+    "dailyReturnCorr": 0.7115,
+    "overlapDays": 1539,
+    "candidateOutcomeCorr": 0.464,
+    "candidatePairs": 91,
+    "sameDirectionOutcomeCorr": 0.6741,
+    "sameDirectionPairs": 71,
+    "activationJaccard": 0.1869
+   },
+   "AERO|BTC": {
+    "dailyReturnCorr": 0.5409,
+    "overlapDays": 651,
+    "candidateOutcomeCorr": null,
+    "candidatePairs": 7,
+    "sameDirectionOutcomeCorr": null,
+    "sameDirectionPairs": 4,
+    "activationJaccard": 0.0221
+   },
+   "AERO|ETH": {
+    "dailyReturnCorr": 0.5815,
+    "overlapDays": 651,
+    "candidateOutcomeCorr": null,
+    "candidatePairs": 19,
+    "sameDirectionOutcomeCorr": null,
+    "sameDirectionPairs": 13,
+    "activationJaccard": 0.0531
+   },
+   "AERO|SOL": {
+    "dailyReturnCorr": 0.5152,
+    "overlapDays": 651,
+    "candidateOutcomeCorr": null,
+    "candidatePairs": 11,
+    "sameDirectionOutcomeCorr": null,
+    "sameDirectionPairs": 7,
+    "activationJaccard": 0.0294
+   },
+   "AERO|XRP": {
+    "dailyReturnCorr": 0.4007,
+    "overlapDays": 651,
+    "candidateOutcomeCorr": null,
+    "candidatePairs": 17,
+    "sameDirectionOutcomeCorr": null,
+    "sameDirectionPairs": 12,
+    "activationJaccard": 0.0887
+   },
+   "AERO|DOGE": {
+    "dailyReturnCorr": 0.5494,
+    "overlapDays": 651,
+    "candidateOutcomeCorr": null,
+    "candidatePairs": 15,
+    "sameDirectionOutcomeCorr": null,
+    "sameDirectionPairs": 11,
+    "activationJaccard": 0.0327
+   },
+   "AERO|LTC": {
+    "dailyReturnCorr": 0.4277,
+    "overlapDays": 651,
+    "candidateOutcomeCorr": null,
+    "candidatePairs": 16,
+    "sameDirectionOutcomeCorr": null,
+    "sameDirectionPairs": 9,
+    "activationJaccard": 0.0361
+   },
+   "AERO|AVAX": {
+    "dailyReturnCorr": 0.5221,
+    "overlapDays": 651,
+    "candidateOutcomeCorr": null,
+    "candidatePairs": 3,
+    "sameDirectionOutcomeCorr": null,
+    "sameDirectionPairs": 2,
+    "activationJaccard": 0.0204
+   },
+   "AERO|BCH": {
+    "dailyReturnCorr": 0.387,
+    "overlapDays": 651,
+    "candidateOutcomeCorr": null,
+    "candidatePairs": 7,
+    "sameDirectionOutcomeCorr": null,
+    "sameDirectionPairs": 5,
+    "activationJaccard": 0.0395
+   },
+   "AERO|DOT": {
+    "dailyReturnCorr": 0.5233,
+    "overlapDays": 651,
+    "candidateOutcomeCorr": null,
+    "candidatePairs": 10,
+    "sameDirectionOutcomeCorr": null,
+    "sameDirectionPairs": 7,
+    "activationJaccard": 0.0289
+   },
+   "AERO|HBAR": {
+    "dailyReturnCorr": 0.3766,
+    "overlapDays": 651,
+    "candidateOutcomeCorr": null,
+    "candidatePairs": 8,
+    "sameDirectionOutcomeCorr": null,
+    "sameDirectionPairs": 8,
+    "activationJaccard": 0.041
+   },
+   "AERO|LINK": {
+    "dailyReturnCorr": 0.523,
+    "overlapDays": 651,
+    "candidateOutcomeCorr": null,
+    "candidatePairs": 15,
+    "sameDirectionOutcomeCorr": null,
+    "sameDirectionPairs": 12,
+    "activationJaccard": 0.0498
+   },
+   "AERO|ONDO": {
+    "dailyReturnCorr": 0.5022,
+    "overlapDays": 651,
+    "candidateOutcomeCorr": null,
+    "candidatePairs": 11,
+    "sameDirectionOutcomeCorr": null,
+    "sameDirectionPairs": 7,
+    "activationJaccard": 0.0833
+   },
+   "AERO|UNI": {
+    "dailyReturnCorr": 0.4984,
+    "overlapDays": 651,
+    "candidateOutcomeCorr": null,
+    "candidatePairs": 17,
+    "sameDirectionOutcomeCorr": null,
+    "sameDirectionPairs": 16,
+    "activationJaccard": 0.0989
+   },
+   "AERO|XLM": {
+    "dailyReturnCorr": 0.3682,
+    "overlapDays": 651,
+    "candidateOutcomeCorr": null,
+    "candidatePairs": 12,
+    "sameDirectionOutcomeCorr": null,
+    "sameDirectionPairs": 8,
+    "activationJaccard": 0.0405
+   },
+   "AVAX|BTC": {
+    "dailyReturnCorr": 0.6987,
+    "overlapDays": 1510,
+    "candidateOutcomeCorr": 0.1784,
+    "candidatePairs": 46,
+    "sameDirectionOutcomeCorr": 0.4565,
+    "sameDirectionPairs": 29,
+    "activationJaccard": 0.1139
+   },
+   "AVAX|ETH": {
+    "dailyReturnCorr": 0.7349,
+    "overlapDays": 1510,
+    "candidateOutcomeCorr": 0.3829,
+    "candidatePairs": 59,
+    "sameDirectionOutcomeCorr": 0.6029,
+    "sameDirectionPairs": 42,
+    "activationJaccard": 0.1268
+   },
+   "AVAX|SOL": {
+    "dailyReturnCorr": 0.7479,
+    "overlapDays": 1510,
+    "candidateOutcomeCorr": 0.4364,
+    "candidatePairs": 50,
+    "sameDirectionOutcomeCorr": 0.4933,
+    "sameDirectionPairs": 39,
+    "activationJaccard": 0.1047
+   },
+   "AVAX|XRP": {
+    "dailyReturnCorr": 0.6027,
+    "overlapDays": 859,
+    "candidateOutcomeCorr": null,
+    "candidatePairs": 19,
+    "sameDirectionOutcomeCorr": null,
+    "sameDirectionPairs": 13,
+    "activationJaccard": 0.0585
+   },
+   "AVAX|DOGE": {
+    "dailyReturnCorr": 0.6579,
+    "overlapDays": 1510,
+    "candidateOutcomeCorr": 0.3326,
+    "candidatePairs": 68,
+    "sameDirectionOutcomeCorr": 0.4115,
+    "sameDirectionPairs": 54,
+    "activationJaccard": 0.1433
+   },
+   "AVAX|LTC": {
+    "dailyReturnCorr": 0.6637,
+    "overlapDays": 1510,
+    "candidateOutcomeCorr": 0.2314,
+    "candidatePairs": 56,
+    "sameDirectionOutcomeCorr": 0.4373,
+    "sameDirectionPairs": 36,
+    "activationJaccard": 0.1182
+   },
+   "AVAX|BCH": {
+    "dailyReturnCorr": 0.6046,
+    "overlapDays": 1510,
+    "candidateOutcomeCorr": 0.4449,
+    "candidatePairs": 43,
+    "sameDirectionOutcomeCorr": 0.5576,
+    "sameDirectionPairs": 27,
+    "activationJaccard": 0.1483
+   },
+   "AVAX|DOT": {
+    "dailyReturnCorr": 0.7736,
+    "overlapDays": 1510,
+    "candidateOutcomeCorr": 0.344,
+    "candidatePairs": 46,
+    "sameDirectionOutcomeCorr": 0.5064,
+    "sameDirectionPairs": 32,
+    "activationJaccard": 0.1255
+   },
+   "AVAX|HBAR": {
+    "dailyReturnCorr": 0.5998,
+    "overlapDays": 1132,
+    "candidateOutcomeCorr": 0.7473,
+    "candidatePairs": 25,
+    "sameDirectionOutcomeCorr": 0.7656,
+    "sameDirectionPairs": 21,
+    "activationJaccard": 0.0609
+   },
+   "AVAX|LINK": {
+    "dailyReturnCorr": 0.7431,
+    "overlapDays": 1510,
+    "candidateOutcomeCorr": 0.4021,
+    "candidatePairs": 49,
+    "sameDirectionOutcomeCorr": 0.5137,
+    "sameDirectionPairs": 40,
+    "activationJaccard": 0.1269
+   },
+   "AVAX|ONDO": {
+    "dailyReturnCorr": 0.6344,
+    "overlapDays": 666,
+    "candidateOutcomeCorr": 0.2744,
+    "candidatePairs": 24,
+    "sameDirectionOutcomeCorr": null,
+    "sameDirectionPairs": 15,
+    "activationJaccard": 0.0745
+   },
+   "AVAX|UNI": {
+    "dailyReturnCorr": 0.6664,
+    "overlapDays": 1510,
+    "candidateOutcomeCorr": 0.4382,
+    "candidatePairs": 26,
+    "sameDirectionOutcomeCorr": 0.5393,
+    "sameDirectionPairs": 20,
+    "activationJaccard": 0.103
+   },
+   "AVAX|XLM": {
+    "dailyReturnCorr": 0.6003,
+    "overlapDays": 1510,
+    "candidateOutcomeCorr": 0.3614,
+    "candidatePairs": 44,
+    "sameDirectionOutcomeCorr": 0.4553,
+    "sameDirectionPairs": 35,
+    "activationJaccard": 0.1099
+   },
+   "BCH|BTC": {
+    "dailyReturnCorr": 0.6976,
+    "overlapDays": 1539,
+    "candidateOutcomeCorr": 0.2234,
+    "candidatePairs": 49,
+    "sameDirectionOutcomeCorr": 0.3842,
+    "sameDirectionPairs": 41,
+    "activationJaccard": 0.1224
+   },
+   "BCH|ETH": {
+    "dailyReturnCorr": 0.6751,
+    "overlapDays": 1539,
+    "candidateOutcomeCorr": 0.0911,
+    "candidatePairs": 56,
+    "sameDirectionOutcomeCorr": 0.2585,
+    "sameDirectionPairs": 40,
+    "activationJaccard": 0.1349
+   },
+   "BCH|SOL": {
+    "dailyReturnCorr": 0.5766,
+    "overlapDays": 1539,
+    "candidateOutcomeCorr": 0.0939,
+    "candidatePairs": 46,
+    "sameDirectionOutcomeCorr": 0.3966,
+    "sameDirectionPairs": 28,
+    "activationJaccard": 0.1204
+   },
+   "BCH|XRP": {
+    "dailyReturnCorr": 0.5065,
+    "overlapDays": 859,
+    "candidateOutcomeCorr": 0.5148,
+    "candidatePairs": 26,
+    "sameDirectionOutcomeCorr": 0.4453,
+    "sameDirectionPairs": 23,
+    "activationJaccard": 0.1084
+   },
+   "BCH|DOGE": {
+    "dailyReturnCorr": 0.6248,
+    "overlapDays": 1539,
+    "candidateOutcomeCorr": 0.199,
+    "candidatePairs": 68,
+    "sameDirectionOutcomeCorr": 0.3912,
+    "sameDirectionPairs": 49,
+    "activationJaccard": 0.1472
+   },
+   "BCH|LTC": {
+    "dailyReturnCorr": 0.7068,
+    "overlapDays": 1539,
+    "candidateOutcomeCorr": 0.2128,
+    "candidatePairs": 61,
+    "sameDirectionOutcomeCorr": 0.4815,
+    "sameDirectionPairs": 44,
+    "activationJaccard": 0.1287
+   },
+   "BCH|DOT": {
+    "dailyReturnCorr": 0.6565,
+    "overlapDays": 1539,
+    "candidateOutcomeCorr": 0.2488,
+    "candidatePairs": 32,
+    "sameDirectionOutcomeCorr": 0.3568,
+    "sameDirectionPairs": 22,
+    "activationJaccard": 0.0894
+   },
+   "BCH|HBAR": {
+    "dailyReturnCorr": 0.4416,
+    "overlapDays": 1132,
+    "candidateOutcomeCorr": 0.3661,
+    "candidatePairs": 27,
+    "sameDirectionOutcomeCorr": null,
+    "sameDirectionPairs": 19,
+    "activationJaccard": 0.0905
+   },
+   "BCH|LINK": {
+    "dailyReturnCorr": 0.6431,
+    "overlapDays": 1539,
+    "candidateOutcomeCorr": 0.4748,
+    "candidatePairs": 52,
+    "sameDirectionOutcomeCorr": 0.7118,
+    "sameDirectionPairs": 37,
+    "activationJaccard": 0.1273
+   },
+   "BCH|ONDO": {
+    "dailyReturnCorr": 0.5031,
+    "overlapDays": 666,
+    "candidateOutcomeCorr": 0.4133,
+    "candidatePairs": 25,
+    "sameDirectionOutcomeCorr": null,
+    "sameDirectionPairs": 16,
+    "activationJaccard": 0.0904
+   },
+   "BCH|UNI": {
+    "dailyReturnCorr": 0.608,
+    "overlapDays": 1539,
+    "candidateOutcomeCorr": 0.0905,
+    "candidatePairs": 21,
+    "sameDirectionOutcomeCorr": null,
+    "sameDirectionPairs": 15,
+    "activationJaccard": 0.0734
+   },
+   "BCH|XLM": {
+    "dailyReturnCorr": 0.5684,
+    "overlapDays": 1539,
+    "candidateOutcomeCorr": 0.4319,
+    "candidatePairs": 44,
+    "sameDirectionOutcomeCorr": 0.5126,
+    "sameDirectionPairs": 33,
+    "activationJaccard": 0.1146
+   },
+   "DOT|ETH": {
+    "dailyReturnCorr": 0.7676,
+    "overlapDays": 1539,
+    "candidateOutcomeCorr": 0.3671,
+    "candidatePairs": 59,
+    "sameDirectionOutcomeCorr": 0.6985,
+    "sameDirectionPairs": 40,
+    "activationJaccard": 0.1226
+   },
+   "DOT|SOL": {
+    "dailyReturnCorr": 0.7019,
+    "overlapDays": 1539,
+    "candidateOutcomeCorr": 0.1497,
+    "candidatePairs": 54,
+    "sameDirectionOutcomeCorr": 0.5637,
+    "sameDirectionPairs": 42,
+    "activationJaccard": 0.1342
+   },
+   "DOT|XRP": {
+    "dailyReturnCorr": 0.6397,
+    "overlapDays": 859,
+    "candidateOutcomeCorr": -0.049,
+    "candidatePairs": 33,
+    "sameDirectionOutcomeCorr": 0.0343,
+    "sameDirectionPairs": 26,
+    "activationJaccard": 0.1086
+   },
+   "DOT|LTC": {
+    "dailyReturnCorr": 0.7402,
+    "overlapDays": 1539,
+    "candidateOutcomeCorr": 0.2935,
+    "candidatePairs": 62,
+    "sameDirectionOutcomeCorr": 0.4956,
+    "sameDirectionPairs": 45,
+    "activationJaccard": 0.1343
+   },
+   "DOT|HBAR": {
+    "dailyReturnCorr": 0.6367,
+    "overlapDays": 1132,
+    "candidateOutcomeCorr": 0.2951,
+    "candidatePairs": 41,
+    "sameDirectionOutcomeCorr": 0.3874,
+    "sameDirectionPairs": 28,
+    "activationJaccard": 0.1023
+   },
+   "DOT|LINK": {
+    "dailyReturnCorr": 0.7872,
+    "overlapDays": 1539,
+    "candidateOutcomeCorr": 0.5028,
+    "candidatePairs": 68,
+    "sameDirectionOutcomeCorr": 0.6017,
+    "sameDirectionPairs": 57,
+    "activationJaccard": 0.163
+   },
+   "DOT|ONDO": {
+    "dailyReturnCorr": 0.6338,
+    "overlapDays": 666,
+    "candidateOutcomeCorr": null,
+    "candidatePairs": 19,
+    "sameDirectionOutcomeCorr": null,
+    "sameDirectionPairs": 17,
+    "activationJaccard": 0.0579
+   },
+   "DOT|UNI": {
+    "dailyReturnCorr": 0.7205,
+    "overlapDays": 1539,
+    "candidateOutcomeCorr": null,
+    "candidatePairs": 13,
+    "sameDirectionOutcomeCorr": null,
+    "sameDirectionPairs": 10,
+    "activationJaccard": 0.0553
+   },
+   "DOT|XLM": {
+    "dailyReturnCorr": 0.714,
+    "overlapDays": 1539,
+    "candidateOutcomeCorr": 0.2324,
+    "candidatePairs": 55,
+    "sameDirectionOutcomeCorr": 0.6369,
+    "sameDirectionPairs": 39,
+    "activationJaccard": 0.1329
+   },
+   "HBAR|SOL": {
+    "dailyReturnCorr": 0.5247,
+    "overlapDays": 1132,
+    "candidateOutcomeCorr": 0.323,
+    "candidatePairs": 38,
+    "sameDirectionOutcomeCorr": 0.4232,
+    "sameDirectionPairs": 34,
+    "activationJaccard": 0.1095
+   },
+   "HBAR|XRP": {
+    "dailyReturnCorr": 0.6061,
+    "overlapDays": 859,
+    "candidateOutcomeCorr": 0.3072,
+    "candidatePairs": 41,
+    "sameDirectionOutcomeCorr": 0.4612,
+    "sameDirectionPairs": 33,
+    "activationJaccard": 0.1479
+   },
+   "HBAR|LTC": {
+    "dailyReturnCorr": 0.5539,
+    "overlapDays": 1132,
+    "candidateOutcomeCorr": -0.0782,
+    "candidatePairs": 41,
+    "sameDirectionOutcomeCorr": 0.2773,
+    "sameDirectionPairs": 28,
+    "activationJaccard": 0.0881
+   },
+   "HBAR|LINK": {
+    "dailyReturnCorr": 0.6322,
+    "overlapDays": 1132,
+    "candidateOutcomeCorr": 0.4168,
+    "candidatePairs": 32,
+    "sameDirectionOutcomeCorr": 0.7342,
+    "sameDirectionPairs": 23,
+    "activationJaccard": 0.0887
+   },
+   "HBAR|ONDO": {
+    "dailyReturnCorr": 0.5824,
+    "overlapDays": 666,
+    "candidateOutcomeCorr": 0.6173,
+    "candidatePairs": 21,
+    "sameDirectionOutcomeCorr": null,
+    "sameDirectionPairs": 17,
+    "activationJaccard": 0.1029
+   },
+   "HBAR|UNI": {
+    "dailyReturnCorr": 0.5085,
+    "overlapDays": 1132,
+    "candidateOutcomeCorr": null,
+    "candidatePairs": 7,
+    "sameDirectionOutcomeCorr": null,
+    "sameDirectionPairs": 6,
+    "activationJaccard": 0.0192
+   },
+   "HBAR|XLM": {
+    "dailyReturnCorr": 0.5958,
+    "overlapDays": 1132,
+    "candidateOutcomeCorr": 0.5286,
+    "candidatePairs": 39,
+    "sameDirectionOutcomeCorr": 0.5989,
+    "sameDirectionPairs": 32,
+    "activationJaccard": 0.0902
+   },
+   "LINK|SOL": {
+    "dailyReturnCorr": 0.6726,
+    "overlapDays": 1539,
+    "candidateOutcomeCorr": 0.4574,
+    "candidatePairs": 67,
+    "sameDirectionOutcomeCorr": 0.564,
+    "sameDirectionPairs": 58,
+    "activationJaccard": 0.1479
+   },
+   "LINK|XRP": {
+    "dailyReturnCorr": 0.6163,
+    "overlapDays": 859,
+    "candidateOutcomeCorr": 0.1918,
+    "candidatePairs": 32,
+    "sameDirectionOutcomeCorr": 0.353,
+    "sameDirectionPairs": 21,
+    "activationJaccard": 0.1076
+   },
+   "LINK|LTC": {
+    "dailyReturnCorr": 0.6978,
+    "overlapDays": 1539,
+    "candidateOutcomeCorr": 0.3891,
+    "candidatePairs": 84,
+    "sameDirectionOutcomeCorr": 0.5319,
+    "sameDirectionPairs": 57,
+    "activationJaccard": 0.1685
+   },
+   "LINK|ONDO": {
+    "dailyReturnCorr": 0.6544,
+    "overlapDays": 666,
+    "candidateOutcomeCorr": 0.3655,
+    "candidatePairs": 38,
+    "sameDirectionOutcomeCorr": 0.4928,
+    "sameDirectionPairs": 30,
+    "activationJaccard": 0.1038
+   },
+   "LINK|UNI": {
+    "dailyReturnCorr": 0.7025,
+    "overlapDays": 1539,
+    "candidateOutcomeCorr": 0.3378,
+    "candidatePairs": 23,
+    "sameDirectionOutcomeCorr": null,
+    "sameDirectionPairs": 17,
+    "activationJaccard": 0.0658
+   },
+   "LINK|XLM": {
+    "dailyReturnCorr": 0.6411,
+    "overlapDays": 1539,
+    "candidateOutcomeCorr": 0.361,
+    "candidatePairs": 77,
+    "sameDirectionOutcomeCorr": 0.5999,
+    "sameDirectionPairs": 54,
+    "activationJaccard": 0.1873
+   },
+   "ONDO|SOL": {
+    "dailyReturnCorr": 0.606,
+    "overlapDays": 666,
+    "candidateOutcomeCorr": 0.2051,
+    "candidatePairs": 25,
+    "sameDirectionOutcomeCorr": 0.5108,
+    "sameDirectionPairs": 22,
+    "activationJaccard": 0.072
+   },
+   "ONDO|XRP": {
+    "dailyReturnCorr": 0.5143,
+    "overlapDays": 666,
+    "candidateOutcomeCorr": 0.2055,
+    "candidatePairs": 21,
+    "sameDirectionOutcomeCorr": null,
+    "sameDirectionPairs": 16,
+    "activationJaccard": 0.1206
+   },
+   "ONDO|UNI": {
+    "dailyReturnCorr": 0.5287,
+    "overlapDays": 666,
+    "candidateOutcomeCorr": null,
+    "candidatePairs": 12,
+    "sameDirectionOutcomeCorr": null,
+    "sameDirectionPairs": 12,
+    "activationJaccard": 0.0696
+   },
+   "ONDO|XLM": {
+    "dailyReturnCorr": 0.4991,
+    "overlapDays": 666,
+    "candidateOutcomeCorr": 0.4349,
+    "candidatePairs": 34,
+    "sameDirectionOutcomeCorr": 0.5051,
+    "sameDirectionPairs": 25,
+    "activationJaccard": 0.0809
+   },
+   "UNI|XRP": {
+    "dailyReturnCorr": 0.5137,
+    "overlapDays": 859,
+    "candidateOutcomeCorr": null,
+    "candidatePairs": 16,
+    "sameDirectionOutcomeCorr": null,
+    "sameDirectionPairs": 14,
+    "activationJaccard": 0.0774
+   },
+   "UNI|XLM": {
+    "dailyReturnCorr": 0.584,
+    "overlapDays": 1539,
+    "candidateOutcomeCorr": 0.0129,
+    "candidatePairs": 25,
+    "sameDirectionOutcomeCorr": 0.0946,
+    "sameDirectionPairs": 23,
+    "activationJaccard": 0.0605
+   },
+   "XLM|XRP": {
+    "dailyReturnCorr": 0.7734,
+    "overlapDays": 859,
+    "candidateOutcomeCorr": 0.7987,
+    "candidatePairs": 57,
+    "sameDirectionOutcomeCorr": 0.8193,
+    "sameDirectionPairs": 53,
+    "activationJaccard": 0.1462
+   }
+  },
+  "clusters": [
+   [
+    "BTC",
+    "ETH"
+   ],
+   [
+    "SOL"
+   ],
+   [
+    "XRP"
+   ],
+   [
+    "DOGE"
+   ],
+   [
+    "LTC"
+   ],
+   [
+    "ADA"
+   ],
+   [
+    "AERO"
+   ],
+   [
+    "AVAX"
+   ],
+   [
+    "BCH"
+   ],
+   [
+    "DOT"
+   ],
+   [
+    "HBAR"
+   ],
+   [
+    "LINK"
+   ],
+   [
+    "ONDO"
+   ],
+   [
+    "UNI"
+   ],
+   [
+    "XLM"
+   ]
+  ]
+ },
+ "temporal": {
+  "OLD": {
+   "choiceScansByYear": {
+    "2022": 83,
+    "2023": 78,
+    "2024": 110,
+    "2025": 88
+   },
+   "choiceScansByQuarter": {
+    "2022-Q2": 24,
+    "2022-Q3": 25,
+    "2022-Q4": 34,
+    "2023-Q1": 26,
+    "2023-Q2": 3,
+    "2023-Q3": 21,
+    "2023-Q4": 28,
+    "2024-Q1": 28,
+    "2024-Q2": 21,
+    "2024-Q3": 32,
+    "2024-Q4": 29,
+    "2025-Q1": 27,
+    "2025-Q2": 27,
+    "2025-Q3": 32,
+    "2025-Q4": 2
+   },
+   "choiceScansByTrend": {
+    "BEAR": 77,
+    "SIDEWAYS": 174,
+    "BULL": 108
+   },
+   "choiceScansByVol": {
+    "HIGH_VOL": 181,
+    "LOW_VOL": 178
+   },
+   "choiceScansByTrendVol": {
+    "BEAR/HIGH_VOL": 63,
+    "SIDEWAYS/HIGH_VOL": 64,
+    "BEAR/LOW_VOL": 14,
+    "SIDEWAYS/LOW_VOL": 110,
+    "BULL/LOW_VOL": 54,
+    "BULL/HIGH_VOL": 54
+   },
+   "scansByTrend": {
+    "BEAR": 127,
+    "SIDEWAYS": 339,
+    "BULL": 193
+   },
+   "scansByVol": {
+    "HIGH_VOL": 331,
+    "LOW_VOL": 328
+   }
+  },
+  "EXPANDED": {
+   "choiceScansByYear": {
+    "2022": 140,
+    "2023": 127,
+    "2024": 171,
+    "2025": 171
+   },
+   "choiceScansByQuarter": {
+    "2022-Q2": 33,
+    "2022-Q3": 45,
+    "2022-Q4": 62,
+    "2023-Q1": 45,
+    "2023-Q2": 5,
+    "2023-Q3": 32,
+    "2023-Q4": 45,
+    "2024-Q1": 44,
+    "2024-Q2": 30,
+    "2024-Q3": 50,
+    "2024-Q4": 47,
+    "2025-Q1": 56,
+    "2025-Q2": 49,
+    "2025-Q3": 59,
+    "2025-Q4": 7
+   },
+   "choiceScansByTrend": {
+    "BEAR": 129,
+    "SIDEWAYS": 294,
+    "BULL": 186
+   },
+   "choiceScansByVol": {
+    "HIGH_VOL": 315,
+    "LOW_VOL": 294
+   },
+   "choiceScansByTrendVol": {
+    "BEAR/HIGH_VOL": 107,
+    "SIDEWAYS/HIGH_VOL": 112,
+    "BEAR/LOW_VOL": 22,
+    "SIDEWAYS/LOW_VOL": 182,
+    "BULL/LOW_VOL": 90,
+    "BULL/HIGH_VOL": 96
+   },
+   "scansByTrend": {
+    "BEAR": 164,
+    "SIDEWAYS": 433,
+    "BULL": 255
+   },
+   "scansByVol": {
+    "HIGH_VOL": 426,
+    "LOW_VOL": 426
+   }
+  }
+ },
+ "baselines": {
+  "OLD": {
+   "folds": [
+    {
+     "fold": 1,
+     "train": 255,
+     "test": 79,
+     "purged": 8
+    },
+    {
+     "fold": 2,
+     "train": 338,
+     "test": 79,
+     "purged": 4
+    },
+    {
+     "fold": 3,
+     "train": 416,
+     "test": 79,
+     "purged": 5
+    },
+    {
+     "fold": 4,
+     "train": 495,
+     "test": 79,
+     "purged": 5
+    },
+    {
+     "fold": 5,
+     "train": 570,
+     "test": 80,
+     "purged": 9
+    }
+   ],
+   "models": {
+    "RANDOM": {
+     "meanR": {
+      "0.00%": -0.0284,
+      "0.08%": -0.0939,
+      "0.16%": -0.1594,
+      "0.25%": -0.2331
+     },
+     "ci95_016": [
+      -0.2618,
+      -0.0565
+     ],
+     "vsRandom016": {
+      "meanDiff": 0,
+      "ci95": [
+       0,
+       0
+      ],
+      "winPct": 0
+     },
+     "vsQuant016": {
+      "meanDiff": 0.0066,
+      "ci95": [
+       -0.0544,
+       0.0639
+      ],
+      "winPct": 58.45
+     },
+     "oosScans": 396,
+     "oosChoiceScans": 214,
+     "choiceScansOnly": {
+      "n": 214,
+      "meanR": -0.2009,
+      "vsQuantMeanDiff": 0.0122
+     },
+     "folds": [
+      {
+       "fold": 1,
+       "testStart": "2023-11-23",
+       "testEnd": "2024-04-08",
+       "testScans": 79,
+       "meanR016": -0.103,
+       "vsQuant": -0.004
+      },
+      {
+       "fold": 2,
+       "testStart": "2024-04-14",
+       "testEnd": "2024-09-08",
+       "testScans": 79,
+       "meanR016": -0.2087,
+       "vsQuant": 0.0261
+      },
+      {
+       "fold": 3,
+       "testStart": "2024-09-09",
+       "testEnd": "2025-01-20",
+       "testScans": 79,
+       "meanR016": -0.216,
+       "vsQuant": 0.0447
+      },
+      {
+       "fold": 4,
+       "testStart": "2025-01-22",
+       "testEnd": "2025-06-02",
+       "testScans": 79,
+       "meanR016": -0.2197,
+       "vsQuant": 0.0726
+      },
+      {
+       "fold": 5,
+       "testStart": "2025-06-03",
+       "testEnd": "2025-10-23",
+       "testScans": 80,
+       "meanR016": -0.0509,
+       "vsQuant": -0.1051
+      }
+     ],
+     "foldsPositive016": 0,
+     "rankPositions": {
+      "buckets": {
+       "#1": {
+        "n": 214,
+        "meanR": -0.1595,
+        "tp1Rate": 0.2383,
+        "stopRate": 0.5794
+       },
+       "#2": {
+        "n": 214,
+        "meanR": -0.2219,
+        "tp1Rate": 0.2243,
+        "stopRate": 0.5794
+       },
+       "#3": {
+        "n": 115,
+        "meanR": -0.092,
+        "tp1Rate": 0.2783,
+        "stopRate": 0.5478
+       },
+       "#4": {
+        "n": 57,
+        "meanR": 0.0638,
+        "tp1Rate": 0.3158,
+        "stopRate": 0.5088
+       },
+       "#5+": {
+        "n": 60,
+        "meanR": -0.1609,
+        "tp1Rate": 0.2667,
+        "stopRate": 0.6333
+       }
+      },
+      "flag": "NON-MONOTONIC"
+     },
+     "pairAccuracy": 0.5,
+     "spearman": 0.0127,
+     "assets": {
+      "SOL": {
+       "picks": 64,
+       "meanR": -0.039
+      },
+      "DOGE": {
+       "picks": 55,
+       "meanR": -0.275
+      },
+      "ETH": {
+       "picks": 61,
+       "meanR": -0.1215
+      },
+      "LTC": {
+       "picks": 97,
+       "meanR": -0.293
+      },
+      "BTC": {
+       "picks": 58,
+       "meanR": -0.0031
+      },
+      "XRP": {
+       "picks": 61,
+       "meanR": -0.1554
+      }
+     },
+     "withoutDominantAsset": {
+      "n": 299,
+      "meanR": -0.116
+     },
+     "pickProfile": {
+      "strategies": {
+       "TREND CONTINUATION": 244,
+       "BREAKOUT + RETEST": 55,
+       "LIQUIDITY-SWEEP REVERSAL": 55,
+       "MEAN REVERSION": 25,
+       "MOMENTUM CONTINUATION": 17
+      },
+      "directions": {
+       "long": 226,
+       "short": 170
+      },
+      "medianStopPct": 1.8381,
+      "labelSources": {
+       "COINBASE_SPOT_5M_ARCHIVE": 396
+      }
+     }
+    },
+    "CURRENT_QUANT": {
+     "meanR": {
+      "0.00%": -0.0382,
+      "0.08%": -0.1021,
+      "0.16%": -0.166,
+      "0.25%": -0.2378
+     },
+     "ci95_016": [
+      -0.2836,
+      -0.0465
+     ],
+     "vsRandom016": {
+      "meanDiff": -0.0066,
+      "ci95": [
+       -0.067,
+       0.05
+      ],
+      "winPct": 40.3
+     },
+     "vsQuant016": {
+      "meanDiff": 0,
+      "ci95": [
+       0,
+       0
+      ],
+      "winPct": 0
+     },
+     "oosScans": 396,
+     "oosChoiceScans": 214,
+     "choiceScansOnly": {
+      "n": 214,
+      "meanR": -0.2131,
+      "vsQuantMeanDiff": 0
+     },
+     "folds": [
+      {
+       "fold": 1,
+       "testStart": "2023-11-23",
+       "testEnd": "2024-04-08",
+       "testScans": 79,
+       "meanR016": -0.099,
+       "vsQuant": 0
+      },
+      {
+       "fold": 2,
+       "testStart": "2024-04-14",
+       "testEnd": "2024-09-08",
+       "testScans": 79,
+       "meanR016": -0.2348,
+       "vsQuant": 0
+      },
+      {
+       "fold": 3,
+       "testStart": "2024-09-09",
+       "testEnd": "2025-01-20",
+       "testScans": 79,
+       "meanR016": -0.2607,
+       "vsQuant": 0
+      },
+      {
+       "fold": 4,
+       "testStart": "2025-01-22",
+       "testEnd": "2025-06-02",
+       "testScans": 79,
+       "meanR016": -0.2923,
+       "vsQuant": 0
+      },
+      {
+       "fold": 5,
+       "testStart": "2025-06-03",
+       "testEnd": "2025-10-23",
+       "testScans": 80,
+       "meanR016": 0.0542,
+       "vsQuant": 0
+      }
+     ],
+     "foldsPositive016": 1,
+     "rankPositions": {
+      "buckets": {
+       "#1": {
+        "n": 214,
+        "meanR": -0.2037,
+        "tp1Rate": 0.215,
+        "stopRate": 0.5654
+       },
+       "#2": {
+        "n": 214,
+        "meanR": -0.1266,
+        "tp1Rate": 0.2523,
+        "stopRate": 0.5607
+       },
+       "#3": {
+        "n": 115,
+        "meanR": -0.1448,
+        "tp1Rate": 0.2609,
+        "stopRate": 0.5652
+       },
+       "#4": {
+        "n": 57,
+        "meanR": 0.1999,
+        "tp1Rate": 0.4035,
+        "stopRate": 0.5263
+       },
+       "#5+": {
+        "n": 60,
+        "meanR": -0.3713,
+        "tp1Rate": 0.2,
+        "stopRate": 0.7
+       }
+      },
+      "flag": "NON-MONOTONIC"
+     },
+     "pairAccuracy": 0.5553,
+     "spearman": 0.0513,
+     "assets": {
+      "BTC": {
+       "picks": 48,
+       "meanR": -0.3093
+      },
+      "DOGE": {
+       "picks": 69,
+       "meanR": -0.1624
+      },
+      "SOL": {
+       "picks": 68,
+       "meanR": -0.0421
+      },
+      "LTC": {
+       "picks": 98,
+       "meanR": -0.1364
+      },
+      "ETH": {
+       "picks": 53,
+       "meanR": -0.4318
+      },
+      "XRP": {
+       "picks": 60,
+       "meanR": -0.0092
+      }
+     },
+     "withoutDominantAsset": {
+      "n": 298,
+      "meanR": -0.1757
+     },
+     "pickProfile": {
+      "strategies": {
+       "TREND CONTINUATION": 255,
+       "BREAKOUT + RETEST": 80,
+       "MEAN REVERSION": 22,
+       "LIQUIDITY-SWEEP REVERSAL": 34,
+       "MOMENTUM CONTINUATION": 5
+      },
+      "directions": {
+       "long": 226,
+       "short": 170
+      },
+      "medianStopPct": 1.9567,
+      "labelSources": {
+       "COINBASE_SPOT_5M_ARCHIVE": 396
+      }
+     }
+    },
+    "GBM_FINAL_R": {
+     "meanR": {
+      "0.00%": -0.0113,
+      "0.08%": -0.0698,
+      "0.16%": -0.1284,
+      "0.25%": -0.1942
+     },
+     "ci95_016": [
+      -0.2476,
+      -0.0115
+     ],
+     "vsRandom016": {
+      "meanDiff": 0.031,
+      "ci95": [
+       -0.0287,
+       0.0844
+      ],
+      "winPct": 85.45
+     },
+     "vsQuant016": {
+      "meanDiff": 0.0376,
+      "ci95": [
+       -0.0442,
+       0.1209
+      ],
+      "winPct": 80.5
+     },
+     "oosScans": 396,
+     "oosChoiceScans": 214,
+     "choiceScansOnly": {
+      "n": 214,
+      "meanR": -0.1435,
+      "vsQuantMeanDiff": 0.0696
+     },
+     "folds": [
+      {
+       "fold": 1,
+       "testStart": "2023-11-23",
+       "testEnd": "2024-04-08",
+       "testScans": 79,
+       "meanR016": -0.0675,
+       "vsQuant": 0.0315
+      },
+      {
+       "fold": 2,
+       "testStart": "2024-04-14",
+       "testEnd": "2024-09-08",
+       "testScans": 79,
+       "meanR016": -0.1682,
+       "vsQuant": 0.0666
+      },
+      {
+       "fold": 3,
+       "testStart": "2024-09-09",
+       "testEnd": "2025-01-20",
+       "testScans": 79,
+       "meanR016": -0.3156,
+       "vsQuant": -0.0549
+      },
+      {
+       "fold": 4,
+       "testStart": "2025-01-22",
+       "testEnd": "2025-06-02",
+       "testScans": 79,
+       "meanR016": -0.1231,
+       "vsQuant": 0.1692
+      },
+      {
+       "fold": 5,
+       "testStart": "2025-06-03",
+       "testEnd": "2025-10-23",
+       "testScans": 80,
+       "meanR016": 0.0306,
+       "vsQuant": -0.0237
+      }
+     ],
+     "foldsPositive016": 1,
+     "rankPositions": {
+      "buckets": {
+       "#1": {
+        "n": 214,
+        "meanR": -0.1339,
+        "tp1Rate": 0.2243,
+        "stopRate": 0.5187
+       },
+       "#2": {
+        "n": 214,
+        "meanR": -0.2235,
+        "tp1Rate": 0.2243,
+        "stopRate": 0.5888
+       },
+       "#3": {
+        "n": 115,
+        "meanR": -0.1978,
+        "tp1Rate": 0.2696,
+        "stopRate": 0.6174
+       },
+       "#4": {
+        "n": 57,
+        "meanR": 0.034,
+        "tp1Rate": 0.2807,
+        "stopRate": 0.5439
+       },
+       "#5+": {
+        "n": 60,
+        "meanR": -0.0154,
+        "tp1Rate": 0.3667,
+        "stopRate": 0.65
+       }
+      },
+      "flag": "NON-MONOTONIC"
+     },
+     "pairAccuracy": 0.5274,
+     "spearman": 0.1775,
+     "assets": {
+      "SOL": {
+       "picks": 68,
+       "meanR": -0.1296
+      },
+      "DOGE": {
+       "picks": 69,
+       "meanR": -0.0771
+      },
+      "LTC": {
+       "picks": 94,
+       "meanR": -0.1888
+      },
+      "BTC": {
+       "picks": 54,
+       "meanR": -0.0594
+      },
+      "ETH": {
+       "picks": 54,
+       "meanR": -0.1348
+      },
+      "XRP": {
+       "picks": 57,
+       "meanR": -0.1483
+      }
+     },
+     "withoutDominantAsset": {
+      "n": 302,
+      "meanR": -0.1095
+     },
+     "pickProfile": {
+      "strategies": {
+       "TREND CONTINUATION": 278,
+       "BREAKOUT + RETEST": 40,
+       "MEAN REVERSION": 26,
+       "LIQUIDITY-SWEEP REVERSAL": 44,
+       "MOMENTUM CONTINUATION": 8
+      },
+      "directions": {
+       "long": 230,
+       "short": 166
+      },
+      "medianStopPct": 1.9495,
+      "labelSources": {
+       "COINBASE_SPOT_5M_ARCHIVE": 396
+      }
+     }
+    },
+    "LAMBDARANK_GBM_TP1": {
+     "meanR": {
+      "0.00%": 0.0075,
+      "0.08%": -0.0645,
+      "0.16%": -0.1366,
+      "0.25%": -0.2176
+     },
+     "ci95_016": [
+      -0.2602,
+      -0.0209
+     ],
+     "vsRandom016": {
+      "meanDiff": 0.0228,
+      "ci95": [
+       -0.0396,
+       0.0835
+      ],
+      "winPct": 77.15
+     },
+     "vsQuant016": {
+      "meanDiff": 0.0294,
+      "ci95": [
+       -0.0627,
+       0.1222
+      ],
+      "winPct": 73.6
+     },
+     "oosScans": 396,
+     "oosChoiceScans": 214,
+     "choiceScansOnly": {
+      "n": 214,
+      "meanR": -0.1587,
+      "vsQuantMeanDiff": 0.0544
+     },
+     "folds": [
+      {
+       "fold": 1,
+       "testStart": "2023-11-23",
+       "testEnd": "2024-04-08",
+       "testScans": 79,
+       "meanR016": -0.0756,
+       "vsQuant": 0.0235
+      },
+      {
+       "fold": 2,
+       "testStart": "2024-04-14",
+       "testEnd": "2024-09-08",
+       "testScans": 79,
+       "meanR016": -0.3261,
+       "vsQuant": -0.0913
+      },
+      {
+       "fold": 3,
+       "testStart": "2024-09-09",
+       "testEnd": "2025-01-20",
+       "testScans": 79,
+       "meanR016": -0.0502,
+       "vsQuant": 0.2105
+      },
+      {
+       "fold": 4,
+       "testStart": "2025-01-22",
+       "testEnd": "2025-06-02",
+       "testScans": 79,
+       "meanR016": -0.1869,
+       "vsQuant": 0.1054
+      },
+      {
+       "fold": 5,
+       "testStart": "2025-06-03",
+       "testEnd": "2025-10-23",
+       "testScans": 80,
+       "meanR016": -0.0452,
+       "vsQuant": -0.0995
+      }
+     ],
+     "foldsPositive016": 0,
+     "rankPositions": {
+      "buckets": {
+       "#1": {
+        "n": 214,
+        "meanR": -0.1408,
+        "tp1Rate": 0.3037,
+        "stopRate": 0.6729
+       },
+       "#2": {
+        "n": 214,
+        "meanR": -0.2449,
+        "tp1Rate": 0.2009,
+        "stopRate": 0.5514
+       },
+       "#3": {
+        "n": 115,
+        "meanR": -0.1651,
+        "tp1Rate": 0.2435,
+        "stopRate": 0.5652
+       },
+       "#4": {
+        "n": 57,
+        "meanR": 0.1738,
+        "tp1Rate": 0.2807,
+        "stopRate": 0.386
+       },
+       "#5+": {
+        "n": 60,
+        "meanR": -0.1101,
+        "tp1Rate": 0.2167,
+        "stopRate": 0.4833
+       }
+      },
+      "flag": "NON-MONOTONIC"
+     },
+     "pairAccuracy": 0.4993,
+     "spearman": -0.1689,
+     "assets": {
+      "BTC": {
+       "picks": 50,
+       "meanR": -0.0964
+      },
+      "DOGE": {
+       "picks": 68,
+       "meanR": -0.0522
+      },
+      "ETH": {
+       "picks": 66,
+       "meanR": -0.1431
+      },
+      "LTC": {
+       "picks": 95,
+       "meanR": -0.201
+      },
+      "SOL": {
+       "picks": 65,
+       "meanR": -0.055
+      },
+      "XRP": {
+       "picks": 52,
+       "meanR": -0.2615
+      }
+     },
+     "withoutDominantAsset": {
+      "n": 301,
+      "meanR": -0.1163
+     },
+     "pickProfile": {
+      "strategies": {
+       "TREND CONTINUATION": 202,
+       "BREAKOUT + RETEST": 74,
+       "LIQUIDITY-SWEEP REVERSAL": 71,
+       "MEAN REVERSION": 25,
+       "MOMENTUM CONTINUATION": 24
+      },
+      "directions": {
+       "long": 213,
+       "short": 183
+      },
+      "medianStopPct": 1.6007,
+      "labelSources": {
+       "COINBASE_SPOT_5M_ARCHIVE": 396
+      }
+     }
+    }
+   },
+   "placeboGate": {
+    "GBM_FINAL_R": {
+     "k": 19,
+     "real016": -0.1284,
+     "placeboMean": -0.1592,
+     "placeboMax": -0.13,
+     "p": 0.05,
+     "checks": {
+      "placeboP005": true,
+      "beatsRandomCi": false,
+      "beatsQuantCi": false
+     },
+     "verdict": "FAIL"
+    },
+    "LAMBDARANK_GBM_TP1": {
+     "k": 19,
+     "real016": -0.1366,
+     "placeboMean": -0.1586,
+     "placeboMax": -0.1081,
+     "p": 0.3,
+     "checks": {
+      "placeboP005": false,
+      "beatsRandomCi": false,
+      "beatsQuantCi": false
+     },
+     "verdict": "FAIL"
+    }
+   }
+  },
+  "EXPANDED": {
+   "folds": [
+    {
+     "fold": 1,
+     "train": 329,
+     "test": 102,
+     "purged": 11
+    },
+    {
+     "fold": 2,
+     "train": 436,
+     "test": 102,
+     "purged": 6
+    },
+    {
+     "fold": 3,
+     "train": 535,
+     "test": 102,
+     "purged": 9
+    },
+    {
+     "fold": 4,
+     "train": 637,
+     "test": 102,
+     "purged": 9
+    },
+    {
+     "fold": 5,
+     "train": 740,
+     "test": 104,
+     "purged": 8
+    }
+   ],
+   "models": {
+    "RANDOM": {
+     "meanR": {
+      "0.00%": -0.021,
+      "0.08%": -0.0776,
+      "0.16%": -0.1342,
+      "0.25%": -0.1979
+     },
+     "ci95_016": [
+      -0.2158,
+      -0.0549
+     ],
+     "vsRandom016": {
+      "meanDiff": 0,
+      "ci95": [
+       0,
+       0
+      ],
+      "winPct": 0
+     },
+     "vsQuant016": {
+      "meanDiff": 0.0097,
+      "ci95": [
+       -0.0585,
+       0.0758
+      ],
+      "winPct": 61.55
+     },
+     "oosScans": 512,
+     "oosChoiceScans": 358,
+     "choiceScansOnly": {
+      "n": 358,
+      "meanR": -0.1482,
+      "vsQuantMeanDiff": 0.0139
+     },
+     "folds": [
+      {
+       "fold": 1,
+       "testStart": "2023-12-06",
+       "testEnd": "2024-04-19",
+       "testScans": 102,
+       "meanR016": -0.1273,
+       "vsQuant": -0.0212
+      },
+      {
+       "fold": 2,
+       "testStart": "2024-04-20",
+       "testEnd": "2024-09-20",
+       "testScans": 102,
+       "meanR016": -0.0676,
+       "vsQuant": 0.0967
+      },
+      {
+       "fold": 3,
+       "testStart": "2024-09-21",
+       "testEnd": "2025-02-01",
+       "testScans": 102,
+       "meanR016": -0.1405,
+       "vsQuant": -0.0395
+      },
+      {
+       "fold": 4,
+       "testStart": "2025-02-03",
+       "testEnd": "2025-06-14",
+       "testScans": 102,
+       "meanR016": -0.2316,
+       "vsQuant": 0.0881
+      },
+      {
+       "fold": 5,
+       "testStart": "2025-06-15",
+       "testEnd": "2025-10-24",
+       "testScans": 104,
+       "meanR016": -0.1047,
+       "vsQuant": -0.0737
+      }
+     ],
+     "foldsPositive016": 0,
+     "rankPositions": {
+      "buckets": {
+       "#1": {
+        "n": 358,
+        "meanR": -0.1047,
+        "tp1Rate": 0.2514,
+        "stopRate": 0.5503
+       },
+       "#2": {
+        "n": 358,
+        "meanR": -0.1854,
+        "tp1Rate": 0.2291,
+        "stopRate": 0.5726
+       },
+       "#3": {
+        "n": 238,
+        "meanR": -0.1742,
+        "tp1Rate": 0.2185,
+        "stopRate": 0.5546
+       },
+       "#4": {
+        "n": 178,
+        "meanR": -0.0061,
+        "tp1Rate": 0.2865,
+        "stopRate": 0.5337
+       },
+       "#5+": {
+        "n": 429,
+        "meanR": -0.0806,
+        "tp1Rate": 0.2541,
+        "stopRate": 0.5641
+       }
+      },
+      "flag": "WEAKLY MONOTONIC"
+     },
+     "pairAccuracy": 0.5,
+     "spearman": -0.0095,
+     "assets": {
+      "AVAX": {
+       "picks": 26,
+       "meanR": -0.1656
+      },
+      "BTC": {
+       "picks": 32,
+       "meanR": -0.1174
+      },
+      "SOL": {
+       "picks": 43,
+       "meanR": -0.1294
+      },
+      "ETH": {
+       "picks": 41,
+       "meanR": -0.0995
+      },
+      "DOGE": {
+       "picks": 48,
+       "meanR": -0.2804
+      },
+      "LINK": {
+       "picks": 31,
+       "meanR": -0.2685
+      },
+      "DOT": {
+       "picks": 29,
+       "meanR": -0.0364
+      },
+      "LTC": {
+       "picks": 69,
+       "meanR": -0.3264
+      },
+      "XLM": {
+       "picks": 32,
+       "meanR": 0.1004
+      },
+      "HBAR": {
+       "picks": 31,
+       "meanR": 0.1937
+      },
+      "BCH": {
+       "picks": 27,
+       "meanR": -0.1391
+      },
+      "ADA": {
+       "picks": 24,
+       "meanR": -0.1454
+      },
+      "XRP": {
+       "picks": 29,
+       "meanR": -0.2003
+      },
+      "UNI": {
+       "picks": 18,
+       "meanR": -0.1678
+      },
+      "AERO": {
+       "picks": 12,
+       "meanR": -0.1354
+      },
+      "ONDO": {
+       "picks": 20,
+       "meanR": 0.1408
+      }
+     },
+     "withoutDominantAsset": {
+      "n": 443,
+      "meanR": -0.1043
+     },
+     "pickProfile": {
+      "strategies": {
+       "BREAKOUT + RETEST": 73,
+       "LIQUIDITY-SWEEP REVERSAL": 73,
+       "TREND CONTINUATION": 305,
+       "MEAN REVERSION": 38,
+       "MOMENTUM CONTINUATION": 23
+      },
+      "directions": {
+       "long": 264,
+       "short": 248
+      },
+      "medianStopPct": 2.01,
+      "labelSources": {
+       "COINBASE_SPOT_5M_ARCHIVE": 512
+      }
+     }
+    },
+    "CURRENT_QUANT": {
+     "meanR": {
+      "0.00%": -0.0361,
+      "0.08%": -0.0901,
+      "0.16%": -0.144,
+      "0.25%": -0.2046
+     },
+     "ci95_016": [
+      -0.2385,
+      -0.0503
+     ],
+     "vsRandom016": {
+      "meanDiff": -0.0097,
+      "ci95": [
+       -0.0752,
+       0.0576
+      ],
+      "winPct": 38.9
+     },
+     "vsQuant016": {
+      "meanDiff": 0,
+      "ci95": [
+       0,
+       0
+      ],
+      "winPct": 0
+     },
+     "oosScans": 512,
+     "oosChoiceScans": 358,
+     "choiceScansOnly": {
+      "n": 358,
+      "meanR": -0.1621,
+      "vsQuantMeanDiff": 0
+     },
+     "folds": [
+      {
+       "fold": 1,
+       "testStart": "2023-12-06",
+       "testEnd": "2024-04-19",
+       "testScans": 102,
+       "meanR016": -0.1061,
+       "vsQuant": 0
+      },
+      {
+       "fold": 2,
+       "testStart": "2024-04-20",
+       "testEnd": "2024-09-20",
+       "testScans": 102,
+       "meanR016": -0.1643,
+       "vsQuant": 0
+      },
+      {
+       "fold": 3,
+       "testStart": "2024-09-21",
+       "testEnd": "2025-02-01",
+       "testScans": 102,
+       "meanR016": -0.101,
+       "vsQuant": 0
+      },
+      {
+       "fold": 4,
+       "testStart": "2025-02-03",
+       "testEnd": "2025-06-14",
+       "testScans": 102,
+       "meanR016": -0.3196,
+       "vsQuant": 0
+      },
+      {
+       "fold": 5,
+       "testStart": "2025-06-15",
+       "testEnd": "2025-10-24",
+       "testScans": 104,
+       "meanR016": -0.031,
+       "vsQuant": 0
+      }
+     ],
+     "foldsPositive016": 0,
+     "rankPositions": {
+      "buckets": {
+       "#1": {
+        "n": 358,
+        "meanR": -0.1511,
+        "tp1Rate": 0.2067,
+        "stopRate": 0.5251
+       },
+       "#2": {
+        "n": 358,
+        "meanR": -0.1013,
+        "tp1Rate": 0.243,
+        "stopRate": 0.5363
+       },
+       "#3": {
+        "n": 238,
+        "meanR": -0.1199,
+        "tp1Rate": 0.2563,
+        "stopRate": 0.563
+       },
+       "#4": {
+        "n": 178,
+        "meanR": -0.1367,
+        "tp1Rate": 0.264,
+        "stopRate": 0.5787
+       },
+       "#5+": {
+        "n": 429,
+        "meanR": -0.0879,
+        "tp1Rate": 0.2681,
+        "stopRate": 0.5921
+       }
+      },
+      "flag": "NON-MONOTONIC"
+     },
+     "pairAccuracy": 0.5368,
+     "spearman": 0.0888,
+     "assets": {
+      "AVAX": {
+       "picks": 30,
+       "meanR": -0.0266
+      },
+      "DOT": {
+       "picks": 35,
+       "meanR": -0.1364
+      },
+      "ETH": {
+       "picks": 31,
+       "meanR": -0.3734
+      },
+      "XLM": {
+       "picks": 36,
+       "meanR": -0.1064
+      },
+      "SOL": {
+       "picks": 43,
+       "meanR": -0.2179
+      },
+      "ADA": {
+       "picks": 31,
+       "meanR": -0.3874
+      },
+      "LTC": {
+       "picks": 68,
+       "meanR": -0.1858
+      },
+      "DOGE": {
+       "picks": 40,
+       "meanR": -0.2937
+      },
+      "BTC": {
+       "picks": 35,
+       "meanR": -0.4046
+      },
+      "LINK": {
+       "picks": 36,
+       "meanR": 0.2129
+      },
+      "HBAR": {
+       "picks": 36,
+       "meanR": 0.194
+      },
+      "BCH": {
+       "picks": 22,
+       "meanR": -0.0253
+      },
+      "XRP": {
+       "picks": 31,
+       "meanR": -0.1161
+      },
+      "UNI": {
+       "picks": 17,
+       "meanR": -0.0853
+      },
+      "ONDO": {
+       "picks": 12,
+       "meanR": 0.3139
+      },
+      "AERO": {
+       "picks": 9,
+       "meanR": -0.6246
+      }
+     },
+     "withoutDominantAsset": {
+      "n": 444,
+      "meanR": -0.1376
+     },
+     "pickProfile": {
+      "strategies": {
+       "BREAKOUT + RETEST": 114,
+       "TREND CONTINUATION": 324,
+       "MEAN REVERSION": 28,
+       "LIQUIDITY-SWEEP REVERSAL": 40,
+       "MOMENTUM CONTINUATION": 6
+      },
+      "directions": {
+       "long": 271,
+       "short": 241
+      },
+      "medianStopPct": 2.1544,
+      "labelSources": {
+       "COINBASE_SPOT_5M_ARCHIVE": 512
+      }
+     }
+    },
+    "GBM_FINAL_R": {
+     "meanR": {
+      "0.00%": 0.0155,
+      "0.08%": -0.0291,
+      "0.16%": -0.0736,
+      "0.25%": -0.1237
+     },
+     "ci95_016": [
+      -0.166,
+      0.019
+     ],
+     "vsRandom016": {
+      "meanDiff": 0.0606,
+      "ci95": [
+       0.0013,
+       0.1226
+      ],
+      "winPct": 97.75
+     },
+     "vsQuant016": {
+      "meanDiff": 0.0704,
+      "ci95": [
+       -0.013,
+       0.1575
+      ],
+      "winPct": 94.45
+     },
+     "oosScans": 512,
+     "oosChoiceScans": 358,
+     "choiceScansOnly": {
+      "n": 358,
+      "meanR": -0.0615,
+      "vsQuantMeanDiff": 0.1006
+     },
+     "folds": [
+      {
+       "fold": 1,
+       "testStart": "2023-12-06",
+       "testEnd": "2024-04-19",
+       "testScans": 102,
+       "meanR016": -0.1255,
+       "vsQuant": -0.0194
+      },
+      {
+       "fold": 2,
+       "testStart": "2024-04-20",
+       "testEnd": "2024-09-20",
+       "testScans": 102,
+       "meanR016": -0.0417,
+       "vsQuant": 0.1226
+      },
+      {
+       "fold": 3,
+       "testStart": "2024-09-21",
+       "testEnd": "2025-02-01",
+       "testScans": 102,
+       "meanR016": -0.0631,
+       "vsQuant": 0.0379
+      },
+      {
+       "fold": 4,
+       "testStart": "2025-02-03",
+       "testEnd": "2025-06-14",
+       "testScans": 102,
+       "meanR016": -0.0912,
+       "vsQuant": 0.2285
+      },
+      {
+       "fold": 5,
+       "testStart": "2025-06-15",
+       "testEnd": "2025-10-24",
+       "testScans": 104,
+       "meanR016": -0.0472,
+       "vsQuant": -0.0161
+      }
+     ],
+     "foldsPositive016": 0,
+     "rankPositions": {
+      "buckets": {
+       "#1": {
+        "n": 358,
+        "meanR": -0.0623,
+        "tp1Rate": 0.2039,
+        "stopRate": 0.4469
+       },
+       "#2": {
+        "n": 358,
+        "meanR": -0.2269,
+        "tp1Rate": 0.2151,
+        "stopRate": 0.5922
+       },
+       "#3": {
+        "n": 238,
+        "meanR": -0.1258,
+        "tp1Rate": 0.2269,
+        "stopRate": 0.563
+       },
+       "#4": {
+        "n": 178,
+        "meanR": 0.0963,
+        "tp1Rate": 0.3371,
+        "stopRate": 0.5112
+       },
+       "#5+": {
+        "n": 429,
+        "meanR": -0.1506,
+        "tp1Rate": 0.2797,
+        "stopRate": 0.6387
+       }
+      },
+      "flag": "WEAKLY MONOTONIC"
+     },
+     "pairAccuracy": 0.542,
+     "spearman": 0.2294,
+     "assets": {
+      "XLM": {
+       "picks": 47,
+       "meanR": -0.0339
+      },
+      "AVAX": {
+       "picks": 26,
+       "meanR": 0.043
+      },
+      "DOT": {
+       "picks": 37,
+       "meanR": 0.0269
+      },
+      "ETH": {
+       "picks": 37,
+       "meanR": -0.1672
+      },
+      "LTC": {
+       "picks": 68,
+       "meanR": -0.1102
+      },
+      "SOL": {
+       "picks": 34,
+       "meanR": -0.2116
+      },
+      "DOGE": {
+       "picks": 35,
+       "meanR": -0.1437
+      },
+      "LINK": {
+       "picks": 37,
+       "meanR": -0.233
+      },
+      "BTC": {
+       "picks": 33,
+       "meanR": -0.1855
+      },
+      "ADA": {
+       "picks": 25,
+       "meanR": -0.3017
+      },
+      "HBAR": {
+       "picks": 30,
+       "meanR": 0.3712
+      },
+      "BCH": {
+       "picks": 23,
+       "meanR": 0.031
+      },
+      "XRP": {
+       "picks": 33,
+       "meanR": -0.2377
+      },
+      "UNI": {
+       "picks": 17,
+       "meanR": 0.1211
+      },
+      "AERO": {
+       "picks": 13,
+       "meanR": -0.0755
+      },
+      "ONDO": {
+       "picks": 17,
+       "meanR": 0.2877
+      }
+     },
+     "withoutDominantAsset": {
+      "n": 444,
+      "meanR": -0.068
+     },
+     "pickProfile": {
+      "strategies": {
+       "TREND CONTINUATION": 409,
+       "BREAKOUT + RETEST": 34,
+       "MEAN REVERSION": 31,
+       "LIQUIDITY-SWEEP REVERSAL": 35,
+       "MOMENTUM CONTINUATION": 3
+      },
+      "directions": {
+       "long": 261,
+       "short": 251
+      },
+      "medianStopPct": 2.4468,
+      "labelSources": {
+       "COINBASE_SPOT_5M_ARCHIVE": 512
+      }
+     }
+    },
+    "LAMBDARANK_GBM_TP1": {
+     "meanR": {
+      "0.00%": -0.0444,
+      "0.08%": -0.1104,
+      "0.16%": -0.1763,
+      "0.25%": -0.2505
+     },
+     "ci95_016": [
+      -0.284,
+      -0.078
+     ],
+     "vsRandom016": {
+      "meanDiff": -0.0421,
+      "ci95": [
+       -0.1081,
+       0.0228
+      ],
+      "winPct": 10.35
+     },
+     "vsQuant016": {
+      "meanDiff": -0.0323,
+      "ci95": [
+       -0.1321,
+       0.07
+      ],
+      "winPct": 26.15
+     },
+     "oosScans": 512,
+     "oosChoiceScans": 358,
+     "choiceScansOnly": {
+      "n": 358,
+      "meanR": -0.2084,
+      "vsQuantMeanDiff": -0.0462
+     },
+     "folds": [
+      {
+       "fold": 1,
+       "testStart": "2023-12-06",
+       "testEnd": "2024-04-19",
+       "testScans": 102,
+       "meanR016": -0.2358,
+       "vsQuant": -0.1297
+      },
+      {
+       "fold": 2,
+       "testStart": "2024-04-20",
+       "testEnd": "2024-09-20",
+       "testScans": 102,
+       "meanR016": -0.1195,
+       "vsQuant": 0.0448
+      },
+      {
+       "fold": 3,
+       "testStart": "2024-09-21",
+       "testEnd": "2025-02-01",
+       "testScans": 102,
+       "meanR016": -0.059,
+       "vsQuant": 0.042
+      },
+      {
+       "fold": 4,
+       "testStart": "2025-02-03",
+       "testEnd": "2025-06-14",
+       "testScans": 102,
+       "meanR016": -0.3849,
+       "vsQuant": -0.0652
+      },
+      {
+       "fold": 5,
+       "testStart": "2025-06-15",
+       "testEnd": "2025-10-24",
+       "testScans": 104,
+       "meanR016": -0.0841,
+       "vsQuant": -0.0531
+      }
+     ],
+     "foldsPositive016": 0,
+     "rankPositions": {
+      "buckets": {
+       "#1": {
+        "n": 358,
+        "meanR": -0.2167,
+        "tp1Rate": 0.2682,
+        "stopRate": 0.6676
+       },
+       "#2": {
+        "n": 358,
+        "meanR": -0.1256,
+        "tp1Rate": 0.243,
+        "stopRate": 0.5615
+       },
+       "#3": {
+        "n": 238,
+        "meanR": -0.0902,
+        "tp1Rate": 0.2521,
+        "stopRate": 0.542
+       },
+       "#4": {
+        "n": 178,
+        "meanR": -0.1331,
+        "tp1Rate": 0.2416,
+        "stopRate": 0.5562
+       },
+       "#5+": {
+        "n": 429,
+        "meanR": -0.0309,
+        "tp1Rate": 0.2284,
+        "stopRate": 0.4732
+       }
+      },
+      "flag": "NON-MONOTONIC"
+     },
+     "pairAccuracy": 0.473,
+     "spearman": -0.1915,
+     "assets": {
+      "AVAX": {
+       "picks": 28,
+       "meanR": -0.3107
+      },
+      "BTC": {
+       "picks": 35,
+       "meanR": -0.1778
+      },
+      "SOL": {
+       "picks": 44,
+       "meanR": -0.2771
+      },
+      "ETH": {
+       "picks": 46,
+       "meanR": -0.3217
+      },
+      "DOGE": {
+       "picks": 44,
+       "meanR": 0.0346
+      },
+      "XLM": {
+       "picks": 29,
+       "meanR": -0.0861
+      },
+      "DOT": {
+       "picks": 27,
+       "meanR": -0.0322
+      },
+      "LTC": {
+       "picks": 66,
+       "meanR": -0.2782
+      },
+      "LINK": {
+       "picks": 39,
+       "meanR": -0.0409
+      },
+      "ADA": {
+       "picks": 22,
+       "meanR": -0.3949
+      },
+      "HBAR": {
+       "picks": 36,
+       "meanR": 0.0314
+      },
+      "BCH": {
+       "picks": 21,
+       "meanR": -0.0423
+      },
+      "XRP": {
+       "picks": 32,
+       "meanR": -0.4528
+      },
+      "UNI": {
+       "picks": 15,
+       "meanR": -0.4337
+      },
+      "AERO": {
+       "picks": 13,
+       "meanR": 0.1504
+      },
+      "ONDO": {
+       "picks": 15,
+       "meanR": 0.0624
+      }
+     },
+     "withoutDominantAsset": {
+      "n": 446,
+      "meanR": -0.1612
+     },
+     "pickProfile": {
+      "strategies": {
+       "BREAKOUT + RETEST": 100,
+       "LIQUIDITY-SWEEP REVERSAL": 96,
+       "TREND CONTINUATION": 249,
+       "MEAN REVERSION": 41,
+       "MOMENTUM CONTINUATION": 26
+      },
+      "directions": {
+       "long": 258,
+       "short": 254
+      },
+      "medianStopPct": 1.6046,
+      "labelSources": {
+       "COINBASE_SPOT_5M_ARCHIVE": 512
+      }
+     }
+    }
+   },
+   "placeboGate": {
+    "GBM_FINAL_R": {
+     "k": 19,
+     "real016": -0.0736,
+     "placeboMean": -0.1357,
+     "placeboMax": -0.0705,
+     "p": 0.1,
+     "checks": {
+      "placeboP005": false,
+      "beatsRandomCi": true,
+      "beatsQuantCi": false
+     },
+     "verdict": "FAIL"
+    },
+    "LAMBDARANK_GBM_TP1": {
+     "k": 19,
+     "real016": -0.1763,
+     "placeboMean": -0.1329,
+     "placeboMax": -0.0887,
+     "p": 0.95,
+     "checks": {
+      "placeboP005": false,
+      "beatsRandomCi": false,
+      "beatsQuantCi": false
+     },
+     "verdict": "FAIL"
+    }
+   }
+  }
+ },
+ "power": {
+  "OLD": {
+   "sigmaPerScan": 1.1683,
+   "lag1Autocorrelation": -0.0526,
+   "varianceInflation": 1,
+   "achievedOosChoiceScans": 214,
+   "effects": {
+    "+0.02R": {
+     "scansForCiExcludingZero": 13109,
+     "scansFor80Power": 26783,
+     "achievedFractionCi": 0.0163,
+     "achievedFraction80": 0.008
+    },
+    "+0.04R": {
+     "scansForCiExcludingZero": 3278,
+     "scansFor80Power": 6696,
+     "achievedFractionCi": 0.0653,
+     "achievedFraction80": 0.032
+    },
+    "+0.06R": {
+     "scansForCiExcludingZero": 1457,
+     "scansFor80Power": 2976,
+     "achievedFractionCi": 0.1469,
+     "achievedFraction80": 0.0719
+    },
+    "+0.08R": {
+     "scansForCiExcludingZero": 820,
+     "scansFor80Power": 1674,
+     "achievedFractionCi": 0.261,
+     "achievedFraction80": 0.1278
+    }
+   }
+  },
+  "EXPANDED": {
+   "sigmaPerScan": 1.1416,
+   "lag1Autocorrelation": 0.0352,
+   "varianceInflation": 1.073,
+   "achievedOosChoiceScans": 358,
+   "effects": {
+    "+0.02R": {
+     "scansForCiExcludingZero": 13431,
+     "scansFor80Power": 27441,
+     "achievedFractionCi": 0.0267,
+     "achievedFraction80": 0.013
+    },
+    "+0.04R": {
+     "scansForCiExcludingZero": 3358,
+     "scansFor80Power": 6861,
+     "achievedFractionCi": 0.1066,
+     "achievedFraction80": 0.0522
+    },
+    "+0.06R": {
+     "scansForCiExcludingZero": 1493,
+     "scansFor80Power": 3049,
+     "achievedFractionCi": 0.2398,
+     "achievedFraction80": 0.1174
+    },
+    "+0.08R": {
+     "scansForCiExcludingZero": 840,
+     "scansFor80Power": 1716,
+     "achievedFractionCi": 0.4262,
+     "achievedFraction80": 0.2086
+    }
+   }
+  }
+ },
+ "d1RowsRead": 6845,
+ "runtimeSeconds": 434.945
+}

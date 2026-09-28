@@ -10,9 +10,12 @@ per-trade metrics the Performance screen charts, computed the same way
 from __future__ import annotations
 
 import json
+import time
 from collections import defaultdict
 from contextlib import closing
 from typing import Optional
+
+from market_edge_exec.paper.engine import MONITOR_MAX_PRICE_AGE_SECONDS
 
 from market_edge_exec.paper.ledger import PaperLedger
 from market_edge_exec.paper.report import build_report
@@ -33,13 +36,32 @@ def _avg_exit_price(trade: dict) -> Optional[float]:
     return (sum(e["fill_price"] * e["quantity"] for e in exits) / qty) if qty > 0 else None
 
 
-def position_view(trade: dict) -> dict:
-    mark = trade.get("mark_price") or trade["entry_fill"]
+MARK_SOURCES = {
+    "HYPERLIQUID_ALLMIDS_LIVE": "live mid (10s open-position monitor)",
+    "HYPERLIQUID_WS_TRADES": "live trade print (exchange stream)",
+    "HYPERLIQUID_CANDLE_5M_CLOSE": "last completed 5m candle close",
+}
+
+
+def position_view(trade: dict, now_ms: Optional[int] = None, max_price_age_s: float = MONITOR_MAX_PRICE_AGE_SECONDS) -> dict:
+    from market_edge_exec.paper.trade_detail import live_metrics  # avoids an import cycle at module load
+
+    now_ms = now_ms or int(time.time() * 1000)
+    live = live_metrics(trade, now_ms, max_price_age_s)
+    mon = live["monitor"]
+    # No live price yet: show the entry mark it was opened on, labelled as such.
+    mark = mon["price"] or trade.get("mark_price") or trade["entry_fill"]
+    source = MARK_SOURCES.get(mon["price_source"], mon["price_source"]) if mon["price"] else "entry mark (awaiting first monitor price)"
     return {
-        "signal_id": trade["signal_id"], "instrument": trade["instrument"], "asset": trade["asset"],
+        "signal_id": trade["signal_id"], "trade_id": trade["trade_id"], "instrument": trade["instrument"], "asset": trade["asset"],
         "direction": trade["direction"], "status": trade["status"], "strategy": trade.get("strategy"),
-        "entry": trade["entry_fill"], "current_price": mark, "mark_source": "last completed 5m candle close",
-        "mark_checked_ms": trade.get("last_checked_ms"), "quantity": trade["remaining_qty"],
+        "entry": trade["entry_fill"], "current_price": mark, "mark_source": source,
+        "mark_checked_ms": mon["price_at_ms"] or trade.get("last_checked_ms"), "quantity": trade["remaining_qty"],
+        "monitor_status": mon["status"], "monitor_detail": mon["detail"], "price_age_s": mon["price_age_s"],
+        "price_source": mon["price_source"], "unrealized_r": live["unrealized_r"],
+        "distance_to_stop": live["distance_to_stop"], "distance_to_tp1": live["distance_to_tp1"],
+        "distance_to_tp2": live["distance_to_tp2"], "mfe": live["mfe"], "mae": live["mae"],
+        "position_age_s": live["position_age_s"], "active_stop": live["active_stop"], "milestones": live["milestones"],
         "original_quantity": trade["quantity"], "leverage": trade["approved_leverage"],
         "requested_leverage": trade["requested_leverage"], "margin": trade["margin_used"],
         "notional": trade["remaining_qty"] * mark, "unrealized_pnl": trade.get("unrealized_pnl", 0.0),
@@ -52,7 +74,7 @@ def position_view(trade: dict) -> dict:
 
 def trade_view(trade: dict) -> dict:
     return {
-        "signal_id": trade["signal_id"], "instrument": trade["instrument"], "asset": trade["asset"],
+        "signal_id": trade["signal_id"], "trade_id": trade["trade_id"], "instrument": trade["instrument"], "asset": trade["asset"],
         "direction": trade["direction"], "status": trade["status"], "strategy": trade.get("strategy"),
         "entry_at_ms": trade["opened_at_ms"], "exit_at_ms": trade.get("closed_at_ms"),
         "size": trade["quantity"], "leverage": trade["approved_leverage"], "entry": trade["entry_fill"],

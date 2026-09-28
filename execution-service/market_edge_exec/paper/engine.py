@@ -30,6 +30,15 @@ from market_edge_exec.telemetry.logging import log_event
 
 EXECUTION_MODE = "PAPER"
 MAX_MARK_AGE_SECONDS = 120  # a mark older than this is stale market data: no new entries
+# Open-position monitor (signal-bridge/position_monitor.mjs) posts a live
+# price every ~10s. A price older than this is STALE for position management:
+# it is not evaluated and the position is flagged, never marked with it.
+# Stricter than the entry guard, and never looser than the operator's
+# stale-data timeout (min of the two applies).
+MONITOR_MAX_PRICE_AGE_SECONDS = 30
+# Which path observed the price that fired an exit. Recorded on the exit.
+TRIGGER_SOURCES = ("WS_TRADE", "POLL_HEARTBEAT")
+MONITOR_LIVE, MONITOR_STALE, MONITOR_OFFLINE = "LIVE", "STALE", "MARKET_DATA_OFFLINE"
 
 
 @dataclass
@@ -38,6 +47,48 @@ class EntryResult:
     accepted: bool
     reason: Optional[str] = None
     trade: Optional[dict] = None
+
+
+@dataclass
+class TickResult:
+    instrument: str
+    exits: list = field(default_factory=list)
+    price: Optional[float] = None
+    skipped: Optional[str] = None
+    monitor_status: Optional[str] = None
+
+
+def _finite_positive(value) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and value == value and 0 < value < float("inf")
+
+
+def update_excursions(trade: dict, prices) -> None:
+    """Highest favourable / lowest adverse price since entry, from real
+    observed prices only (trade prints, polled mids, completed candle
+    highs/lows). Only ever widens, so a restart or an older price can never
+    shrink a recorded MFE/MAE."""
+    seen = [p for p in prices if _finite_positive(p)]
+    if not seen:
+        return
+    long = trade["direction"] == "long"
+    best = trade.get("best_price") or trade["entry_fill"]
+    worst = trade.get("worst_price") or trade["entry_fill"]
+    trade["best_price"] = max([best, *seen]) if long else min([best, *seen])
+    trade["worst_price"] = min([worst, *seen]) if long else max([worst, *seen])
+
+
+def freshest_price(trade: dict) -> tuple[Optional[float], Optional[int], Optional[str]]:
+    """The most recent real price we hold for a trade: the monitor's live
+    price, or the last completed 5m candle close (its close time is the
+    candle open + 5m). Never a synthetic value."""
+    live = (trade.get("last_price"), trade.get("last_price_at_ms"), trade.get("last_price_source"))
+    candle_at = (trade["last_checked_ms"] + 300_000) if trade.get("mark_price") and trade.get("last_checked_ms") != trade["opened_at_ms"] else None
+    candle = (trade.get("mark_price"), candle_at, "HYPERLIQUID_CANDLE_5M_CLOSE")
+    if live[0] and (candle_at is None or (live[1] or 0) >= candle_at):
+        return live
+    if candle_at is not None:
+        return candle
+    return (None, None, None)
 
 
 @dataclass
@@ -65,6 +116,15 @@ class PaperEngine:
         # together exceeding the 20% cap. Held across read-check-write so
         # exposure reservation is atomic within this process.
         self._entry_lock = threading.Lock()
+        # The 5m candle sweep (discovery loop) and the fast position monitor
+        # can both reach the same trade at once; each read-evaluate-write of a
+        # trade's lifecycle happens under this lock so neither overwrites the
+        # other's exit or excursion update.
+        self._lifecycle_lock = threading.RLock()
+
+    def monitor_max_price_age_s(self) -> float:
+        entry_guard = self._max_mark_age_provider() if self._max_mark_age_provider else MAX_MARK_AGE_SECONDS
+        return float(min(MONITOR_MAX_PRICE_AGE_SECONDS, entry_guard))
 
     @property
     def limits(self) -> RiskLimits:
@@ -187,6 +247,13 @@ class PaperEngine:
                 "realized_pnl": 0.0, "unrealized_pnl": 0.0, "fees": entry_fee,
                 "slippage_cost": abs(entry_fill - mark_price) * qty, "mark_price": mark_price, "last_checked_ms": now_ms,
                 "quant_score": signal.quant_score, "exits": [],
+                # Open-position monitor state, persisted so a restart resumes
+                # it instead of resetting it.
+                "best_price": entry_fill, "worst_price": entry_fill,
+                "last_price": None, "last_price_at_ms": None, "last_price_source": None,
+                "stop_status": "ACTIVE", "tp2_status": "PENDING" if tp2 is not None else "NONE",
+                "tp1_fill_at_ms": None, "tp1_fill_price": None,
+                "monitor_status": None, "monitor_detail": None,
             }
             self.ledger.open_trade(trade)
             self.ledger.record_signal(sid, "EXECUTED", None, payload, at_ms=now_ms)
@@ -195,26 +262,13 @@ class PaperEngine:
         return EntryResult(signal_id=sid, accepted=True, trade=trade)
 
     # ---- lifecycle -----------------------------------------------------
-    def mark(self, instrument: str, candles: list[dict], now_ms: Optional[int] = None) -> MarkResult:
-        """Advance every open trade on `instrument` through the completed
-        candles observed since its last check. Exits route as reduce-only
-        intents, so they still go through when the kill switch is engaged."""
-        now_ms = now_ms or int(time.time() * 1000)
-        result = MarkResult(instrument=instrument)
-        trade = self.ledger.open_trade_for(instrument)
-        if trade is None:
-            result.skipped = "NO_OPEN_TRADE"
-            return result
-        fresh = [c for c in candles if c["time"] > trade["last_checked_ms"] and c["time"] > trade["opened_at_ms"]]
-        if not fresh:
-            result.skipped = "NO_NEW_CANDLES"
-            return result
-        fresh.sort(key=lambda c: c["time"])
-        events = lifecycle.advance(
-            trade["direction"], trade["entry_fill"], trade["stop"], trade["tp1"], trade["tp2"], trade["remaining_qty"],
-            trade["quantity"], trade["tp1_hit"], trade["opened_at_ms"], fresh, now_ms,
-        )
+    def _route_exits(self, trade: dict, instrument: str, events: list, trigger: str, observed_price: Optional[float] = None) -> list:
+        """Route each exit as a reduce-only intent (so exits still go through
+        when the kill switch is engaged) and apply it to the ledger. Intent ids
+        are "<trade_id>:<KIND>", so the router and the ledger's UNIQUE event
+        row each independently refuse a second TP1/TP2/stop."""
         side = lifecycle.exit_side(trade["direction"])
+        exits = []
         for event in events:
             exit_intent = ExecutionIntent.create({
                 "signal_id": f"{trade['trade_id']}:{event.kind}", "instrument": instrument, "side": side,
@@ -236,17 +290,124 @@ class PaperEngine:
                 break
             realized = lifecycle.pnl(trade["direction"], trade["entry_fill"], event.fill_price, event.quantity)
             exit_fee = lifecycle.fee(event.fill_price, event.quantity)
+            extra = {"trigger": trigger}
+            if observed_price is not None:
+                extra["observed_price"] = observed_price
             if self.ledger.apply_exit(trade, event.kind, event.quantity, event.fill_price, event.level, realized, exit_fee,
-                                      abs(event.fill_price - event.level) * event.quantity, event.at_ms):
-                result.exits.append({"kind": event.kind, "quantity": event.quantity, "fill_price": event.fill_price, "pnl": realized})
-                log_event("paper_exit", signal_id=trade["trade_id"], reason=event.kind)
-        last_close = fresh[-1]["close"]
-        if trade["status"] != "CLOSED":
-            unrealized = lifecycle.pnl(trade["direction"], trade["entry_fill"], last_close, trade["remaining_qty"])
-            self.ledger.update_mark(trade, last_close, fresh[-1]["time"], unrealized)
-        result.mark_price = last_close
+                                      abs(event.fill_price - event.level) * event.quantity, event.at_ms, extra=extra):
+                exits.append({"kind": event.kind, "quantity": event.quantity, "fill_price": event.fill_price, "pnl": realized,
+                              "at_ms": event.at_ms, "trigger": trigger})
+                log_event("paper_exit", signal_id=trade["trade_id"], reason=event.kind, trigger=trigger)
+        return exits
+
+    def _refresh_unrealized(self, trade: dict) -> None:
+        price, _, _ = freshest_price(trade)
+        if trade["status"] != "CLOSED" and price:
+            trade["unrealized_pnl"] = lifecycle.pnl(trade["direction"], trade["entry_fill"], price, trade["remaining_qty"])
+
+    def mark(self, instrument: str, candles: list[dict], now_ms: Optional[int] = None) -> MarkResult:
+        """Advance every open trade on `instrument` through the completed
+        candles observed since its last check. Exits route as reduce-only
+        intents, so they still go through when the kill switch is engaged.
+
+        This 5m sweep (run by the discovery loop) is also the backstop for
+        the fast monitor: a crossing that happened between two monitor
+        observations is still inside a completed candle's real high/low."""
+        now_ms = now_ms or int(time.time() * 1000)
+        result = MarkResult(instrument=instrument)
+        with self._lifecycle_lock:
+            trade = self.ledger.open_trade_for(instrument)
+            if trade is None:
+                result.skipped = "NO_OPEN_TRADE"
+                return result
+            fresh = [c for c in candles if c["time"] > trade["last_checked_ms"] and c["time"] > trade["opened_at_ms"]]
+            if not fresh:
+                result.skipped = "NO_NEW_CANDLES"
+                return result
+            fresh.sort(key=lambda c: c["time"])
+            update_excursions(trade, [v for c in fresh for v in (c["high"], c["low"])])
+            events = lifecycle.advance(
+                trade["direction"], trade["entry_fill"], trade["stop"], trade["tp1"], trade["tp2"], trade["remaining_qty"],
+                trade["quantity"], trade["tp1_hit"], trade["opened_at_ms"], fresh, now_ms,
+            )
+            result.exits = self._route_exits(trade, instrument, events, "CANDLE_5M")
+            last_close = fresh[-1]["close"]
+            if trade["status"] != "CLOSED":
+                trade["mark_price"] = last_close
+                trade["last_checked_ms"] = fresh[-1]["time"]
+                self._refresh_unrealized(trade)
+                self.ledger.save(trade)
+            result.mark_price = last_close
         self.ledger.record_equity(now_ms)
         return result
+
+    def tick(self, instrument: str, price, at_ms, source: str, trigger: str = "POLL_HEARTBEAT",
+             observed_high=None, observed_low=None, now_ms: Optional[int] = None) -> TickResult:
+        """Open-position monitor: evaluate ONLY position-management triggers
+        (stop / TP1 / TP2 / timeout) for one real observed price. Never opens
+        a trade. Fails closed: a missing, invalid, pre-entry or stale price
+        is not evaluated and does not move the position's price."""
+        now_ms = now_ms or int(time.time() * 1000)
+        result = TickResult(instrument=instrument)
+        if trigger not in TRIGGER_SOURCES:
+            result.skipped = "UNKNOWN_TRIGGER"
+            return result
+        with self._lifecycle_lock:
+            trade = self.ledger.open_trade_for(instrument)
+            if trade is None:
+                result.skipped = "NO_OPEN_TRADE"
+                return result
+            if not _finite_positive(price) or not isinstance(at_ms, int) or isinstance(at_ms, bool):
+                result.skipped = "INVALID_PRICE"
+                return result
+            age_s = (now_ms - at_ms) / 1000.0
+            if age_s > self.monitor_max_price_age_s():
+                if trade.get("monitor_status") != MONITOR_OFFLINE:
+                    trade["monitor_status"], trade["monitor_detail"] = MONITOR_STALE, f"price from {source} is {age_s:.0f}s old"
+                    self.ledger.save(trade)
+                result.skipped, result.monitor_status = "STALE_MARKET_DATA", trade.get("monitor_status")
+                return result
+            if at_ms < trade["opened_at_ms"]:
+                result.skipped = "PRE_ENTRY_PRICE"
+                return result
+            # Observed extremes come from real exchange trade prints between
+            # two monitor posts; they only widen MFE/MAE, they never trigger.
+            extremes = [p for p in (observed_high, observed_low) if _finite_positive(p)]
+            update_excursions(trade, [price, *extremes])
+            if at_ms >= (trade.get("last_price_at_ms") or 0):
+                trade["last_price"], trade["last_price_at_ms"], trade["last_price_source"] = float(price), at_ms, source
+            trade["monitor_status"], trade["monitor_detail"] = MONITOR_LIVE, None
+            # A price observed before the latest recorded exit cannot fire
+            # another one (e.g. a late stream print after TP1 already filled).
+            last_exit_at = max((e["at_ms"] for e in trade.get("exits") or []), default=trade["opened_at_ms"])
+            events = []
+            if at_ms >= last_exit_at:
+                events = lifecycle.evaluate_tick(
+                    trade["direction"], trade["entry_fill"], trade["stop"], trade["tp1"], trade["tp2"], trade["remaining_qty"],
+                    trade["quantity"], trade["tp1_hit"], trade["opened_at_ms"], float(price), at_ms,
+                )
+            result.exits = self._route_exits(trade, instrument, events, trigger, observed_price=float(price))
+            if trade["status"] != "CLOSED":
+                self._refresh_unrealized(trade)
+                self.ledger.save(trade)
+            result.price, result.monitor_status = float(price), trade.get("monitor_status")
+        if result.exits:
+            self.ledger.record_equity(now_ms)
+        return result
+
+    def set_monitor_offline(self, instruments: list[str], detail: str) -> int:
+        """The monitor could not read a live price: flag the positions (they
+        stay open, keep their last real price and its age) -- never mark them."""
+        flagged = 0
+        with self._lifecycle_lock:
+            for instrument in instruments:
+                trade = self.ledger.open_trade_for(instrument)
+                if trade is None:
+                    continue
+                trade["monitor_status"], trade["monitor_detail"] = MONITOR_OFFLINE, detail
+                self.ledger.save(trade)
+                flagged += 1
+        return flagged
 
     # ---- reconciliation ------------------------------------------------
     def reconcile_ledger(self, portfolio_positions: list[dict]) -> dict:

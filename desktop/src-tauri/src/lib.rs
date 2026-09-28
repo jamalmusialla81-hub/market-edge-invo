@@ -119,9 +119,54 @@ async fn get_positions(state: tauri::State<'_, AppState>) -> CmdResult<Value> {
 async fn get_trades(state: tauri::State<'_, AppState>) -> CmdResult<Value> {
     state.get("/paper/trades").await
 }
+/// `path?k=v&...` with each value percent-encoded (trade ids come from signal ids).
+fn with_query(path: &str, params: &[(&str, &str)]) -> String {
+    let url = reqwest::Url::parse_with_params(&format!("http://service{path}"), params).expect("static path");
+    format!("{}?{}", url.path(), url.query().unwrap_or(""))
+}
+#[tauri::command]
+async fn get_trade_detail(state: tauri::State<'_, AppState>, trade_id: String) -> CmdResult<Value> {
+    state.get(&with_query("/paper/trade", &[("trade_id", &trade_id)])).await
+}
+#[tauri::command]
+async fn get_trade_candles(state: tauri::State<'_, AppState>, trade_id: String, interval: String) -> CmdResult<Value> {
+    state.get(&with_query("/paper/trade/candles", &[("trade_id", &trade_id), ("interval", &interval)])).await
+}
 #[tauri::command]
 async fn get_signals(state: tauri::State<'_, AppState>, limit: Option<u32>) -> CmdResult<Value> {
     state.get(&format!("/paper/signals?limit={}", limit.unwrap_or(500).clamp(1, 5000))).await
+}
+// Shadow learning (research only): read-only views of the execution-service's
+// separate shadow research store. Filter values come from the webview, so only
+// known keys with [A-Z_] values (and a bounded limit) are forwarded.
+fn shadow_token_ok(value: &str) -> bool {
+    !value.is_empty() && value.len() <= 64 && value.chars().all(|c| c.is_ascii_uppercase() || c == '_')
+}
+#[tauri::command]
+async fn get_shadow_summary(state: tauri::State<'_, AppState>) -> CmdResult<Value> {
+    state.get("/shadow/summary").await
+}
+#[tauri::command]
+async fn get_shadow_observations(state: tauri::State<'_, AppState>, filter: Option<Value>) -> CmdResult<Value> {
+    let filter = filter.unwrap_or(Value::Null);
+    let limit = filter.get("limit").and_then(Value::as_u64).unwrap_or(200).clamp(1, 1000);
+    let mut path = format!("/shadow/observations?limit={limit}");
+    for key in ["kind", "execution_status", "classification"] {
+        if let Some(v) = filter.get(key).and_then(Value::as_str) {
+            if !shadow_token_ok(v) {
+                return Err(format!("invalid shadow filter {key}"));
+            }
+            path.push_str(&format!("&{key}={v}"));
+        }
+    }
+    state.get(&path).await
+}
+#[tauri::command]
+async fn get_shadow_observation(state: tauri::State<'_, AppState>, id: String) -> CmdResult<Value> {
+    if id.len() > 64 || !id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
+        return Err("invalid observation id".into());
+    }
+    state.get(&format!("/shadow/observations/{id}")).await
 }
 #[tauri::command]
 async fn get_performance(state: tauri::State<'_, AppState>) -> CmdResult<Value> {
@@ -289,7 +334,8 @@ async fn export_backup(app: tauri::AppHandle, state: tauri::State<'_, AppState>)
     let user = state.user.lock().unwrap().clone();
     let dest2 = dest.clone();
     let manifest = tauri::async_runtime::spawn_blocking(move || backup::export(&cfg, &user, &dest2, APP_VERSION, GIT_SHA)).await.map_err(|e| e.to_string())??;
-    state.logs.app(Level::Info, format!("EXPORT BACKUP: {} (schema v{}, {} trades, no secrets)", dest.display(), manifest.schema_version, manifest.counts["paper_trades"]));
+    state.logs.app(Level::Info, format!("EXPORT BACKUP: {} (schema v{}, {} trades, shadow {}, no secrets, local file only)", dest.display(), manifest.schema_version, manifest.counts["paper_trades"],
+        if manifest.shadow_included { format!("{} observations", manifest.shadow_counts["shadow_observations"]) } else { "not present".into() }));
     Ok(json!({"path": dest, "manifest": manifest}))
 }
 
@@ -305,7 +351,7 @@ async fn inspect_backup(app: tauri::AppHandle, state: tauri::State<'_, AppState>
     let inspection = tauri::async_runtime::spawn_blocking(move || backup::inspect(&cfg, &p2)).await.map_err(|e| e.to_string())?;
     match inspection {
         Ok(i) => {
-            let out = json!({"path": i.path, "manifest": i.manifest, "validation": i.validation});
+            let out = json!({"path": i.path, "manifest": i.manifest, "validation": i.validation, "shadow_validation": i.shadow_validation});
             if let Some(old) = rt.pending_restore.lock().unwrap().replace(i) {
                 backup::discard(&old);
             }
@@ -334,13 +380,16 @@ async fn restore_backup(state: tauri::State<'_, AppState>, confirm: String) -> C
         let _ = services.stop_loop(process::EXIT_LOOP_GRACE);
         services.wait_loop_stopped(process::EXIT_LOOP_GRACE + Duration::from_secs(2));
         services.stop_execution_service();
-        let kept = backup::restore(&services.cfg, &inspection)?;
-        logs.app(Level::Info, format!("IMPORT BACKUP: restored {}; previous database kept at {:?}", inspection.path.display(), kept));
+        let outcome = backup::restore(&services.cfg, &inspection)?;
+        let kept = outcome.previous_db.clone();
+        logs.app(Level::Info, format!("IMPORT BACKUP: restored {}; previous database kept at {:?}; shadow research database {}", inspection.path.display(), kept,
+            if outcome.shadow_restored { format!("restored (previous kept at {:?})", outcome.previous_shadow_db) } else { "not in backup, current one kept".into() }));
         services.start_execution_service()?;
         // restored state is reviewed before any new trade: paused + reconciled
         let _ = services.call(reqwest::Method::POST, "/control/pause", Some(json!({"reason": "RESTORED_FROM_BACKUP"})));
         let reconciled = sup.reconcile("post-restore reconciliation").unwrap_or(false);
-        Ok(json!({"restored": inspection.path, "previous_database_kept_at": kept, "reconciled": reconciled, "entries_paused": true}))
+        Ok(json!({"restored": inspection.path, "previous_database_kept_at": kept, "shadow_restored": outcome.shadow_restored,
+                  "previous_shadow_database_kept_at": outcome.previous_shadow_db, "reconciled": reconciled, "entries_paused": true}))
     })
     .await
     .map_err(|e| e.to_string())?;
@@ -683,7 +732,7 @@ fn headless(args: &[String]) -> Option<i32> {
             match backup::inspect(&cfg, &src) {
                 Ok(i) => {
                     backup::discard(&i);
-                    emit(json!({"ok": true, "manifest": i.manifest, "validation": i.validation}), true)
+                    emit(json!({"ok": true, "manifest": i.manifest, "validation": i.validation, "shadow_validation": i.shadow_validation}), true)
                 }
                 Err(e) => emit(json!({"ok": false, "error": e}), false),
             }
@@ -696,8 +745,9 @@ fn headless(args: &[String]) -> Option<i32> {
             if process::http().get(format!("{}/health", cfg.base_url())).send().is_ok() {
                 return Some(emit(json!({"ok": false, "error": "Market Edge is running; use IMPORT BACKUP in the app or quit it first"}), false));
             }
-            match backup::inspect(&cfg, &src).and_then(|i| backup::restore(&cfg, &i).map(|kept| (i, kept))) {
-                Ok((i, kept)) => emit(json!({"ok": true, "restored": src, "manifest": i.manifest, "previous_database_kept_at": kept}), true),
+            match backup::inspect(&cfg, &src).and_then(|i| backup::restore(&cfg, &i).map(|outcome| (i, outcome))) {
+                Ok((i, outcome)) => emit(json!({"ok": true, "restored": src, "manifest": i.manifest, "previous_database_kept_at": outcome.previous_db,
+                                                "shadow_restored": outcome.shadow_restored, "previous_shadow_database_kept_at": outcome.previous_shadow_db}), true),
                 Err(e) => emit(json!({"ok": false, "error": e}), false),
             }
         }
@@ -812,8 +862,13 @@ pub fn run() {
             get_account,
             get_positions,
             get_trades,
+            get_trade_detail,
+            get_trade_candles,
             get_signals,
             get_performance,
+            get_shadow_summary,
+            get_shadow_observations,
+            get_shadow_observation,
             get_risk_config,
             get_risk_usage,
             update_risk_config,
@@ -848,4 +903,18 @@ pub fn run() {
                 }
             }
         });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::with_query;
+
+    #[test]
+    fn trade_detail_query_is_percent_encoded() {
+        assert_eq!(with_query("/paper/trade", &[("trade_id", "scan-abc-ETH")]), "/paper/trade?trade_id=scan-abc-ETH");
+        assert_eq!(
+            with_query("/paper/trade/candles", &[("trade_id", "a&b=c #1"), ("interval", "5m")]),
+            "/paper/trade/candles?trade_id=a%26b%3Dc+%231&interval=5m"
+        );
+    }
 }

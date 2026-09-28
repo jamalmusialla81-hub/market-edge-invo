@@ -259,6 +259,7 @@ impl Services {
             .current_dir(layout.exec_cwd.as_ref().unwrap_or(&self.cfg.data_dir))
             .env("MARKET_EDGE_EXEC_API_KEY", &self.api_key)
             .env("EXECUTION_SERVICE_DB_PATH", &self.cfg.db_path)
+            .env("MARKET_EDGE_SHADOW_DB", &self.cfg.shadow_db_path)
             .env("EXECUTION_SERVICE_PORT", self.cfg.port.to_string())
             .env("EXECUTION_SERVICE_BACKUP_DIR", &self.cfg.backups_dir)
             .env("HUMMINGBOT_MODE", &self.cfg.hummingbot_mode)

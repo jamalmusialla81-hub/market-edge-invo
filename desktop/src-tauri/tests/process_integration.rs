@@ -269,29 +269,48 @@ fn backup_export_validate_restore_and_legacy_migration() {
     assert_eq!(risk["starting_equity"], 25000.0, "legacy data preserved: {risk}");
     assert_eq!(risk["settings"]["max_risk_per_trade_pct"], 0.5);
 
+    // shadow research evidence exists before the backup (one no-trade scan)
+    let shadow_scan = |id: &str, ts: u64| json!({"scan": {"scan_id": id, "decision_ts": ts, "generator_version": "g", "feature_version": "f",
+        "execution": {"decision": "NO_SIGNAL"}}, "observations": [{"kind": "MARKET_STATE", "asset": "BTC", "production_state": "NO_TRADE",
+        "decision": {"market": {"price": 100.0, "data_age_ms": 1000}}}]});
+    let (code, body) = req(&cfg, reqwest::Method::POST, "/shadow/scan", Some(shadow_scan("scan-backup-1", 1_790_000_000_000)));
+    assert_eq!(code, 200, "{body}");
+    let shadow_obs = || get(&cfg, "/shadow/summary?since_ms=0")["observations"].as_u64().unwrap();
+    assert_eq!(shadow_obs(), 1);
+
     // export while running (online snapshot)
     let dest = tmp.path().join("exports").join("b.mebackup");
     let user = UserConfig::default();
     let manifest = backup::export(&cfg, &user, &dest, "0.1.0", "test").unwrap();
     assert!(!manifest.secrets_included);
+    assert!(!manifest.cloud_backup, "backups are local files only");
     assert!(manifest.schema_version >= 2);
+    assert!(manifest.shadow_included, "shadow research database is in the backup");
+    assert_eq!(manifest.shadow_counts["shadow_observations"], 1, "{:?}", manifest.shadow_counts);
     let names = backup::entries(&dest).unwrap();
-    assert_eq!(names.len(), 3, "{names:?}");
+    assert_eq!(names.len(), 4, "{names:?}");
+    assert!(names.iter().any(|n| n == backup::SHADOW_ENTRY), "{names:?}");
     let bytes = std::fs::read(&dest).unwrap();
     assert!(!bytes.windows(KEY.len()).any(|w| w == KEY.as_bytes()), "the service API key never enters a backup");
 
-    // change state, then restore the backup
+    // change state (paper + shadow), then restore the backup
     req(&cfg, reqwest::Method::PUT, "/risk/config", Some(json!({"max_risk_per_trade_pct": 1.5})));
     assert_eq!(get(&cfg, "/risk/config")["settings"]["max_risk_per_trade_pct"], 1.5);
+    req(&cfg, reqwest::Method::POST, "/shadow/scan", Some(shadow_scan("scan-backup-2", 1_790_000_300_000)));
+    assert_eq!(shadow_obs(), 2);
     let inspection = backup::inspect(&cfg, &dest).unwrap();
     assert_eq!(inspection.validation["ok"], true);
+    assert_eq!(inspection.shadow_validation["ok"], true, "{}", inspection.shadow_validation);
     services.stop_execution_service();
-    let kept = backup::restore(&cfg, &inspection).unwrap().expect("previous DB kept");
-    assert!(kept.is_file());
+    let outcome = backup::restore(&cfg, &inspection).unwrap();
+    assert!(outcome.previous_db.expect("previous DB kept").is_file());
+    assert!(outcome.shadow_restored);
+    assert!(outcome.previous_shadow_db.expect("previous shadow DB kept").is_file());
     services.start_execution_service().unwrap();
     let risk = get(&cfg, "/risk/config");
     assert_eq!(risk["settings"]["max_risk_per_trade_pct"], 0.5, "restored settings: {risk}");
     assert_eq!(risk["starting_equity"], 25000.0);
+    assert_eq!(shadow_obs(), 1, "shadow observations restored to the backup's state");
 
     // corrupted / foreign files are rejected before anything is touched
     let mut corrupt = bytes.clone();

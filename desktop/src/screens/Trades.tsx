@@ -1,13 +1,14 @@
 import { api, Trade } from '../api';
 import { Badge, ErrorBanner, Panel, Table, usePoll } from '../components/ui';
 import { DASH, lev, num, price, qty, ts, tone, usd } from '../format';
+import { openRow } from './Positions';
 
-export function TradeTable({ rows }: { rows: Trade[] }) {
+export function TradeTable({ rows, onOpen }: { rows: Trade[]; onOpen?: (id: string) => void }) {
   return (
     <Table empty={rows.length ? false : 'No paper trades yet.'}
       head={['Entry time', 'Exit time', 'Instrument', 'Dir', 'Size', 'Lev', 'Entry', 'Exit', 'Fees', 'Slippage', 'Net PnL', 'R', 'Exit reason', 'Strategy', 'signal_id']}>
       {rows.map((t) => (
-        <tr key={t.signal_id}>
+        <tr key={t.signal_id} {...openRow(t.trade_id ?? t.signal_id, onOpen)}>
           <td className="nowrap">{ts(t.entry_at_ms)}</td>
           <td className="nowrap">{t.exit_at_ms ? ts(t.exit_at_ms) : <Badge kind="info">{t.status}</Badge>}</td>
           <td><b>{t.instrument}</b></td>
@@ -29,14 +30,14 @@ export function TradeTable({ rows }: { rows: Trade[] }) {
   );
 }
 
-export function Trades() {
+export function Trades({ onOpen }: { onOpen?: (id: string) => void }) {
   const trades = usePoll(api.trades, 5000);
   const rows = trades.data?.trades ?? [];
   return (
     <div className="screen">
       <ErrorBanner error={trades.error} />
-      <Panel title={`Trade history (${rows.length})`} right={<span className="muted small">Net PnL = realized − fees. Exit = quantity-weighted average of partial exits.</span>}>
-        <TradeTable rows={rows} />
+      <Panel title={`Trade history (${rows.length})`} right={<span className="muted small">Net PnL = realized − fees. Exit = quantity-weighted average of partial exits. Click a row for the trade chart.</span>}>
+        <TradeTable rows={rows} onOpen={onOpen} />
       </Panel>
     </div>
   );

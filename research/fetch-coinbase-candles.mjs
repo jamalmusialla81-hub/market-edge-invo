@@ -28,7 +28,8 @@ async function page(product, start, end, granularity = 300) {
   throw new Error(`${product} page ${new Date(start).toISOString()} failed after retries`);
 }
 async function asset(name) {
-  const product = Archive.PRODUCTS[name], raw = [];
+  // Research-only extension: assets outside the frozen six map to their USD spot product.
+  const product = Archive.PRODUCTS[name] || `${name}-USD`, raw = [];
   // Coinbase treats start and end as inclusive bucket starts; 300 buckets max.
   for (let start = FROM; start < TO; start += PAGE * BASE) raw.push(...Archive.fromCoinbase(await page(product, start, Math.min(TO - BASE, start + (PAGE - 1) * BASE)), {asset: name, product}));
   const inWindow = raw.filter(row => row.time >= FROM && row.time < TO), validated = Archive.validateSeries(inWindow, {now: NOW});
