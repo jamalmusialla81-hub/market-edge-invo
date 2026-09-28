@@ -119,6 +119,24 @@ test_duplicate_signal_is_still_blocked_after_a_simulated_restart`, which
 opens a fresh `Store`/`ExecutionRouter` against the same file and confirms
 the duplicate is still caught).
 
+## Open-position monitor endpoints
+
+`POST /paper/tick` takes one real observed price for one open position
+(`source`, `trigger` = `WS_TRADE` | `POLL_HEARTBEAT`) and evaluates only
+stop / TP1 / TP2 / timeout (`lifecycle.evaluate_tick`); it never opens a
+trade. Missing, invalid, pre-entry or stale (>30s) prices are not evaluated.
+TP fills are at the level; a stop observed through its level fills at the
+observed price (conservative). Exits reuse the same reduce-only routing as
+the 5m candle sweep, so `<trade_id>:<KIND>` idempotency and the UNIQUE
+`(trade_id, kind)` event row make every milestone fire once, across restarts.
+Milestones (`tp1_fill_at_ms`, `tp1_fill_price`, `stop_status`, `tp2_status`,
+`remaining_qty`) and excursions (`best_price` / `worst_price`, widen-only)
+persist on the trade. `POST /paper/monitor/heartbeat` records the monitor's
+state and flags positions `MARKET_DATA_OFFLINE`. `GET /paper/trade`,
+`GET /paper/trade/candles` and `POST /paper/hindsight` serve the desktop's
+Trade Detail view; hindsight labels are stored in `paper_hindsight`, accepted
+only for CLOSED trades, and never merged into the trade.
+
 ## Reconciliation
 
 `reconciliation/reconcile.py` compares canonical (Nautilus-side) positions

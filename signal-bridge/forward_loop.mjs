@@ -13,6 +13,11 @@
 // If live market data can't be read for an open trade, the loop does not
 // open new risk that cycle (fail closed) and says so in the log.
 //
+// Open positions are managed between discovery cycles by the separate fast
+// open-position monitor (position_monitor.mjs, ~10s, POSITION_MONITOR_INTERVAL_MS
+// clamped to 5-60s). It only evaluates stop/TP/timeout for positions that are
+// already open and sleeps when none are; discovery wakes it after each cycle.
+//
 // CYCLE_INTERVAL_MS defaults to production's 5-minute cadence. MAX_CYCLES is
 // unbounded unless set. FORWARD_LOOP_STDIN_CONTROL=1 (set by the desktop app)
 // lets a "STOP" line on stdin end the loop after the current cycle instead of
@@ -20,8 +25,12 @@
 // *requested* paper leverage; risk decides what is actually approved.
 import { runOnce, toInstrument } from './fetch_signal.mjs';
 import { fetchCompletedCandles, fetchMid, MARKET_PRICE_SOURCE } from './market_data.mjs';
+import { monitorIntervalMs, PositionMonitor } from './position_monitor.mjs';
 
-const CYCLE_INTERVAL_MS = Number(process.env.CYCLE_INTERVAL_MS || 300000);
+// The DISCOVERY cadence (scan -> rank -> maybe open). Unchanged: 5 minutes.
+export const DEFAULT_CYCLE_INTERVAL_MS = 300000;
+const CYCLE_INTERVAL_MS = Number(process.env.CYCLE_INTERVAL_MS || DEFAULT_CYCLE_INTERVAL_MS);
+const MONITOR_INTERVAL_MS = monitorIntervalMs(process.env.POSITION_MONITOR_INTERVAL_MS);
 const MAX_CYCLES = process.env.MAX_CYCLES ? Number(process.env.MAX_CYCLES) : Infinity;
 const LEVERAGE_ROTATION = String(process.env.LEVERAGE_ROTATION || '1').split(',').map(Number).filter((n) => n > 0);
 const SEGMENT = process.env.SEGMENT_NAME || `local-${Date.now()}`;
@@ -54,7 +63,7 @@ export function emptyMetrics() {
   };
 }
 
-async function api(method, path, body) {
+export async function api(method, path, body) {
   const key = process.env.MARKET_EDGE_EXEC_API_KEY;
   if (!key) throw new Error('MARKET_EDGE_EXEC_API_KEY is not set');
   const base = process.env.EXECUTION_SERVICE_URL || 'http://localhost:8000';
@@ -147,9 +156,14 @@ export async function runCycle(cycle, metrics, deps = {}) {
   return { outcome, lifecycle, signal_id: result.signal.signal_id, reason: posted.body?.reason, leverage };
 }
 
-export async function runLoop({ maxCycles = MAX_CYCLES, intervalMs = CYCLE_INTERVAL_MS, sleep = interruptibleSleep, deps = {} } = {}) {
+// `monitor`: undefined -> the real open-position monitor; null -> none (tests).
+export async function runLoop({ maxCycles = MAX_CYCLES, intervalMs = CYCLE_INTERVAL_MS, sleep = interruptibleSleep, deps = {}, monitor } = {}) {
   const metrics = emptyMetrics();
   const { body: seg } = await api('POST', '/paper/segment/start', { segment: SEGMENT });
+  // Restart path too: positions persisted by a previous run are picked up by
+  // the monitor's first look at /paper/open.
+  const positions = monitor === undefined ? new PositionMonitor({ api, intervalMs: MONITOR_INTERVAL_MS }) : monitor;
+  void positions?.start();
   try {
     for (let cycle = 0; cycle < maxCycles && !stopControl.requested; cycle += 1) {
       console.log(JSON.stringify({ event: 'CYCLE_START', cycle, at: new Date().toISOString(), interval_ms: intervalMs }));
@@ -159,6 +173,8 @@ export async function runLoop({ maxCycles = MAX_CYCLES, intervalMs = CYCLE_INTER
         metrics.reconciliation_checks += 1;
         if (rec.reconciled === false) metrics.reconciliation_failures += 1;
         console.log(JSON.stringify({ cycle, at: new Date().toISOString(), ...cycleResult, reconciled: rec.reconciled, halted: rec.halted }));
+        // A position can only have opened in this cycle: let the monitor look now.
+        void positions?.wake();
       } catch (error) {
         metrics.errors += 1;
         metrics.cycles += 1;
@@ -170,6 +186,7 @@ export async function runLoop({ maxCycles = MAX_CYCLES, intervalMs = CYCLE_INTER
       }
     }
   } finally {
+    positions?.stop();
     await api('POST', '/paper/segment/end', { segment_row: seg.segment_row }).catch(() => {});
   }
   metrics.ended_at = Date.now();

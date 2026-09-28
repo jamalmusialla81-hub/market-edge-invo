@@ -23,7 +23,9 @@ from market_edge_exec.control.settings import BOUNDS as SETTINGS_BOUNDS, Control
 from market_edge_exec.domain.contracts import ContractError, ExecutionIntent
 from market_edge_exec.hummingbot.factory import build_hummingbot_client
 from market_edge_exec.nautilus.portfolio import NautilusPortfolio
+from market_edge_exec.paper.candles import hyperliquid_fetcher, trade_candles
 from market_edge_exec.paper.engine import PaperEngine
+from market_edge_exec.paper.trade_detail import HINDSIGHT_FIELDS, build_trade_detail, monitor_status
 from market_edge_exec.paper.ledger import PaperLedger
 from market_edge_exec.paper.performance import build_performance, position_view, signal_rows, trade_view
 from market_edge_exec.paper.report import build_report
@@ -61,7 +63,7 @@ class PaperBackendAdapter:
 
 
 def create_app(db_path: str = "market_edge_exec.sqlite3", hummingbot_mode: str = None,
-               risk_limits: RiskLimits = None) -> FastAPI:
+               risk_limits: RiskLimits = None, candle_fetcher=None) -> FastAPI:
     """hummingbot_mode: 'disabled' (default: no Hummingbot backend at all),
     'real' (bridge must be reachable at startup) or 'mock' (tests only).
     There is no runtime fallback between them.
@@ -103,6 +105,10 @@ def create_app(db_path: str = "market_edge_exec.sqlite3", hummingbot_mode: str =
     app.state.store, app.state.portfolio, app.state.hummingbot, app.state.router = store, portfolio, hummingbot, router
     app.state.ledger, app.state.paper, app.state.control = ledger, paper, control
     app.state.migration = migration
+    app.state.candle_fetcher = candle_fetcher or hyperliquid_fetcher()
+    # Latest heartbeat from the open-position monitor (runtime only; the
+    # per-position state it produces is persisted on the trades themselves).
+    app.state.monitor = {"state": "NOT_REPORTED", "at_ms": None}
     app.state.request_shutdown = None  # set by run_server.py when it owns the uvicorn server
     started_at = time.time()
 
@@ -227,9 +233,83 @@ def create_app(db_path: str = "market_edge_exec.sqlite3", hummingbot_mode: str =
 
     @app.get("/paper/open", dependencies=[Depends(require_api_key)])
     def paper_open():
+        # Geometry is included so the monitor can spot a level crossing on
+        # the exchange stream and post it at once; evaluation stays here.
         return {"trades": [{"trade_id": t["trade_id"], "instrument": t["instrument"], "asset": t["asset"], "coin": t.get("coin") or t["asset"],
-                            "last_checked_ms": t["last_checked_ms"], "opened_at_ms": t["opened_at_ms"]}
+                            "last_checked_ms": t["last_checked_ms"], "opened_at_ms": t["opened_at_ms"],
+                            "direction": t["direction"], "entry_fill": t["entry_fill"], "stop": t["stop"], "tp1": t["tp1"],
+                            "tp2": t["tp2"], "tp1_hit": t["tp1_hit"], "remaining_qty": t["remaining_qty"]}
                            for t in ledger.trades("OPEN")]}
+
+    # ---- open-position monitor (signal-bridge/position_monitor.mjs) ------
+    @app.post("/paper/tick", dependencies=[Depends(require_api_key)])
+    def paper_tick(payload: dict):
+        """One real observed price for one open position. Evaluates ONLY
+        stop/TP1/TP2/timeout; this endpoint can never open a trade."""
+        instrument = payload.get("instrument")
+        if not instrument or not payload.get("source"):
+            raise HTTPException(status_code=422, detail="instrument and source are required")
+        result = paper.tick(instrument, payload.get("price"), payload.get("at_ms"), payload["source"],
+                            trigger=payload.get("trigger") or "POLL_HEARTBEAT", observed_high=payload.get("observed_high"),
+                            observed_low=payload.get("observed_low"), now_ms=payload.get("now_ms"))
+        return {"instrument": result.instrument, "exits": result.exits, "price": result.price, "skipped": result.skipped,
+                "monitor_status": result.monitor_status}
+
+    @app.post("/paper/monitor/heartbeat", dependencies=[Depends(require_api_key)])
+    def monitor_heartbeat(payload: dict):
+        payload = dict(payload or {})
+        offline = [i for i in payload.get("offline_instruments") or [] if isinstance(i, str)]
+        if offline:
+            paper.set_monitor_offline(offline, str(payload.get("error") or "no live price from the monitor's market data source"))
+        app.state.monitor = {**payload, "received_at_ms": int(time.time() * 1000)}
+        return {"recorded": True, "flagged_offline": len(offline)}
+
+    def _monitor_summary(now_ms: int) -> dict:
+        max_age = paper.monitor_max_price_age_s()
+        open_trades = ledger.trades("OPEN")
+        statuses = [monitor_status(t, now_ms, max_age)["status"] for t in open_trades]
+        # A position that just opened is AWAITING_PRICE for a few seconds;
+        # it only counts as unmonitored once it has waited past the limit.
+        stale = sum(1 for t, s in zip(open_trades, statuses)
+                    if s in ("STALE", "MARKET_DATA_OFFLINE") or (s == "AWAITING_PRICE" and (now_ms - t["opened_at_ms"]) / 1000 > max_age))
+        return {**app.state.monitor, "open_positions": len(statuses), "max_price_age_s": max_age,
+                "stale_positions": stale, "position_statuses": statuses}
+
+    @app.get("/paper/monitor", dependencies=[Depends(require_api_key)])
+    def monitor_view():
+        return _monitor_summary(int(time.time() * 1000))
+
+    # ---- desktop app: trade detail --------------------------------------
+    def _trade_or_404(trade_id: str) -> dict:
+        trade = ledger.trade(trade_id) if trade_id else None
+        if trade is None:
+            raise HTTPException(status_code=404, detail="TRADE_NOT_FOUND")
+        return trade
+
+    @app.get("/paper/trade", dependencies=[Depends(require_api_key)])
+    def trade_detail(trade_id: str):
+        now_ms = int(time.time() * 1000)
+        return build_trade_detail(ledger, _trade_or_404(trade_id), now_ms, paper.monitor_max_price_age_s())
+
+    @app.get("/paper/trade/candles", dependencies=[Depends(require_api_key)])
+    def trade_chart_candles(trade_id: str, interval: str = "5m"):
+        return trade_candles(_trade_or_404(trade_id), interval, int(time.time() * 1000), app.state.candle_fetcher)
+
+    @app.post("/paper/hindsight", dependencies=[Depends(require_api_key)])
+    def record_hindsight(payload: dict):
+        """Research overlay input: post-outcome labels for a RESOLVED trade.
+        Stored apart from the trade and never merged into it."""
+        payload = payload or {}
+        trade = _trade_or_404(payload.get("trade_id"))
+        if trade["status"] != "CLOSED":
+            raise HTTPException(status_code=409, detail="OUTCOME_NOT_RESOLVED: hindsight labels are accepted only for closed trades")
+        labels = payload.get("labels") if isinstance(payload.get("labels"), dict) else {}
+        clean = {k: labels[k] for k in HINDSIGHT_FIELDS if isinstance(labels.get(k), (int, float)) and not isinstance(labels.get(k), bool)}
+        if not clean:
+            raise HTTPException(status_code=422, detail=f"labels must include at least one of {list(HINDSIGHT_FIELDS)}")
+        ledger.record_hindsight(trade["trade_id"], int(payload.get("resolved_at_ms") or time.time() * 1000),
+                                str(payload.get("source") or "UNSPECIFIED"), clean)
+        return {"recorded": True, "trade_id": trade["trade_id"], "labels": clean}
 
     @app.post("/paper/mark", dependencies=[Depends(require_api_key)])
     def paper_mark(payload: dict):
@@ -269,7 +349,8 @@ def create_app(db_path: str = "market_edge_exec.sqlite3", hummingbot_mode: str =
 
     @app.get("/paper/positions", dependencies=[Depends(require_api_key)])
     def paper_positions():
-        return {"positions": [position_view(t) for t in ledger.trades("OPEN")]}
+        now_ms, max_age = int(time.time() * 1000), paper.monitor_max_price_age_s()
+        return {"positions": [position_view(t, now_ms, max_age) for t in ledger.trades("OPEN")]}
 
     @app.get("/paper/trades", dependencies=[Depends(require_api_key)])
     def paper_trades():
@@ -393,6 +474,7 @@ def create_app(db_path: str = "market_edge_exec.sqlite3", hummingbot_mode: str =
             "nautilus": nautilus, "sqlite": sqlite, "hummingbot": hb,
             "last_reconcile": control.last_reconcile(), "latest_signal": signals[0] if signals else None,
             "open_positions": len(ledger.trades("OPEN")), "segments": ledger.runtime_segments()[-5:],
+            "position_monitor": _monitor_summary(int(time.time() * 1000)),
             "control_audit": control.audit_log(20),
             "version": __version__, "build": build_info(), "migration": migration.to_dict(),
         }

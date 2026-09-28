@@ -1,0 +1,183 @@
+import { Fragment, useEffect, useState } from 'react';
+import { api, CandleInterval, Distance, Excursion, TradeDetail } from '../api';
+import { CandleChart, HindsightLine } from '../components/CandleChart';
+import { Badge, ErrorBanner, Panel, Stat, usePoll } from '../components/ui';
+import { ago, DASH, duration, lev, num, pct, price, qty, tone, ts, usd } from '../format';
+
+const INTERVALS: CandleInterval[] = ['1m', '5m', '15m', '1h'];
+const HINDSIGHT_LABELS: Record<string, string> = { optimal_entry: 'optimal entry', optimal_tp1: 'optimal TP1', optimal_tp2: 'optimal TP2', optimal_exit: 'optimal exit' };
+
+function dist(d: Distance | null | undefined, hit?: string) {
+  if (hit) return hit;
+  if (!d) return DASH;
+  return <>{price(d.price)} <span className="muted small">({pct(d.pct)})</span></>;
+}
+
+function exc(e: Excursion | undefined) {
+  if (!e) return DASH;
+  return <>{price(e.price)} <span className="muted small">{e.r === null ? '' : `${num(e.r, 2)}R · `}{usd(e.usd, { sign: true })}</span></>;
+}
+
+export function MonitorBanner({ d }: { d: TradeDetail }) {
+  if (!d.is_open) return null;
+  const m = d.live.monitor;
+  const age = m.price_age_s === null ? 'no price yet' : `${duration(m.price_age_s)} old`;
+  if (m.status === 'MARKET_DATA_OFFLINE') {
+    return <div className="banner banner-error" role="alert">MARKET DATA OFFLINE for this position: {m.detail ?? 'no live price'}. The position is preserved; stop/TP are not evaluated until a fresh price arrives. Last real price {price(m.price)} ({age}).</div>;
+  }
+  if (m.status === 'STALE') {
+    return <div className="banner banner-error" role="alert">MARKET DATA STALE: last real price {price(m.price)} is {age} (limit {m.max_price_age_s}s, source {m.price_source ?? DASH}). No trigger is evaluated on it; figures below use that last real price.</div>;
+  }
+  if (m.status === 'AWAITING_PRICE') {
+    return <div className="banner banner-warn" role="status">Waiting for the first live price from the open-position monitor.</div>;
+  }
+  return null;
+}
+
+export function TradeDetailView({ tradeId, onBack, pollMs = 2000, candlePollMs = 10000 }: {
+  tradeId: string; onBack: () => void; pollMs?: number; candlePollMs?: number;
+}) {
+  const [interval, setIntervalSel] = useState<CandleInterval>('5m');
+  const [showHindsight, setShowHindsight] = useState(false);
+  const detail = usePoll(() => api.tradeDetail(tradeId), pollMs, [tradeId]);
+  const d = detail.data;
+  // Open trades refresh their candles while the view is open; a closed
+  // trade's window is fixed, so it is read once per timeframe.
+  const candles = usePoll(() => api.tradeCandles(tradeId, interval), d && !d.is_open ? 24 * 3_600_000 : candlePollMs, [tradeId, interval, d?.is_open]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onBack(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onBack]);
+
+  const back = <button className="btn" onClick={onBack} aria-label="Back to list">← Back</button>;
+  if (!d) {
+    return <div className="screen">{back}<ErrorBanner error={detail.error} />{!detail.error && <div className="muted">Loading trade…</div>}</div>;
+  }
+  const dec = d.decision;
+  const live = d.live;
+  const dir = dec.direction.toUpperCase();
+  const hs = d.hindsight;
+  const hindsightLines: HindsightLine[] = showHindsight && hs.available && hs.levels
+    ? Object.entries(hs.levels).filter(([, v]) => typeof v === 'number').map(([k, v]) => ({ key: k, label: HINDSIGHT_LABELS[k] ?? k, price: v as number }))
+    : [];
+  const cs = candles.data;
+  const netR = dec.risk_amount ? d.net_pnl / dec.risk_amount : null;
+
+  return (
+    <div className="screen trade-detail">
+      <div className="detail-head">
+        {back}
+        <h1><b>{dec.asset}</b> <span className={dec.direction === 'long' ? 'pos' : 'neg'}>{dir}</span></h1>
+        <Badge kind={d.is_open ? 'info' : 'neutral'}>{d.status}</Badge>
+        {d.is_open && <Badge kind={live.monitor.status === 'LIVE' ? 'pos' : 'neg'}>MONITOR {live.monitor.status}</Badge>}
+        <span className="mono small muted">{d.trade_id}</span>
+        <span className="topbar-spacer" />
+        <span className="muted small">{d.is_open ? `updated ${ago(detail.updatedAt)}` : `closed ${ts(d.closed_at_ms)} · ${d.exit_reason}`}</span>
+      </div>
+      <ErrorBanner error={detail.error} />
+      <MonitorBanner d={d} />
+
+      <div className="stat-grid">
+        {d.is_open ? (
+          <>
+            <Stat label="Current price" value={price(live.current_price)} sub={live.monitor.price_at_ms ? <>{live.monitor.price_source} · {ago(live.monitor.price_at_ms)}</> : 'awaiting monitor price'} />
+            <Stat label="Unrealized PnL" value={usd(live.unrealized_pnl, { sign: true })} tone={tone(live.unrealized_pnl)} sub={`remaining ${qty(live.remaining_qty)}`} />
+            <Stat label="Unrealized R" value={live.unrealized_r === null ? DASH : `${num(live.unrealized_r, 2)}R`} tone={tone(live.unrealized_r)} />
+            <Stat label={live.milestones.stop_status === 'BREAKEVEN' ? 'Distance to stop (breakeven)' : 'Distance to stop'} value={dist(live.distance_to_stop)} sub={`active stop ${price(live.active_stop)}`} />
+            <Stat label="Distance to TP1" value={dist(live.distance_to_tp1, live.milestones.tp1_hit ? 'HIT' : undefined)} />
+            <Stat label="Distance to TP2" value={dist(live.distance_to_tp2)} />
+            <Stat label="Position age" value={duration(live.position_age_s)} sub={`opened ${ts(d.opened_at_ms)}`} />
+          </>
+        ) : (
+          <>
+            <Stat label="Net PnL" value={usd(d.net_pnl, { sign: true })} tone={tone(d.net_pnl)} sub={`fees ${usd(d.fees)}`} />
+            <Stat label="Result" value={netR === null ? DASH : `${num(netR, 2)}R`} tone={tone(netR)} sub={d.exit_reason ?? DASH} />
+            <Stat label="Held" value={duration(live.position_age_s)} sub={`${ts(d.opened_at_ms)} → ${ts(d.closed_at_ms)}`} />
+          </>
+        )}
+        <Stat label={`MFE (best ${d.is_open ? 'so far' : ''})`} value={exc(live.mfe)} tone="pos" sub={`best price ${price(live.best_price)}`} />
+        <Stat label="MAE (worst)" value={exc(live.mae)} tone="neg" sub={`worst price ${price(live.worst_price)}`} />
+      </div>
+
+      <Panel title={`${dec.asset} ${dir} · ${interval} candles`} right={
+        <div className="seg">
+          {INTERVALS.map((iv) => (
+            <button key={iv} className={`seg-btn ${iv === interval ? 'active' : ''}`} aria-pressed={iv === interval} onClick={() => setIntervalSel(iv)}>{iv}</button>
+          ))}
+          <label className={`hindsight-toggle ${hs.available ? '' : 'disabled'}`} title={hs.available ? hs.label : `Unavailable: ${hs.reason}`}>
+            <input type="checkbox" checked={showHindsight} disabled={!hs.available} onChange={(e) => setShowHindsight(e.target.checked)} />
+            SHOW RESEARCH OVERLAY
+          </label>
+        </div>
+      }>
+        <ErrorBanner error={candles.error} />
+        {cs && !cs.available && <div className="chart-empty">Candles unavailable ({cs.reason}). {cs.reason === 'RANGE_TOO_LARGE_FOR_INTERVAL' ? 'Pick a coarser timeframe.' : 'Nothing is drawn in their place.'}</div>}
+        {cs?.available && (
+          <CandleChart label={`${dec.asset} ${dir} trade chart`} candles={cs.candles} interval={interval} levels={d.levels} markers={d.markers}
+            currentPrice={d.is_open ? live.current_price : null} hindsight={hindsightLines} />
+        )}
+        {!cs && !candles.error && <div className="muted">Loading candles…</div>}
+        <div className="muted small chart-foot">
+          {cs ? <>Source {cs.source} ({cs.coin}) · {ts(cs.start_ms)} → {ts(cs.end_ms)}{d.is_open ? ` · refreshes every ${Math.round(candlePollMs / 1000)}s` : ''}. </> : null}
+          {dec.direction === 'long' ? 'LONG: stop below entry, targets above; entry is a BUY, exits are SELLs.' : 'SHORT: stop above entry, targets below; entry is a SELL, exits are BUYs.'}
+        </div>
+        {showHindsight && hs.available && (
+          <div className="hindsight-note" role="note"><b>POST-OUTCOME / HINDSIGHT.</b> {hs.label}. Source {hs.source}, resolved {ts(hs.resolved_at_ms)}. Shown for research only; it never changes the original trade record.</div>
+        )}
+      </Panel>
+
+      <div className="grid-2">
+        <Panel title="Original decision (as recorded at entry)">
+          <dl className="kv">
+            <dt>Asset</dt><dd>{dec.asset} <span className="muted">({dec.instrument})</span></dd>
+            <dt>Direction</dt><dd className={dec.direction === 'long' ? 'pos' : 'neg'}>{dir}</dd>
+            <dt>Entry time</dt><dd>{ts(dec.entry_time_ms)}</dd>
+            <dt>Entry price</dt><dd>{price(dec.entry_price)} <span className="muted small">signal entry {price(dec.signal_entry)} · mark {price(dec.mark_at_entry)}</span></dd>
+            <dt>Quantity / notional</dt><dd>{qty(dec.quantity)} · {usd(dec.notional)} <span className="muted small">lev {lev(dec.approved_leverage)} (req {lev(dec.requested_leverage)}) · risk {usd(dec.risk_amount)}</span></dd>
+            <dt>Original stop</dt><dd className="neg">{price(dec.original_stop)}</dd>
+            <dt>Original TP1</dt><dd className="pos">{price(dec.original_tp1)}</dd>
+            <dt>Original TP2</dt><dd className="pos">{price(dec.original_tp2)}</dd>
+            <dt>Original RR</dt><dd>TP1 {num(dec.original_rr1, 2)} · TP2 {num(dec.original_rr2, 2)}</dd>
+            <dt>Strategy / setup</dt><dd>{dec.strategy ?? DASH}{dec.regime ? <span className="muted"> · {dec.regime}</span> : null}</dd>
+            <dt>Quant score</dt><dd>{num(dec.quant_score, 1)} <span className="muted small">rank {dec.rank ?? DASH}</span></dd>
+            <dt>Model score</dt><dd>{dec.ml_score === null ? 'n/a' : num(dec.ml_score, 3)} <span className="muted small">combined {num(dec.combined_score, 1)}</span></dd>
+            <dt>scan_id</dt><dd className="mono small">{dec.scan_id ?? DASH}</dd>
+            <dt>observation_id</dt><dd className="mono small">{dec.observation_id ?? 'not shadow-linked'}</dd>
+            <dt>Model version</dt><dd className="mono small">{dec.model_version ?? DASH}{dec.model_status ? ` (${dec.model_status})` : ''}</dd>
+            <dt>Feature version</dt><dd className="mono small">{dec.feature_version ?? DASH}</dd>
+            <dt>Price provenance</dt><dd>{dec.market_price_source ?? DASH} <span className="muted small">{ts(dec.market_price_timestamp)} · {dec.market_price_age_ms === null ? DASH : `${num(dec.market_price_age_ms / 1000, 1)}s old at entry`}</span></dd>
+            <dt>Execution</dt><dd>{dec.execution_mode} · {dec.backend} · {dec.execution_status}</dd>
+          </dl>
+        </Panel>
+        <Panel title="Position management">
+          <dl className="kv">
+            <dt>TP1</dt><dd>{live.milestones.tp1_hit ? <>HIT {price(live.milestones.tp1_fill_price)} <span className="muted small">{ts(live.milestones.tp1_fill_timestamp)}</span></> : 'PENDING'}</dd>
+            <dt>TP2</dt><dd>{live.milestones.tp2_status}</dd>
+            <dt>Stop</dt><dd>{live.milestones.stop_status}</dd>
+            <dt>Remaining qty</dt><dd>{qty(live.milestones.remaining_quantity)}</dd>
+          </dl>
+          <table className="compact exits">
+            <thead><tr><th>Exit</th><th>Time</th><th>Fill</th><th>Qty</th><th>PnL</th><th>Seen by</th></tr></thead>
+            <tbody>
+              {d.exits.length ? d.exits.map((e) => (
+                <tr key={e.kind}><td>{e.kind}</td><td className="nowrap">{ts(e.at_ms)}</td><td className="num">{price(e.fill_price)}</td>
+                  <td className="num">{qty(e.quantity)}</td><td className={`num ${tone(e.pnl)}`}>{usd(e.pnl, { sign: true })}</td><td className="small">{e.trigger ?? 'CANDLE_5M'}</td></tr>
+              )) : <tr><td colSpan={6} className="empty">No exits yet.</td></tr>}
+            </tbody>
+          </table>
+        </Panel>
+      </div>
+
+      {showHindsight && hs.available && hs.levels && (
+        <Panel title="Research overlay — POST-OUTCOME / HINDSIGHT" className="panel-hindsight">
+          <p className="muted small">{hs.label}. These are not decision-time values.</p>
+          <dl className="kv">
+            {Object.entries(hs.levels).map(([k, v]) => <Fragment key={k}><dt>{HINDSIGHT_LABELS[k] ?? k}</dt><dd>{price(v)}</dd></Fragment>)}
+          </dl>
+        </Panel>
+      )}
+    </div>
+  );
+}

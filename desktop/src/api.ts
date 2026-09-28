@@ -37,7 +37,7 @@ export interface HealthComponent { name: string; status: ComponentStatus; detail
 export interface SystemStatus {
   paper_only: boolean; execution_mode: string; uptime_s: number; halted: string | null; entries_paused: boolean; entries_paused_reason?: string | null;
   last_reconcile: ({ reconciled: boolean; at: number } & Record<string, unknown>) | null;
-  latest_signal: SignalRow | null; open_positions: number;
+  latest_signal: SignalRow | null; open_positions: number; position_monitor?: PositionMonitorStatus;
 }
 export interface Health {
   components: HealthComponent[]; execution_service: ProcStatus | null; forward_loop: ProcStatus | null; loop: LoopTelemetry | null;
@@ -56,18 +56,66 @@ export interface SignalRow {
   tp1: number | null; tp2: number | null; rr: number | null; freshness_s: number | null; mark_price: number | null;
   requested_leverage: number | null;
 }
+export type MonitorStatus = 'LIVE' | 'STALE' | 'MARKET_DATA_OFFLINE' | 'AWAITING_PRICE' | 'CLOSED';
+export interface Distance { price: number; pct: number | null }
+export interface Excursion { price: number; pct: number | null; usd: number; r: number | null }
+export interface Milestones {
+  tp1_hit: boolean; tp1_fill_timestamp: number | null; tp1_fill_price: number | null; remaining_quantity: number;
+  stop_status: string; tp2_status: string;
+}
 export interface Position {
-  signal_id: string; instrument: string; asset: string; direction: 'long' | 'short'; status: string; strategy: string | null;
+  signal_id: string; trade_id?: string; instrument: string; asset: string; direction: 'long' | 'short'; status: string; strategy: string | null;
   entry: number; current_price: number; mark_source: string; mark_checked_ms: number | null; quantity: number;
   original_quantity: number; leverage: number; requested_leverage: number; margin: number; notional: number;
   unrealized_pnl: number; realized_pnl: number; stop: number; tp1: number | null; tp2: number | null; tp1_hit: boolean;
   risk_amount: number; liquidation_estimate: number | null; liquidation_buffer_pct: number | null; backend: string; opened_at_ms: number;
+  // open-position monitor (optional: an older execution-service omits them)
+  monitor_status?: MonitorStatus; monitor_detail?: string | null; price_age_s?: number | null; price_source?: string | null;
+  unrealized_r?: number | null; distance_to_stop?: Distance | null; distance_to_tp1?: Distance | null; distance_to_tp2?: Distance | null;
+  mfe?: Excursion; mae?: Excursion; position_age_s?: number; active_stop?: number; milestones?: Milestones;
 }
 export interface Trade {
-  signal_id: string; instrument: string; asset: string; direction: 'long' | 'short'; status: string; strategy: string | null;
+  signal_id: string; trade_id?: string; instrument: string; asset: string; direction: 'long' | 'short'; status: string; strategy: string | null;
   entry_at_ms: number; exit_at_ms: number | null; size: number; leverage: number; entry: number; exit: number | null;
   fees: number; slippage: number; realized_pnl: number; net_pnl: number; r_multiple: number | null; exit_reason: string | null;
   risk_amount: number; backend: string;
+}
+export interface LiveMetrics {
+  monitor: { status: MonitorStatus; detail: string | null; price: number | null; price_at_ms: number | null; price_source: string | null; price_age_s: number | null; max_price_age_s: number };
+  current_price: number | null; unrealized_pnl: number | null; unrealized_r: number | null; active_stop: number;
+  distance_to_stop: Distance | null; distance_to_tp1: Distance | null; distance_to_tp2: Distance | null;
+  best_price: number; worst_price: number; mfe: Excursion; mae: Excursion; position_age_s: number; remaining_qty: number; milestones: Milestones;
+}
+export interface DecisionContext {
+  asset: string; instrument: string; coin: string | null; direction: 'long' | 'short'; entry_time_ms: number; signal_timestamp: number | null;
+  signal_entry: number | null; entry_price: number; mark_at_entry: number | null; quantity: number; notional: number | null; risk_amount: number | null;
+  requested_leverage: number | null; approved_leverage: number | null; original_stop: number; original_tp1: number | null; original_tp2: number | null;
+  original_rr1: number | null; original_rr2: number | null; strategy: string | null; regime: string | null; quant_score: number | null;
+  ml_score: number | null; combined_score: number | null; rank: number | null; scan_id: string | null; observation_id: string | null;
+  model_version: string | null; model_status: string | null; feature_version: string | null; market_price_source: string | null;
+  market_price_timestamp: number | null; market_price_age_ms: number | null; execution_mode: string; backend: string | null; execution_status: string;
+}
+export interface ChartLevel { kind: 'ENTRY' | 'STOP' | 'TP1' | 'TP2' | 'BREAKEVEN_STOP'; price: number; label: string }
+export interface ChartMarker { kind: string; at_ms: number; price: number; side: 'BUY' | 'SELL'; label: string; quantity: number; level?: number | null; trigger?: string | null }
+export interface Hindsight {
+  label: string; post_outcome: true; known_at_decision_time: false; available: boolean; reason: string | null;
+  resolved_at_ms?: number; source?: string; levels?: Record<'optimal_entry' | 'optimal_tp1' | 'optimal_tp2' | 'optimal_exit', number | null>;
+}
+export interface TradeDetail {
+  trade_id: string; status: string; is_open: boolean; opened_at_ms: number; closed_at_ms: number | null; exit_reason: string | null;
+  decision: DecisionContext; live: LiveMetrics; levels: ChartLevel[]; markers: ChartMarker[];
+  exits: { kind: string; quantity: number; fill_price: number; level: number; pnl: number; at_ms: number; trigger?: string }[];
+  realized_pnl: number; fees: number; net_pnl: number; hindsight: Hindsight; generated_at_ms: number;
+}
+export type CandleInterval = '1m' | '5m' | '15m' | '1h';
+export interface Candle { time: number; open: number; high: number; low: number; close: number; volume: number; complete: boolean }
+export interface CandleSet {
+  available: boolean; reason: string | null; interval: CandleInterval; coin: string; source: string; start_ms: number; end_ms: number;
+  candles: Candle[]; intervals: CandleInterval[];
+}
+export interface PositionMonitorStatus {
+  state: string; mode?: string; ws_state?: string; interval_ms?: number; market_ok?: boolean; error?: string | null;
+  open_positions: number; stale_positions: number; max_price_age_s: number;
 }
 export interface GroupStats { trades_opened: number; trades_closed: number; wins: number; losses: number; win_rate_pct: number | null; net_realized_pnl: number }
 export interface Performance {
@@ -100,6 +148,8 @@ export const api = {
   account: () => invoke<Account>('get_account'),
   positions: () => invoke<{ positions: Position[] }>('get_positions'),
   trades: () => invoke<{ trades: Trade[] }>('get_trades'),
+  tradeDetail: (tradeId: string) => invoke<TradeDetail>('get_trade_detail', { tradeId }),
+  tradeCandles: (tradeId: string, interval: CandleInterval) => invoke<CandleSet>('get_trade_candles', { tradeId, interval }),
   signals: (limit = 500) => invoke<{ signals: SignalRow[] }>('get_signals', { limit }),
   performance: () => invoke<Performance>('get_performance'),
   riskConfig: () => invoke<RiskConfig>('get_risk_config'),

@@ -5,6 +5,7 @@ import { Dashboard } from './screens/Dashboard';
 import { Signals } from './screens/Signals';
 import { Positions } from './screens/Positions';
 import { Trades } from './screens/Trades';
+import { TradeDetailView } from './screens/TradeDetail';
 import { PerformanceScreen } from './screens/Performance';
 import { Risk } from './screens/Risk';
 import { SystemScreen } from './screens/System';
@@ -109,6 +110,10 @@ export function Warnings({ health, healthError }: { health: Health | null; healt
     const why = PAUSE_REASONS[health.status.entries_paused_reason ?? ''] ?? health.status.entries_paused_reason;
     items.push({ kind: 'warn', text: `New entries are PAUSED${why ? ` (${why})` : ''}. Open positions are still managed.` });
   }
+  const pm = health?.status?.position_monitor;
+  if (pm && pm.stale_positions > 0) {
+    items.push({ kind: 'error', text: `OPEN-POSITION MONITOR: ${pm.stale_positions} of ${pm.open_positions} open position(s) have no fresh market price (STALE / OFFLINE${pm.error ? `: ${pm.error}` : ''}). Stops and targets are not evaluated on old prices; positions are preserved.` });
+  }
   const down = health?.components.filter((c) => c.status === 'DOWN' && c.name !== 'execution-service' && c.name !== 'Reconciliation') ?? [];
   for (const c of down) items.push({ kind: 'warn', text: `${c.name}: ${c.detail}` });
   if (!items.length) return null;
@@ -143,7 +148,9 @@ export function StartupScreen({ health, info, error }: { health: Health | null; 
 }
 
 export default function App() {
-  const [screen, setScreen] = useState<Screen>('Dashboard');
+  const [screen, setScreenRaw] = useState<Screen>('Dashboard');
+  const [detail, setDetail] = useState<string | null>(null);
+  const setScreen = (s: Screen) => { setDetail(null); setScreenRaw(s); };
   const [info, setInfo] = useState<AppInfo | null>(null);
   const [mode, setMode] = useState<Mode>('PAPER');
   const [modeError, setModeError] = useState<string | null>(null);
@@ -191,14 +198,15 @@ export default function App() {
           <div className="nav-foot">Paper only · LIVE disabled<br />v{info?.version ?? '…'}</div>
         </nav>
         <main className="main">
-          {screen === 'Dashboard' && <Dashboard health={h} />}
-          {screen === 'Signals' && <Signals />}
-          {screen === 'Positions' && <Positions />}
-          {screen === 'Trades' && <Trades />}
-          {screen === 'Performance' && <PerformanceScreen />}
-          {screen === 'Risk' && <Risk />}
-          {screen === 'System' && <SystemScreen health={h} info={info} />}
-          {screen === 'About' && <About info={info} />}
+          {detail && <TradeDetailView tradeId={detail} onBack={() => setDetail(null)} />}
+          {!detail && screen === 'Dashboard' && <Dashboard health={h} onOpen={setDetail} />}
+          {!detail && screen === 'Signals' && <Signals />}
+          {!detail && screen === 'Positions' && <Positions onOpen={setDetail} />}
+          {!detail && screen === 'Trades' && <Trades onOpen={setDetail} />}
+          {!detail && screen === 'Performance' && <PerformanceScreen />}
+          {!detail && screen === 'Risk' && <Risk />}
+          {!detail && screen === 'System' && <SystemScreen health={h} info={info} />}
+          {!detail && screen === 'About' && <About info={info} />}
         </main>
       </div>
     </div>

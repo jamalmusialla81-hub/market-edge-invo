@@ -119,6 +119,19 @@ async fn get_positions(state: tauri::State<'_, AppState>) -> CmdResult<Value> {
 async fn get_trades(state: tauri::State<'_, AppState>) -> CmdResult<Value> {
     state.get("/paper/trades").await
 }
+/// `path?k=v&...` with each value percent-encoded (trade ids come from signal ids).
+fn with_query(path: &str, params: &[(&str, &str)]) -> String {
+    let url = reqwest::Url::parse_with_params(&format!("http://service{path}"), params).expect("static path");
+    format!("{}?{}", url.path(), url.query().unwrap_or(""))
+}
+#[tauri::command]
+async fn get_trade_detail(state: tauri::State<'_, AppState>, trade_id: String) -> CmdResult<Value> {
+    state.get(&with_query("/paper/trade", &[("trade_id", &trade_id)])).await
+}
+#[tauri::command]
+async fn get_trade_candles(state: tauri::State<'_, AppState>, trade_id: String, interval: String) -> CmdResult<Value> {
+    state.get(&with_query("/paper/trade/candles", &[("trade_id", &trade_id), ("interval", &interval)])).await
+}
 #[tauri::command]
 async fn get_signals(state: tauri::State<'_, AppState>, limit: Option<u32>) -> CmdResult<Value> {
     state.get(&format!("/paper/signals?limit={}", limit.unwrap_or(500).clamp(1, 5000))).await
@@ -812,6 +825,8 @@ pub fn run() {
             get_account,
             get_positions,
             get_trades,
+            get_trade_detail,
+            get_trade_candles,
             get_signals,
             get_performance,
             get_risk_config,
@@ -848,4 +863,18 @@ pub fn run() {
                 }
             }
         });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::with_query;
+
+    #[test]
+    fn trade_detail_query_is_percent_encoded() {
+        assert_eq!(with_query("/paper/trade", &[("trade_id", "scan-abc-ETH")]), "/paper/trade?trade_id=scan-abc-ETH");
+        assert_eq!(
+            with_query("/paper/trade/candles", &[("trade_id", "a&b=c #1"), ("interval", "5m")]),
+            "/paper/trade/candles?trade_id=a%26b%3Dc+%231&interval=5m"
+        );
+    }
 }

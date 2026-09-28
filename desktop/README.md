@@ -36,6 +36,36 @@ React UI ──Tauri IPC──▶ Rust controller (src-tauri) ──X-API-Key, 1
 
 Ctrl/Cmd + 1–8 switches screens.
 
+## Open positions and Trade Detail
+
+Discovery (scan, rank, open) keeps its 5-minute cadence. Positions that are
+already open are managed by a separate open-position monitor inside the
+forward-loop process (`signal-bridge/position_monitor.mjs`), which only runs
+while at least one position is open:
+
+- Hyperliquid websocket `trades` stream per open coin: a print that crosses
+  the active stop, TP1 or TP2 is posted to `POST /paper/tick` straight away.
+- A 10s heartbeat (`POSITION_MONITOR_INTERVAL_MS`, clamped to 5–60s): one
+  batched `allMids` read for all open positions, posted per position, plus
+  the highest/lowest stream prints since the last heartbeat (MFE/MAE only).
+- The discovery loop's completed 5m candle sweep stays as the last backstop.
+
+**Limitation:** if the stream is down, the monitor is poll-only (shown as
+`POLL_ONLY`). A poll sees only the sampled mid, so a touch-and-reverse between
+two polls is caught later by the 5m candle sweep, not by the poll. No price
+path between observations is invented. A price older than 30s (or the
+operator's stale-data timeout, whichever is lower) is not evaluated; the
+position is flagged `STALE` / `MARKET_DATA_OFFLINE` and kept open.
+
+Clicking any row in Open positions, Trade history or the Dashboard's
+positions opens Trade Detail: a candlestick chart (1m/5m/15m/1h from
+Hyperliquid `candleSnapshot`, pre-entry context plus the full trade) with
+ENTRY/STOP/TP1/TP2 lines, entry and actual exit markers, live figures for
+open trades (refreshed without reloading), and the original decision-time
+record. The research (hindsight) overlay is off by default, available only
+for a closed trade with a resolved post-outcome label, and never merged into
+the trade record. Back or Esc returns to the list.
+
 On exit the app stops the loop gracefully, then asks the execution-service to
 shut down (`POST /system/shutdown`), killing either only after a grace period.
 Every backend write is its own committed SQLite transaction, so no stop leaves
