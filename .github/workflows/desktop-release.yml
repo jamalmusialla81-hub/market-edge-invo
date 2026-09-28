@@ -55,7 +55,18 @@ jobs:
           gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID" > run.json
           jq -r '"\(.name) | \(.head_branch) | \(.status)/\(.conclusion) | \(.head_sha)"' run.json
           [ "$(jq -r .path run.json)" = ".github/workflows/desktop-app.yml" ] || { echo "run is not a Desktop app run"; exit 1; }
-          [ "$(jq -r .conclusion run.json)" = "success" ] || { echo "run is not green"; exit 1; }
+          if [ "${{ inputs.include_windows }}" = "true" ]; then
+            [ "$(jq -r .conclusion run.json)" = "success" ] || { echo "run is not green"; exit 1; }
+          else
+            # Mac-only release: every job that builds or tests the published
+            # bytes (Linux tests, macOS package, macOS clean machine) must be
+            # green; Windows jobs are not part of this release.
+            gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/jobs?per_page=100" > jobs.json
+            jq -r '.jobs[] | "\(.name) | \(.conclusion)"' jobs.json
+            BAD=$(jq -r '[.jobs[] | select((.name | test("windows"; "i")) | not) | select(.conclusion != "success")] | length' jobs.json)
+            MAC=$(jq -r '[.jobs[] | select((.name | test("macos"; "i")) and .conclusion == "success")] | length' jobs.json)
+            [ "$BAD" = "0" ] && [ "$MAC" -ge 2 ] || { echo "non-Windows jobs are not all green (bad=$BAD, mac green=$MAC)"; exit 1; }
+          fi
           SHA=$(jq -r .head_sha run.json)
           git merge-base --is-ancestor "$SHA" origin/main || { echo "$SHA is not on main"; exit 1; }
           VERSION=$(jq -r .version desktop/package.json)
