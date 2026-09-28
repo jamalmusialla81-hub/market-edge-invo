@@ -1,0 +1,81 @@
+name: Research — Feature research v1 (read-only)
+
+# Research only.  SELECT-only D1 access with a hard read budget (sealed holdout
+# filtered in SQL), the audited Coinbase candle archive verified against the
+# committed manifest, Binance official public archives for derivatives
+# context.  No Worker token, no D1 writes, no production code touched.
+# Trigger: edit research/feature-research/RUN_REQUEST on the research branch.
+on:
+  workflow_dispatch:
+  push:
+    branches: [claude/project-thread-qmt2jt]
+    paths: [research/feature-research/RUN_REQUEST]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: research-feature-research
+  cancel-in-progress: true
+
+jobs:
+  research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    permissions:
+      contents: write     # only to commit the report back to this research branch
+      actions: read       # to download the audited candle archive artifact
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      TARDIS_API_KEY: ${{ secrets.TARDIS_API_KEY }}
+      CLOUDFLARE_ACCOUNT_ID: 8ea7796a8fb13ffb612245e8a08a55d6
+      MARKET_EDGE_D1_DATABASE_ID: 39a4082e-41a4-45e9-9b76-99cf10eaca01
+      HISTORICAL_RANK_ENGINE_VERSION: HISTORICAL-RANK-V2-CLEAN-NATIVE-HTF
+      FEATURE_RESEARCH_D1_READ_BUDGET: '300000'
+      CANDLE_ARCHIVE_DIR: candle-archive
+      CANDLE_ARCHIVE_RUN_ID: '36313185824'
+      NODE_OPTIONS: --max-old-space-size=6144
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: coinbase-5m-archive*
+          merge-multiple: true
+          path: candle-archive
+          run-id: ${{ env.CANDLE_ARCHIVE_RUN_ID }}
+          github-token: ${{ github.token }}
+      - name: Verify the archive against the committed manifest (fail closed)
+        run: node research/verify-candle-archive.mjs
+      - name: Point-in-time and pipeline tests
+        run: |
+          node research/rank-research-v2.test.js
+          node research/feature-research/features.test.js
+          node research/feature-research/diagnostics.test.js
+          node research/feature-research/microstructure-interface.test.js
+          node research/feature-research/forward-observation.test.js
+      - name: Feature research on the development period only
+        run: |
+          mkdir -p research/feature-research/reports
+          export FEATURE_RESEARCH_REPORT=research/feature-research/reports/feature-research-run-${{ github.run_id }}.json
+          node research/feature-research/run-feature-research.mjs | tee feature-research-summary.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: feature-research-${{ github.run_id }}
+          path: |
+            research/feature-research/reports/
+            feature-research-summary.json
+          if-no-files-found: warn
+          retention-days: 90
+      - name: Commit the report to the research branch
+        if: always() && github.ref_name == 'claude/project-thread-qmt2jt'
+        run: |
+          git config user.name "market-edge-research-bot"
+          git config user.email "research-bot@users.noreply.github.com"
+          git add research/feature-research/reports/ || exit 0
+          git commit -m "research: feature-research v1 report (run ${{ github.run_id }})" || exit 0
+          git pull --rebase origin ${{ github.ref_name }}
+          git push origin HEAD:${{ github.ref_name }}

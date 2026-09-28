@@ -5,8 +5,13 @@ name: Research — Rank V2 suite (read-only)
 # sealed Phase 5 holdout is filtered out in SQL before any row is read.
 on:
   workflow_dispatch:
+    inputs:
+      engine:
+        description: 'Dataset engine version to research (must be trainable in dataset-registry.js)'
+        required: false
+        default: HISTORICAL-RANK-V2-CLEAN-NATIVE-HTF
   push:
-    branches: [claude/clever-faraday-y12d11]
+    branches: [claude/clever-faraday-y12d11, claude/project-thread-yhldkp]
     paths:
       - research/rank-research-v2.js
       - research/rank-research-v2.test.js
@@ -28,7 +33,7 @@ jobs:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: 8ea7796a8fb13ffb612245e8a08a55d6
       MARKET_EDGE_D1_DATABASE_ID: 39a4082e-41a4-45e9-9b76-99cf10eaca01
-      HISTORICAL_RANK_ENGINE_VERSION: HISTORICAL-RANK-V2-CLEAN
+      HISTORICAL_RANK_ENGINE_VERSION: ${{ inputs.engine || 'HISTORICAL-RANK-V2-CLEAN-NATIVE-HTF' }}
       RANK_V2_D1_READ_BUDGET: '300000'
       RANK_V2_REPORT: rank-research-v2-report.json
     steps:
