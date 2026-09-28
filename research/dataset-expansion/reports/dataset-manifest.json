@@ -1,0 +1,108 @@
+{
+ "dataset_version": "HISTORICAL-RANK-V2-CLEAN-NATIVE-HTF-EXPANDED",
+ "generator_policy": "HISTORICAL-RANK-V2-CLEAN-NATIVE-HTF",
+ "label_version": "outcome-strict-v1",
+ "holdout": {
+  "id": "PHASE5-V1-HOLDOUT-2025-12-01",
+  "startMs": 1764547200000,
+  "devCutoffMs": 1763539200000,
+  "rule": "scan_timestamp >= startMs is holdout; development uses scan_timestamp < devCutoffMs only; consumption is one-shot with a pre-registered model hash"
+ },
+ "development_only": true,
+ "assets": [
+  "BTC",
+  "ETH",
+  "SOL",
+  "XRP",
+  "DOGE",
+  "LTC",
+  "ADA",
+  "AERO",
+  "AVAX",
+  "BCH",
+  "DOT",
+  "HBAR",
+  "LINK",
+  "ONDO",
+  "UNI",
+  "XLM"
+ ],
+ "candidates": 2796,
+ "scans": 856,
+ "candidates_sha256": "33dab8016e17f137149f3653326d2b52c682672fc667dd54372afc47552112a4",
+ "snapshots_sha256": "2c934347b492a6e5b5db6fdb67ef8c23fab620a116ea4db41fd32914ff72ac3e",
+ "per_asset": {
+  "UNI": 81,
+  "DOGE": 267,
+  "BCH": 148,
+  "ETH": 236,
+  "LTC": 290,
+  "XLM": 228,
+  "BTC": 220,
+  "SOL": 248,
+  "DOT": 166,
+  "LINK": 206,
+  "ADA": 232,
+  "AVAX": 136,
+  "HBAR": 113,
+  "XRP": 116,
+  "ONDO": 69,
+  "AERO": 40
+ },
+ "frozen_files_sha256": {
+  "quant-engine.js": "5a407644da29102d7734e8df238b51f8e7f91957ae626c328a8f461cbc6dec79",
+  "replay-engine.js": "3de128d23227d8e94be8be831ad0210641175c0ba4e4a730c7b118cb759b2dfd",
+  "research/historical-rank.js": "10f4d5d763cffdec7923a6f83c01f4101fa02860a9d2c587998a7b6b360a9ba6",
+  "research/historical-rank-v2-clean.js": "b822d103c55547718e6a2892ef4f9da4a901b93e7933a475a8cb86706a1fce49",
+  "research/candle-sequence.js": "37bb747447b317f85598c2bd579226e09d84c752a25bc827f16491cfec7d4484",
+  "research/rank-research-v2.js": "af273b5cb307207a4058f45bbf86b83ff3eb684a21d811b0f0057e72ef892965"
+ },
+ "archive": {
+  "old": {
+   "artifact_run": "36313185824",
+   "manifest": "research/data/v2-clean/candle-manifest.json"
+  },
+  "new": {
+   "ADA": {
+    "months": 61,
+    "content_sha256": "7cc4609f22a145f8399e77cbb9ff83bbcba6253e07ee8e1e9fc4802efaacab5f"
+   },
+   "AERO": {
+    "months": 61,
+    "content_sha256": "3656b222d33610db184288f9c15e7640d617a70cfc2064331a6772750c3dafd4"
+   },
+   "AVAX": {
+    "months": 61,
+    "content_sha256": "58c517923581f095ef5e5fcf65326de6e75c3f7c012f8ecbfef9bd6a9b898394"
+   },
+   "BCH": {
+    "months": 61,
+    "content_sha256": "263a30f9e13b73c9a892bd1cafaaa34dcab69764491f5da1d40aadbf9a52f3aa"
+   },
+   "DOT": {
+    "months": 61,
+    "content_sha256": "4fb7feeaff3d2a639f74c42789077d09144012a7b22df64a9a69703a66f45abb"
+   },
+   "HBAR": {
+    "months": 61,
+    "content_sha256": "098c67f774bc7bc69c30d18b829415af8ba171bff2955946dd02ed77c1af0916"
+   },
+   "LINK": {
+    "months": 61,
+    "content_sha256": "f4e33cb4ae1ba950f4f810f8b19c093e788e8f37503908847fdf6a83a51cbd01"
+   },
+   "ONDO": {
+    "months": 61,
+    "content_sha256": "98d2bff12872077c42e93f0b1fd3450d64fc0dc97276114d02fabbf0461bb3f8"
+   },
+   "UNI": {
+    "months": 61,
+    "content_sha256": "8e84e3144afd6851d3c45771083636b0bae928f536358a776689c1723dc728b3"
+   },
+   "XLM": {
+    "months": 61,
+    "content_sha256": "db9df3c19b715801118f668284b185796251d4608b2983e81cb8dd29d14c8160"
+   }
+  }
+ }
+}

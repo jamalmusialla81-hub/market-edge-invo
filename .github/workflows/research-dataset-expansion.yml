@@ -1,0 +1,203 @@
+name: Research — Dataset expansion v1 (read-only)
+
+# Research only (research/dataset-expansion/PREREGISTRATION.md).
+#   screen      Coinbase /products + native daily candles -> screen report + shortlist
+#   old_assets  frozen generator on the audited archive (run 36313185824), 6 old assets
+#   new_assets  Coinbase spot 5m/1h/1d archive per shortlisted asset (manifested,
+#               verified) + frozen generator
+#   build       assemble HISTORICAL-RANK-V2-CLEAN-NATIVE-HTF-EXPANDED (artifact),
+#               OLD vs EXPANDED diversity, baselines, placebo gate, power
+# D1: SELECT only (OLD development rows).  No Worker token, no D1 writes, no
+# production code touched.  Holdout scans are counted, never resolved.
+# Trigger: edit research/dataset-expansion/RUN_REQUEST on the research branch.
+on:
+  workflow_dispatch:
+  push:
+    branches: [claude/project-thread-99bbtg]
+    paths: [research/dataset-expansion/RUN_REQUEST]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: research-dataset-expansion
+  cancel-in-progress: true
+
+env:
+  CANDLE_FROM: '2021-09-01T00:00:00Z'
+  CANDLE_TO_MS: '1790467200000'      # 2026-09-27T00:00Z, identical to the committed manifest window
+  OLD_ARCHIVE_RUN_ID: '36313185824'
+
+jobs:
+  screen:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    outputs:
+      matrix: ${{ steps.screen.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node research/dataset-expansion/expansion.test.js && node research/candle-archive.test.js
+      - id: screen
+        env:
+          EXPANSION_SCREEN_REPORT: screen-report.json
+          EXPANSION_MATRIX: matrix.json
+        run: |
+          node research/dataset-expansion/screen-universe.mjs
+          echo "matrix=$(cat matrix.json)" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: expansion-screen
+          path: screen-report.json
+          retention-days: 90
+
+  old_assets:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        asset: [BTC, ETH, SOL, XRP, DOGE, LTC]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: coinbase-5m-archive*
+          merge-multiple: true
+          path: candle-archive
+          run-id: ${{ env.OLD_ARCHIVE_RUN_ID }}
+          github-token: ${{ github.token }}
+      - name: Verify the audited archive against the committed manifest (fail closed)
+        run: node research/verify-candle-archive.mjs
+      - name: Frozen generator, ${{ matrix.asset }}
+        env:
+          EXPANSION_ASSET: ${{ matrix.asset }}
+          CANDLE_ARCHIVE_DIR: candle-archive
+          EXPANSION_OUT: expansion-out
+        run: node research/dataset-expansion/generate-asset.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: expansion-asset-${{ matrix.asset }}
+          path: expansion-out/
+          retention-days: 90
+
+  new_assets:
+    needs: screen
+    if: ${{ needs.screen.outputs.matrix != '[]' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    strategy:
+      fail-fast: false
+      max-parallel: 10
+      matrix:
+        include: ${{ fromJSON(needs.screen.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Fetch Coinbase spot 5m + native 1h/1d, ${{ matrix.product }} (no fill, no substitution)
+        env:
+          CANDLE_ASSETS: ${{ matrix.asset }}
+          CANDLE_ARCHIVE_DIR: candle-archive
+          CANDLE_MANIFEST_OUT: expansion-out/${{ matrix.asset }}.manifest.json
+        run: node research/fetch-coinbase-candles.mjs
+      - name: Verify the archive against its manifest (fail closed)
+        env:
+          CANDLE_ARCHIVE_DIR: candle-archive
+          CANDLE_MANIFEST: expansion-out/${{ matrix.asset }}.manifest.json
+        run: node research/verify-candle-archive.mjs
+      - name: Frozen generator, ${{ matrix.asset }}
+        env:
+          EXPANSION_ASSET: ${{ matrix.asset }}
+          EXPANSION_PRODUCT: ${{ matrix.product }}
+          CANDLE_ARCHIVE_DIR: candle-archive
+          EXPANSION_OUT: expansion-out
+        run: node research/dataset-expansion/generate-asset.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: expansion-asset-${{ matrix.asset }}
+          path: expansion-out/
+          retention-days: 90
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: expansion-archive-${{ matrix.asset }}
+          path: candle-archive/
+          retention-days: 90
+
+  build:
+    needs: [screen, old_assets, new_assets]
+    if: ${{ always() && needs.screen.result == 'success' && needs.old_assets.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    permissions:
+      contents: write     # only to commit reports back to this research branch
+      actions: read
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: 8ea7796a8fb13ffb612245e8a08a55d6
+      MARKET_EDGE_D1_DATABASE_ID: 39a4082e-41a4-45e9-9b76-99cf10eaca01
+      NODE_OPTIONS: --max-old-space-size=6144
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: expansion-asset-*
+          merge-multiple: true
+          path: expansion-out
+      - uses: actions/download-artifact@v4
+        with:
+          name: expansion-screen
+          path: research/dataset-expansion/reports
+      - name: Pipeline tests
+        run: |
+          node research/dataset-expansion/expansion.test.js
+          node research/rank-research-v2.test.js
+          node research/historical-rank-v2-clean.test.js
+      - name: Build the expanded dataset and measure OLD vs EXPANDED
+        env:
+          EXPANSION_IN: expansion-out
+          EXPANSION_MANIFESTS: expansion-out
+          EXPANSION_SCREEN_REPORT: research/dataset-expansion/reports/screen-report.json
+          EXPANSION_DATASET_DIR: expanded-dataset
+        run: |
+          export EXPANSION_REPORT=research/dataset-expansion/reports/expansion-run-${{ github.run_id }}.json
+          node research/dataset-expansion/build-expanded.mjs | tee expansion-summary.json
+      - name: Keep manifests and the dataset manifest with the reports
+        if: always()
+        run: |
+          mkdir -p research/dataset-expansion/reports/manifests
+          cp expansion-out/*.manifest.json research/dataset-expansion/reports/manifests/ 2>/dev/null || true
+          cp expanded-dataset/dataset-manifest.json research/dataset-expansion/reports/ 2>/dev/null || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: historical-rank-v2-clean-native-htf-expanded
+          path: |
+            expanded-dataset/
+            research/dataset-expansion/reports/
+            expansion-summary.json
+          retention-days: 90
+      - name: Commit reports to the research branch
+        if: always() && github.ref_name == 'claude/project-thread-99bbtg'
+        run: |
+          git config user.name "market-edge-research-bot"
+          git config user.email "research-bot@users.noreply.github.com"
+          git add research/dataset-expansion/reports/ || exit 0
+          git commit -m "research: dataset-expansion v1 reports (run ${{ github.run_id }})" || exit 0
+          git pull --rebase origin ${{ github.ref_name }}
+          git push origin HEAD:${{ github.ref_name }}
