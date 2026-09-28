@@ -263,14 +263,17 @@ log "== 6. backup / restore"
 BK="$OUT/backup.mebackup"
 "$APP" --export-backup "$(native "$BK")" --result "$OUT/export.json" > /dev/null 2>&1
 check BACKUP_EXPORT "$(jq -c '.manifest | {schema_version, counts, secrets_included}' "$OUT/export.json")" test "$(jq -r .ok "$OUT/export.json")" = true
-check BACKUP_NO_SECRETS "entries $(jq -c .entries "$OUT/export.json")" test "$(jq -r '.manifest.secrets_included' "$OUT/export.json")" = false -a "$(jq -r '.entries|length' "$OUT/export.json")" = 3
+check BACKUP_NO_SECRETS "entries $(jq -c .entries "$OUT/export.json")" test "$(jq -r '.manifest.secrets_included' "$OUT/export.json")" = false -a "$(jq -r '.entries|length' "$OUT/export.json")" = 4
+check BACKUP_HAS_SHADOW_DB "$(jq -c '.manifest | {shadow_included, shadow_counts, dataset_versions, cloud_backup}' "$OUT/export.json")" test "$(jq -r '.manifest.shadow_included' "$OUT/export.json")" = true -a "$(jq -r '.manifest.cloud_backup' "$OUT/export.json")" = false
 "$APP" --verify-backup "$(native "$BK")" --result "$OUT/verify.json" > /dev/null 2>&1
 check BACKUP_VERIFY "$(jq -c .validation.counts "$OUT/verify.json")" test "$(jq -r .ok "$OUT/verify.json")" = true
+check BACKUP_VERIFY_SHADOW "$(jq -c .shadow_validation.counts "$OUT/verify.json")" test "$(jq -r .shadow_validation.ok "$OUT/verify.json")" = true
 head -c 2000 "$BK" > "$OUT/truncated.mebackup"
 "$APP" --verify-backup "$(native "$OUT/truncated.mebackup")" --result "$OUT/verify-bad.json" > /dev/null 2>&1
 check BACKUP_REJECTS_CORRUPT "$(jq -r .error "$OUT/verify-bad.json")" test "$(jq -r .ok "$OUT/verify-bad.json")" = false
 "$APP" --restore-backup "$(native "$BK")" --confirm RESTORE --result "$OUT/restore.json" > /dev/null 2>&1
 check BACKUP_RESTORE "kept $(jq -r .previous_database_kept_at "$OUT/restore.json")" test "$(jq -r .ok "$OUT/restore.json")" = true
+check BACKUP_RESTORE_SHADOW "kept $(jq -r .previous_shadow_database_kept_at "$OUT/restore.json")" test "$(jq -r .shadow_restored "$OUT/restore.json")" = true
 launch after-restore
 wait_for 300 '.execution_service.state == "RUNNING" and .trades_count != null'
 check RESTORE_STATE_MATCHES "$(st '.trade_ids|tostring')" test "$(jq -c .trade_ids "$SNAP")" = "$(jq -c .trade_ids "$STATUS")"

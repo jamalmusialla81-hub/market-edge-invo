@@ -14,6 +14,8 @@ prints one JSON object and exits 0 on success):
   version                      build/version/schema info
   backup-db SRC DST            consistent online copy of SRC into DST
   validate-db PATH             read-only integrity/schema check
+  backup-shadow-db SRC DST     consistent online copy of the shadow research DB
+  validate-shadow-db PATH      read-only integrity/schema check of a shadow DB
   migrate PATH                 back up if needed, create tables, migrate forward
   nautilus-selftest            runs the real Nautilus BacktestEngine scenario
                                (diagnostics/real_backtest_scenarios.py) to prove
@@ -43,6 +45,15 @@ def _maintenance(argv):
         if cmd == "validate-db" and len(argv) == 2:
             result = migrations.inspect_database(argv[1])
             _print(result, ok=result["ok"])
+        if cmd in ("backup-shadow-db", "validate-shadow-db"):
+            from market_edge_exec.shadow import store as shadow_store
+            if cmd == "backup-shadow-db" and len(argv) == 3:
+                dst = shadow_store.backup_database(argv[1], argv[2])
+                result = shadow_store.inspect_database(dst)
+                _print({**result, "path": dst}, ok=result["ok"])
+            if cmd == "validate-shadow-db" and len(argv) == 2:
+                result = shadow_store.inspect_database(argv[1])
+                _print(result, ok=result["ok"])
         if cmd == "nautilus-selftest":
             if not getattr(sys, "frozen", False):
                 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "diagnostics"))

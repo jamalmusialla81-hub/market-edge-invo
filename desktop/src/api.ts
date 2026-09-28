@@ -47,7 +47,7 @@ export interface Health {
 export interface Account {
   starting_equity: number; equity: number; balance: number; realized_pnl: number; unrealized_pnl: number; fees: number;
   slippage_cost: number; open_positions: number; open_notional: number; daily_pnl: number; peak_equity: number;
-  total_pnl: number; drawdown_pct: number; exposure_pct: number | null; effective_leverage: number | null; execution_mode: string;
+  total_pnl: number; drawdown_pct: number; exposure_pct: number | null; effective_leverage: number | null; gross_exposure_multiple?: number | null; execution_mode: string;
 }
 export interface SignalRow {
   row_id: number; signal_id: string | null; at_ms: number; outcome: string; accepted: boolean; reason: string | null;
@@ -100,12 +100,19 @@ export interface ChartMarker { kind: string; at_ms: number; price: number; side:
 export interface Hindsight {
   label: string; post_outcome: true; known_at_decision_time: false; available: boolean; reason: string | null;
   resolved_at_ms?: number; source?: string; levels?: Record<'optimal_entry' | 'optimal_tp1' | 'optimal_tp2' | 'optimal_exit', number | null>;
+  diagnostics?: Record<string, number | string | null>;
+}
+/** Link from an executed paper trade to its shadow-learning observation (ids and progress only). */
+export interface ShadowLink {
+  linked: boolean; reason?: string; observation_id?: string; scan_id?: string; decision_ts?: number;
+  resolution_status?: string | null; next_due_ts?: number | null; resolved_horizons?: string[];
+  unresolvable_horizons?: string[]; pending_horizons?: string[]; post_outcome_available?: boolean;
 }
 export interface TradeDetail {
   trade_id: string; status: string; is_open: boolean; opened_at_ms: number; closed_at_ms: number | null; exit_reason: string | null;
   decision: DecisionContext; live: LiveMetrics; levels: ChartLevel[]; markers: ChartMarker[];
   exits: { kind: string; quantity: number; fill_price: number; level: number; pnl: number; at_ms: number; trigger?: string }[];
-  realized_pnl: number; fees: number; net_pnl: number; hindsight: Hindsight; generated_at_ms: number;
+  realized_pnl: number; fees: number; net_pnl: number; hindsight: Hindsight; shadow?: ShadowLink; generated_at_ms: number;
 }
 export type CandleInterval = '1m' | '5m' | '15m' | '1h';
 export interface Candle { time: number; open: number; high: number; low: number; close: number; volume: number; complete: boolean }
@@ -136,6 +143,8 @@ export type LogFile = 'desktop' | 'execution-service' | 'forward-loop' | 'reconc
 export interface BackupManifest {
   format: string; format_version: number; created_at: string; app_version: string; git_sha: string; schema_version: number;
   db_sha256: string; db_bytes: number; counts: Record<string, number>; starting_equity: number | null; secrets_included: boolean; contents: string[];
+  // format v2
+  shadow_included?: boolean; shadow_counts?: Record<string, number> | null; dataset_versions?: string[]; cloud_backup?: boolean;
 }
 export interface SecretsStatus {
   store: string; secrets: { name: string; configured: boolean; error: string | null }[];

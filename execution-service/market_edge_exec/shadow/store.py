@@ -93,6 +93,53 @@ def default_path(paper_db_path: str) -> str:
     return os.path.join(base, "market_edge_shadow_research.sqlite3")
 
 
+SHADOW_TABLES = ("shadow_meta", "shadow_scans", "shadow_observations", "shadow_labels", "shadow_hindsight",
+                 "forward_paper_executed", "shadow_resolution")
+
+
+def inspect_database(path: str) -> dict:
+    """Read-only validation of a shadow research database (backup/restore).
+    Never creates tables, never writes."""
+    if not os.path.isfile(path):
+        return {"ok": False, "error": "NOT_FOUND", "path": path}
+    try:
+        uri = "file:" + os.path.abspath(path).replace(os.sep, "/") + "?mode=ro"
+        with closing(sqlite3.connect(uri, uri=True)) as conn:
+            integrity = conn.execute("PRAGMA integrity_check").fetchone()[0]
+            tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+            meta = dict(conn.execute("SELECT key, value FROM shadow_meta").fetchall()) if "shadow_meta" in tables else {}
+            counts = {t: conn.execute(f"SELECT count(*) FROM {t}").fetchone()[0] for t in SHADOW_TABLES if t in tables and t != "shadow_meta"}
+            datasets = sorted({r[0] for t in ("shadow_scans", "shadow_observations", "shadow_labels", "forward_paper_executed")
+                               if t in tables for r in conn.execute(f"SELECT DISTINCT dataset_version FROM {t}")})
+            triggers = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='trigger'")}
+    except sqlite3.DatabaseError as error:
+        return {"ok": False, "error": f"NOT_A_VALID_DATABASE: {error}", "path": path}
+    problems = []
+    if integrity != "ok":
+        problems.append(f"INTEGRITY_CHECK_FAILED: {integrity}")
+    missing = [t for t in SHADOW_TABLES if t not in tables]
+    if missing:
+        problems.append(f"MISSING_TABLES: {missing}")
+    version = int(meta.get("schema_version") or 0)
+    if version > C.SHADOW_SCHEMA_VERSION:
+        problems.append(f"SHADOW_SCHEMA_NEWER: v{version} > supported v{C.SHADOW_SCHEMA_VERSION}")
+    missing_guards = [f"{t}_no_{op}" for t in IMMUTABLE for op in ("update", "delete") if f"{t}_no_{op}" not in triggers]
+    if missing_guards and not missing:
+        problems.append(f"MISSING_IMMUTABILITY_TRIGGERS: {missing_guards}")
+    return {"ok": not problems, "problems": problems, "path": path, "kind": "shadow_research",
+            "shadow_schema_version": version, "supported_shadow_schema_version": C.SHADOW_SCHEMA_VERSION,
+            "integrity": integrity, "counts": counts, "dataset_versions": datasets}
+
+
+def backup_database(src: str, dst: str) -> str:
+    """Consistent copy of the live shadow database (SQLite online backup
+    API: safe while the execution-service is writing)."""
+    os.makedirs(os.path.dirname(os.path.abspath(dst)), exist_ok=True)
+    with closing(sqlite3.connect(src, timeout=30)) as source, closing(sqlite3.connect(dst)) as target:
+        source.backup(target)
+    return dst
+
+
 def _batch_due(first_bar_ts: int, decision_ts: int, batch: str) -> int:
     return decision_ts + max(C.HORIZONS[h] for h in C.LABEL_BATCHES[batch])
 
@@ -180,13 +227,15 @@ class ShadowStore:
             if conn.execute("SELECT 1 FROM shadow_scans WHERE scan_id=?", (scan_id,)).fetchone():
                 return {"scan_id": scan_id, "inserted": 0, "duplicate": True}
             n_cand = sum(1 for o in observations if o.get("kind") == C.KIND_CANDIDATE)
-            state = "TRADE_SELECTED" if scan.get("submitted_signal_id") else "NO_TRADE"
+            state = ("RESEARCH_SUPPLEMENT" if scan.get("scan_scope") == "RESEARCH_SUPPLEMENT"
+                     else "TRADE_SELECTED" if scan.get("submitted_signal_id") else "NO_TRADE")
             conn.execute(
                 "INSERT INTO shadow_scans VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (scan_id, ts, scan.get("scan_status"), state, exec_decision, execution.get("reason"), scan.get("submitted_signal_id"),
                  int(scan.get("n_markets") or 0), n_cand, scan.get("observation_interval_ms"), versions["generator_version"],
                  versions["feature_version"], versions["model_version"], C.DATASET_RAW,
-                 _blob({"failures": scan.get("failures") or [], "universe": scan.get("universe"), "cross_market": scan.get("cross_market")}), now_ms))
+                 _blob({"failures": scan.get("failures") or [], "universe": scan.get("universe"), "cross_market": scan.get("cross_market"),
+                        "scan_scope": scan.get("scan_scope") or "PRODUCTION_SCAN"}), now_ms))
             for obs in observations:
                 kind, decision = obs["kind"], obs.get("decision") or {}
                 asset, coin = str(obs.get("asset") or ""), str(obs.get("coin") or obs.get("asset") or "")
@@ -370,6 +419,9 @@ class ShadowStore:
                 "bad_trades_avoided": classes.get("BAD_TRADE_AVOIDED", 0),
                 "clusters": one("SELECT COUNT(DISTINCT observation_cluster_id) FROM shadow_observations WHERE decision_ts >= ?", since_ms),
                 "episodes": one("SELECT COUNT(DISTINCT market_episode_id) FROM shadow_observations WHERE decision_ts >= ?", since_ms),
+                "research_supplement_observations": one("SELECT COUNT(*) FROM shadow_observations WHERE decision_ts >= ? AND production_state='OUTSIDE_PRODUCTION_UNIVERSE'", since_ms),
+                "observations_by_asset": {r[0]: r[1] for r in conn.execute(
+                    "SELECT asset, COUNT(*) FROM shadow_observations WHERE decision_ts >= ? GROUP BY asset ORDER BY asset", (since_ms,))},
                 "db_bytes": os.path.getsize(self.path) if os.path.exists(self.path) else 0,
             }
 
@@ -408,6 +460,41 @@ class ShadowStore:
             "FUTURE_LABEL_DATA": labels,
             "POST_OUTCOME_RESEARCH_ONLY": ({"notice": "Hindsight labels describe what the market offered after the fact. They are not predictions and are never model features.",
                                             **_unblob(h["labels"])} if h else None),
+        }
+
+    def link_for_signal(self, signal_id: str) -> Optional[dict]:
+        """Shadow side of an executed paper trade, joined by its stable
+        signal_id (forward_paper_executed -> observation). Read only: returns
+        ids and resolution progress, never copies of the decision or labels.
+        post_outcome is only present once the final batch (and with it the
+        hindsight record) has been written."""
+        if not signal_id:
+            return None
+        with closing(self._connect()) as conn:
+            link = conn.execute("SELECT observation_id, scan_id, decision_ts FROM forward_paper_executed WHERE signal_id=?",
+                                (signal_id,)).fetchone()
+            if link is None or not link["observation_id"]:
+                return None
+            oid = link["observation_id"]
+            res = conn.execute("SELECT resolution_status, batches_done, next_due_ts FROM shadow_resolution WHERE observation_id=?",
+                               (oid,)).fetchone()
+            rows = conn.execute("SELECT batch, label_status, window_end_ts, labels FROM shadow_labels WHERE observation_id=? ORDER BY batch",
+                                (oid,)).fetchall()
+            batches = [(r["batch"], r["label_status"], r["window_end_ts"]) for r in rows]
+            # per-horizon status only (the label values stay in the store)
+            horizon_status = {hz: (lab or {}).get("label_status") for r in rows for hz, lab in _unblob(r["labels"]).items()
+                              if hz in C.HORIZONS}
+            h = conn.execute("SELECT labels, resolved_at_ms FROM shadow_hindsight WHERE observation_id=?", (oid,)).fetchone()
+        resolved = [hz for hz in C.HORIZONS if horizon_status.get(hz) == "OK"]
+        return {
+            "observation_id": oid, "scan_id": link["scan_id"], "decision_ts": link["decision_ts"],
+            "resolution_status": res["resolution_status"] if res else None,
+            "next_due_ts": res["next_due_ts"] if res else None,
+            "batches": [{"batch": b, "label_status": st, "window_end_ts": w} for b, st, w in batches],
+            "resolved_horizons": resolved,
+            "unresolvable_horizons": [hz for hz in C.HORIZONS if hz in horizon_status and horizon_status[hz] != "OK"],
+            "pending_horizons": [hz for hz in C.HORIZONS if hz not in horizon_status],
+            "post_outcome": ({"resolved_at_ms": h["resolved_at_ms"], "labels": _unblob(h["labels"])} if h else None),
         }
 
     def training_rows(self, feature_paths: list[str], target_batch: str = C.FINAL_BATCH, target_horizon: str = "72h",

@@ -5,6 +5,10 @@ import { DASH } from '../format';
 
 const str = (v: unknown) => (v === null || v === undefined || v === '' ? DASH : String(v));
 
+function shadowText(m: BackupManifest): string {
+  return m.shadow_included ? `${m.shadow_counts?.shadow_observations ?? 0} shadow observations` : 'no shadow research database';
+}
+
 function Backups() {
   const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -14,7 +18,7 @@ function Backups() {
     setBusy(true); setMsg(null);
     try {
       const r = await api.exportBackup();
-      if (!r.cancelled && r.manifest) setMsg({ kind: 'ok', text: `Backup written to ${r.path} (schema v${r.manifest.schema_version}, ${r.manifest.counts.paper_trades ?? 0} trades, ${r.manifest.counts.paper_signals ?? 0} signals; no secrets)` });
+      if (!r.cancelled && r.manifest) setMsg({ kind: 'ok', text: `Backup written to ${r.path} (schema v${r.manifest.schema_version}, ${r.manifest.counts.paper_trades ?? 0} trades, ${r.manifest.counts.paper_signals ?? 0} signals; ${shadowText(r.manifest)}; no secrets; local file only)` });
     } catch (e) { setMsg({ kind: 'err', text: `Export failed: ${errorText(e)}` }); } finally { setBusy(false); }
   };
   const importBackup = async () => {
@@ -34,7 +38,8 @@ function Backups() {
 
   return (
     <Panel title="Backup & restore">
-      <p className="muted small">A backup holds the database (paper account, trades, signals, equity history, risk settings, reconciliation log) and non-secret settings. API keys stay in the OS keychain and are never exported.</p>
+      <p className="muted small">A backup holds the paper database (paper account, trades, signals, positions, equity history, risk settings, reconciliation log), the shadow-learning research database (every observation, label and post-outcome record) and non-secret settings. API keys stay in the OS keychain and are never exported.</p>
+      <p className="muted small"><b>No cloud backup.</b> Nothing leaves this computer automatically: a backup is a local file you export. Copy it somewhere safe yourself.</p>
       <div className="controls-inline">
         <button className="btn" disabled={busy} onClick={exportBackup}>EXPORT BACKUP</button>
         <button className="btn btn-warn" disabled={busy} onClick={importBackup}>IMPORT BACKUP</button>
@@ -44,7 +49,8 @@ function Backups() {
         <ConfirmDialog title="Restore this backup?" word="RESTORE" confirmLabel="Restore backup"
           body={<>
             <p><b>{pending.path}</b></p>
-            <p>Created {pending.manifest.created_at} by Market Edge {pending.manifest.app_version}; schema v{pending.manifest.schema_version}; {pending.manifest.counts.paper_trades ?? 0} trades, {pending.manifest.counts.paper_signals ?? 0} signals. Checksum and database integrity verified.</p>
+            <p>Created {pending.manifest.created_at} by Market Edge {pending.manifest.app_version}; schema v{pending.manifest.schema_version}; {pending.manifest.counts.paper_trades ?? 0} trades, {pending.manifest.counts.paper_signals ?? 0} signals; {shadowText(pending.manifest)}. Checksums and database integrity verified.</p>
+            {!pending.manifest.shadow_included && <p>This backup has no shadow research database; the current one is kept as it is.</p>}
             <p>The paper loop stops, the current database is kept in the backups folder, the backup replaces it, and a reconciliation runs. New entries stay paused until you resume.</p>
           </>}
           onCancel={() => setPending(null)} onConfirm={() => void restore()} />

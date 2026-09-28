@@ -27,6 +27,9 @@ pub const DEFAULT_PORT: u16 = 8765;
 pub const DEFAULT_CYCLE_INTERVAL_MS: u64 = 300_000; // production's 5-minute scan cadence
 pub const APP_DIR_NAME: &str = "Market Edge";
 pub const DB_FILE: &str = "market_edge_paper.sqlite3";
+/// Shadow-learning research database (execution-service `shadow/store.py`):
+/// its own file next to the paper ledger, never mixed with it.
+pub const SHADOW_DB_FILE: &str = "market_edge_shadow_research.sqlite3";
 pub const LEGACY_IDENTIFIER_DIR: &str = "com.marketedge.desktop"; // desktop MVP (0.1.0 dev builds) data dir
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -313,6 +316,7 @@ pub struct AppConfig {
     pub layout: Layout,
     pub port: u16,
     pub db_path: PathBuf,
+    pub shadow_db_path: PathBuf,
     pub data_dir: PathBuf,
     pub logs_dir: PathBuf,
     pub backups_dir: PathBuf,
@@ -326,6 +330,7 @@ impl AppConfig {
             layout,
             port: env("MARKET_EDGE_EXEC_PORT").and_then(|p| p.parse().ok()).unwrap_or(DEFAULT_PORT),
             db_path: data_dir.join(DB_FILE),
+            shadow_db_path: data_dir.join(SHADOW_DB_FILE),
             logs_dir: data_dir.join("logs"),
             backups_dir: data_dir.join("backups"),
             cycle_interval_ms: env("MARKET_EDGE_CYCLE_INTERVAL_MS").and_then(|v| v.parse().ok()).unwrap_or(DEFAULT_CYCLE_INTERVAL_MS),
