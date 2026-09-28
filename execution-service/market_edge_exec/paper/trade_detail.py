@@ -177,21 +177,46 @@ def decision_context(ledger: PaperLedger, trade: dict) -> dict:
     }
 
 
-def hindsight_view(ledger: PaperLedger, trade: dict) -> dict:
+SHADOW_HINDSIGHT_EXTRA = ("current_policy_outcome_r", "strategy_efficiency", "classification", "classification_status",
+                          "best_achievable_r", "executable_within_stop_r")
+
+
+def shadow_view(shadow_link: Optional[dict]) -> dict:
+    """Link to the shadow-learning observation of this trade (joined by the
+    stable signal_id). Ids and resolution progress only; the post-outcome
+    labels are exposed solely through `hindsight`, never here."""
+    if not shadow_link:
+        return {"linked": False, "reason": "NO_SHADOW_OBSERVATION_FOR_THIS_SIGNAL"}
+    return {"linked": True, **{k: v for k, v in shadow_link.items() if k != "post_outcome"},
+            "post_outcome_available": shadow_link.get("post_outcome") is not None}
+
+
+def hindsight_view(ledger: PaperLedger, trade: dict, shadow_link: Optional[dict] = None) -> dict:
     """Separate from `decision`. Unavailable until the trade is CLOSED and a
-    resolved post-outcome label exists for it."""
+    resolved post-outcome label exists for it: either one recorded for the
+    trade itself, or the final (72h) post-outcome record of its linked shadow
+    observation -- which the shadow store only writes after that window has
+    closed."""
     base = {"label": HINDSIGHT_LABEL, "post_outcome": True, "known_at_decision_time": False}
     if trade["status"] != "CLOSED":
         return {**base, "available": False, "reason": "OUTCOME_NOT_RESOLVED"}
     record = ledger.hindsight(trade["trade_id"])
-    if not record:
-        return {**base, "available": False, "reason": "NO_RESOLVED_RESEARCH_LABEL"}
-    labels = record["labels"]
-    return {**base, "available": True, "reason": None, "resolved_at_ms": record["resolved_at_ms"], "source": record["source"],
-            "levels": {k: labels.get(k) for k in HINDSIGHT_FIELDS}}
+    if record:
+        labels = record["labels"]
+        return {**base, "available": True, "reason": None, "resolved_at_ms": record["resolved_at_ms"], "source": record["source"],
+                "levels": {k: labels.get(k) for k in HINDSIGHT_FIELDS}}
+    post = (shadow_link or {}).get("post_outcome")
+    if post:
+        labels = post["labels"]
+        return {**base, "available": True, "reason": None, "resolved_at_ms": post["resolved_at_ms"],
+                "source": f"SHADOW_OBSERVATION:{shadow_link['observation_id']}",
+                "levels": {k: labels.get(k) for k in HINDSIGHT_FIELDS},
+                "diagnostics": {k: labels.get(k) for k in SHADOW_HINDSIGHT_EXTRA}}
+    return {**base, "available": False, "reason": "NO_RESOLVED_RESEARCH_LABEL"}
 
 
-def build_trade_detail(ledger: PaperLedger, trade: dict, now_ms: int, max_age_s: float) -> dict:
+def build_trade_detail(ledger: PaperLedger, trade: dict, now_ms: int, max_age_s: float,
+                       shadow_link: Optional[dict] = None) -> dict:
     return {
         "trade_id": trade["trade_id"], "status": trade["status"], "is_open": trade["status"] != "CLOSED",
         "opened_at_ms": trade["opened_at_ms"], "closed_at_ms": trade.get("closed_at_ms"), "exit_reason": trade.get("exit_reason"),
@@ -201,6 +226,7 @@ def build_trade_detail(ledger: PaperLedger, trade: dict, now_ms: int, max_age_s:
         "markers": chart_markers(trade),
         "exits": trade.get("exits") or [],
         "realized_pnl": trade["realized_pnl"], "fees": trade["fees"], "net_pnl": trade["realized_pnl"] - trade["fees"],
-        "hindsight": hindsight_view(ledger, trade),
+        "shadow": shadow_view(shadow_link),
+        "hindsight": hindsight_view(ledger, trade, shadow_link),
         "generated_at_ms": now_ms,
     }

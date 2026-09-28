@@ -27,8 +27,10 @@ export function Dashboard({ health, onOpen }: { health: Health | null; onOpen?: 
         <Stat label="Realized PnL" value={usd(a?.realized_pnl, { sign: true })} tone={tone(a?.realized_pnl)} sub={a ? <>fees {usd(a.fees)}</> : DASH} />
         <Stat label="Unrealized PnL" value={usd(a?.unrealized_pnl, { sign: true })} tone={tone(a?.unrealized_pnl)} sub="live monitor price (~10s)" />
         <Stat label="Max drawdown" value={pct(perf.data?.max_drawdown_pct)} tone={perf.data && perf.data.max_drawdown_pct > 0 ? 'neg' : ''} sub={a ? <>current {pct(a.drawdown_pct)}</> : DASH} />
-        <Stat label="Exposure" value={pct(a?.exposure_pct)} sub={a ? <>{usd(a.open_notional)} notional</> : DASH} />
-        <Stat label="Leverage" value={lev(a?.effective_leverage ?? null)} sub="open notional / equity" />
+        {/* Open notional / equity. This is a gross exposure multiple, not the
+            leverage any position uses (that is shown per position). */}
+        <Stat label="Gross exposure" value={lev(a?.gross_exposure_multiple ?? a?.effective_leverage ?? null)}
+          sub={a ? <>{pct(a.exposure_pct)} of equity · {usd(a.open_notional)} notional</> : DASH} />
         <Stat label="Open positions" value={a?.open_positions ?? DASH} />
         <Stat label="Execution mode" value={<span className="mode-inline">{health?.mode ?? 'PAPER'}</span>} sub="LIVE disabled" />
       </div>

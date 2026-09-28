@@ -144,7 +144,7 @@ export function TradeDetailView({ tradeId, onBack, pollMs = 2000, candlePollMs =
             <dt>Quant score</dt><dd>{num(dec.quant_score, 1)} <span className="muted small">rank {dec.rank ?? DASH}</span></dd>
             <dt>Model score</dt><dd>{dec.ml_score === null ? 'n/a' : num(dec.ml_score, 3)} <span className="muted small">combined {num(dec.combined_score, 1)}</span></dd>
             <dt>scan_id</dt><dd className="mono small">{dec.scan_id ?? DASH}</dd>
-            <dt>observation_id</dt><dd className="mono small">{dec.observation_id ?? 'not shadow-linked'}</dd>
+            <dt>Shadow observation</dt><dd className="mono small">{d.shadow?.linked ? d.shadow.observation_id : dec.observation_id ?? 'not shadow-linked'}</dd>
             <dt>Model version</dt><dd className="mono small">{dec.model_version ?? DASH}{dec.model_status ? ` (${dec.model_status})` : ''}</dd>
             <dt>Feature version</dt><dd className="mono small">{dec.feature_version ?? DASH}</dd>
             <dt>Price provenance</dt><dd>{dec.market_price_source ?? DASH} <span className="muted small">{ts(dec.market_price_timestamp)} · {dec.market_price_age_ms === null ? DASH : `${num(dec.market_price_age_ms / 1000, 1)}s old at entry`}</span></dd>
@@ -170,12 +170,27 @@ export function TradeDetailView({ tradeId, onBack, pollMs = 2000, candlePollMs =
         </Panel>
       </div>
 
+      <Panel title="Shadow learning link (research only)">
+        {d.shadow?.linked ? (
+          <dl className="kv">
+            <dt>Observation ID</dt><dd className="mono small">{d.shadow.observation_id}</dd>
+            <dt>Shadow scan</dt><dd className="mono small">{d.shadow.scan_id}</dd>
+            <dt>Resolution</dt><dd>{d.shadow.resolution_status ?? DASH}{d.shadow.next_due_ts ? <span className="muted small"> · next window closes {ts(d.shadow.next_due_ts)}</span> : null}</dd>
+            <dt>Resolved horizons</dt><dd>{d.shadow.resolved_horizons?.length ? d.shadow.resolved_horizons.join(' · ') : 'none yet'}</dd>
+            {d.shadow.unresolvable_horizons?.length ? <><dt>Unresolved (data)</dt><dd>{d.shadow.unresolvable_horizons.join(' · ')}</dd></> : null}
+            <dt>Pending horizons</dt><dd>{d.shadow.pending_horizons?.length ? d.shadow.pending_horizons.join(' · ') : 'none'}</dd>
+          </dl>
+        ) : <div className="muted">Not linked to a shadow observation ({d.shadow?.reason ?? 'shadow data unavailable'}).</div>}
+      </Panel>
+
       {showHindsight && hs.available && hs.levels && (
         <Panel title="Research overlay — POST-OUTCOME / HINDSIGHT" className="panel-hindsight">
           <p className="muted small">{hs.label}. These are not decision-time values.</p>
           <dl className="kv">
             {Object.entries(hs.levels).map(([k, v]) => <Fragment key={k}><dt>{HINDSIGHT_LABELS[k] ?? k}</dt><dd>{price(v)}</dd></Fragment>)}
+            {hs.diagnostics && Object.entries(hs.diagnostics).map(([k, v]) => <Fragment key={k}><dt>{k.replace(/_/g, ' ')}</dt><dd>{typeof v === 'number' ? num(v, 3) : v ?? DASH}</dd></Fragment>)}
           </dl>
+          {hs.diagnostics && <p className="muted small">Missed-opportunity classification is diagnostic and unvalidated.</p>}
         </Panel>
       )}
     </div>
