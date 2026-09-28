@@ -300,4 +300,23 @@ expected in this phase.
 
 ## Amendments
 
-(none)
+### A1 — 2026-09-28, before any real-data OOS run: placebo calibration
+
+Reason: a dry run of the full pipeline on synthetic random-walk data (no
+possible signal) produced single-arm deltas of ±0.05–0.09R with bootstrap
+win % anywhere from 1% to 96%. Bootstrap win % therefore overstates evidence
+for a feature family on this sample size, and a family-level null is needed.
+
+Added (stricter only; nothing above is relaxed):
+
+- For each of the five single-family arms, K = 19 placebo runs in which that
+  family's feature block is randomly permuted across candidate rows (fixed
+  seeds 1..19), breaking any link to outcomes while keeping the marginal
+  distribution. Same frozen models, folds and pairing.
+- Placebo p = (1 + #placebo deltas ≥ real delta) / 20, per model.
+- **RETAIN additionally requires placebo p ≤ 0.05 for the GBM regression
+  model.** PROMISING additionally requires placebo p ≤ 0.20. Families that
+  pass the original rule but fail the placebo check are downgraded one level
+  and reported as such.
+- Placebo runs are null calibration, not selection trials; they are counted
+  and reported separately (5 × 19 × 2 = 190 placebo model fits).
