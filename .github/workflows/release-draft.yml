@@ -1,0 +1,75 @@
+name: Release — draft (macOS Apple Silicon)
+
+# Creates a DRAFT GitHub Release (visible only to repository collaborators)
+# from installers that CI already built and clean-machine-tested on main.
+# It never rebuilds, never signs, never publishes. The draft is published
+# manually once the signing decision is made.
+on:
+  workflow_dispatch:
+    inputs:
+      desktop_run_id:
+        description: Desktop app workflow run on main whose macOS artifacts to release
+        required: true
+      tag:
+        description: Release tag
+        default: v0.1.0
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  draft:
+    runs-on: macos-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RUN_ID: ${{ inputs.desktop_run_id }}
+      TAG: ${{ inputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: The source run must be a green desktop build of this exact main commit
+        run: |
+          set -euo pipefail
+          run=$(gh api "repos/${{ github.repository }}/actions/runs/$RUN_ID")
+          sha=$(jq -r .head_sha <<<"$run"); branch=$(jq -r .head_branch <<<"$run"); name=$(jq -r .name <<<"$run")
+          echo "source run: $name on $branch @ $sha; this commit: $GITHUB_SHA"
+          [ "$sha" = "$GITHUB_SHA" ] || { echo "REFUSED: artifacts were built from $sha, not $GITHUB_SHA"; exit 1; }
+          [ "$branch" = main ] || { echo "REFUSED: source run is not on main"; exit 1; }
+          jobs=$(gh api "repos/${{ github.repository }}/actions/runs/$RUN_ID/jobs?per_page=50")
+          for job in "Package macos-arm64" "Clean machine macos-arm64 (no Python, no Node, no repo)"; do
+            c=$(jq -r --arg n "$job" '.jobs[] | select(.name==$n) | .conclusion' <<<"$jobs")
+            echo "$job: $c"; [ "$c" = success ] || { echo "REFUSED: $job is not green"; exit 1; }
+          done
+          if gh release view "$TAG" >/dev/null 2>&1; then echo "REFUSED: release $TAG already exists"; exit 1; fi
+      - uses: actions/download-artifact@v4
+        with:
+          name: installer-macos-arm64
+          path: pkg
+          run-id: ${{ inputs.desktop_run_id }}
+          github-token: ${{ github.token }}
+      - name: Record the real signature and Gatekeeper assessment; checksums
+        run: |
+          set -euo pipefail
+          cd pkg && ls -la
+          DMG=$(ls *.dmg | head -1)
+          V=${TAG#v}
+          # space-free names so the published asset names match SHA256SUMS.txt
+          mkdir -p out && cp "$DMG" "out/Market-Edge_${V}_aarch64.dmg" && cp "Market Edge.app.tar.gz" "out/Market-Edge_${V}_aarch64.app.tar.gz"
+          tar -xzf "Market Edge.app.tar.gz"
+          {
+            echo "Market Edge release signature record ($TAG, commit $GITHUB_SHA, source run $RUN_ID)"
+            echo; echo "== codesign -dv (app)"; codesign -dv --verbose=2 "Market Edge.app" 2>&1 || true
+            echo; echo "== spctl --assess --type execute (app)"; spctl --assess --type execute -vv "Market Edge.app" 2>&1 || true
+            echo; echo "== spctl --assess --type open (dmg)"; spctl --assess --type open --context context:primary-signature -vv "out/Market-Edge_${V}_aarch64.dmg" 2>&1 || true
+            echo; echo "== stapler validate (dmg)"; xcrun stapler validate "out/Market-Edge_${V}_aarch64.dmg" 2>&1 || true
+          } | tee out/SIGNATURE.txt
+          cd out && shasum -a 256 * | grep -v SIGNATURE.txt > SHA256SUMS.txt && cat SHA256SUMS.txt
+      - name: Create the DRAFT release (not published)
+        run: |
+          set -euo pipefail
+          cd pkg/out
+          gh release create "$TAG" --draft --target "$GITHUB_SHA" \
+            --title "Market Edge ${TAG#v} — macOS Apple Silicon (unsigned preview, paper only)" \
+            --notes-file "$GITHUB_WORKSPACE/desktop/release/RELEASE_NOTES_0.1.0.md" \
+            ./*.dmg ./*.app.tar.gz SHA256SUMS.txt SIGNATURE.txt
+          gh release view "$TAG" --json url,isDraft,assets --jq '{url,isDraft,assets:[.assets[].name]}'
