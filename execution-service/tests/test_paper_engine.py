@@ -115,10 +115,14 @@ def test_exposure_cap_counts_open_trades_across_instruments(db):
     for sid, asset in [("a", "ETH"), ("b", "BTC"), ("c", "SOL"), ("d", "AVAX")]:
         result = open_trade(app, sid, asset=asset)
         assert result.accepted, result.reason
-        assert result.trade["notional"] == pytest.approx(500)
+        # Each slot is ~5% of equity at the moment it opens; equity itself
+        # drifts down slightly trade to trade from entry fees, so this is a
+        # tolerance, not an exact 500.
+        assert result.trade["notional"] == pytest.approx(500, rel=0.01)
     fifth = open_trade(app, "e", asset="LINK")
     assert not fifth.accepted and fifth.reason == "MAX_CONCURRENT_POSITIONS_EXCEEDED"
-    assert app.state.ledger.account_state().open_notional == pytest.approx(2_000)
+    assert app.state.ledger.account_state().open_notional <= 2_000 + 1e-6  # never overshoots the 20% cap
+    assert app.state.ledger.account_state().open_notional == pytest.approx(2_000, rel=0.01)
 
 
 def test_closing_a_position_releases_its_slot_and_exposure_for_a_new_trade(db):
@@ -135,7 +139,7 @@ def test_closing_a_position_releases_its_slot_and_exposure_for_a_new_trade(db):
     closed = app.state.ledger.trade("a")
     assert closed["status"] == "CLOSED" and closed["exit_reason"] == "STOP"
     assert app.state.ledger.account_state().open_positions == 3
-    assert app.state.ledger.account_state().open_notional == pytest.approx(1_500)
+    assert app.state.ledger.account_state().open_notional == pytest.approx(1_500, rel=0.01)
 
     admitted = open_trade(app, "e", asset="LINK")
     assert admitted.accepted, admitted.reason
@@ -180,8 +184,55 @@ def test_simultaneous_signals_cannot_independently_pass_the_exposure_check(db, m
     assert len(rejected) == 1
     assert rejected[0].reason in ("MAX_CONCURRENT_POSITIONS_EXCEEDED", "PORTFOLIO_EXPOSURE_CAP", "POSITION_EXPOSURE_CAP")
     account = app.state.ledger.account_state()
-    assert account.open_notional == pytest.approx(2_000)  # never overshoots the 20% cap
+    assert account.open_notional <= 2_000 + 1e-6  # never overshoots the 20% cap
+    assert account.open_notional == pytest.approx(2_000, rel=0.01)
     assert account.open_positions == 4
+
+
+def test_racing_signals_cannot_both_claim_the_same_aggregate_room(db, monkeypatch):
+    # Same race as above, but with the concurrency limit out of the way so
+    # the only thing standing between the two signals and a 25% book is the
+    # aggregate exposure reservation itself.
+    app = create_app(db_path=db, risk_limits=RiskLimits(max_concurrent_positions=10))
+    for sid, asset in [("a", "ETH"), ("b", "BTC"), ("c", "SOL")]:
+        assert open_trade(app, sid, asset=asset).accepted  # ~$1,500 open; ~$500 of the 20% cap left
+    real_account_state = app.state.ledger.account_state
+
+    def slow_account_state(*args, **kwargs):
+        result = real_account_state(*args, **kwargs)
+        time.sleep(0.05)
+        return result
+
+    monkeypatch.setattr(app.state.ledger, "account_state", slow_account_state)
+    results = {}
+    threads = [threading.Thread(target=lambda s=s, a=a: results.__setitem__(s, open_trade(app, s, asset=a)))
+               for s, a in [("d", "AVAX"), ("e", "LINK"), ("f", "DOGE")]]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    accepted = [r for r in results.values() if r.accepted]
+    assert len(accepted) == 1, [r.reason for r in results.values()]
+    assert all(r.reason == "PORTFOLIO_EXPOSURE_CAP" for r in results.values() if not r.accepted)
+    account = real_account_state()
+    assert account.open_notional <= 2_000 + 1e-6 and account.open_positions == 4
+
+
+def test_price_provenance_is_recorded_through_the_http_api(db):
+    client = TestClient(create_app(db_path=db))
+    now = int(time.time() * 1000)
+    body = client.post("/paper/signal", headers=HEADERS, json={
+        "signal": make_signal("p1"), "instrument": "ETH-PERP", "coin": "ETH", "mark_price": 100.0, "mark_at_ms": now - 5_000,
+        "requested_leverage": 1, "market_price_source": "HYPERLIQUID_ALLMIDS_LIVE"}).json()
+    assert body["accepted"], body
+    assert body["trade"]["market_price_timestamp"] == now - 5_000
+    assert body["trade"]["market_price_source"] == "HYPERLIQUID_ALLMIDS_LIVE"
+    assert 5_000 <= body["trade"]["market_price_age_ms"] < 60_000
+    missing = client.post("/paper/signal", headers=HEADERS, json={
+        "signal": make_signal("p2", asset="BTC"), "instrument": "BTC-PERP", "coin": "BTC", "mark_price": None, "mark_at_ms": None,
+        "requested_leverage": 1, "market_price_source": "HYPERLIQUID_ALLMIDS_LIVE"}).json()
+    assert missing["accepted"] is False and missing["reason"] == "NO_MARKET_PRICE"
 
 
 def test_duplicate_signal_id_rejected(db):

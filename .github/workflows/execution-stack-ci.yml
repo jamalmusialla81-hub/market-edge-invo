@@ -217,6 +217,13 @@ jobs:
           PYTHONPATH: .
         run: python diagnostics/end_to_end_testnet_flow.py | tee e2e_testnet.json
 
+      - name: Hummingbot bridge test suite (fake-API contract tests; previously not run in CI)
+        working-directory: hummingbot-service
+        run: |
+          set -o pipefail
+          python -m pip install --quiet httpx pytest fastapi "uvicorn[standard]"
+          python -m pytest -q | tee bridge_pytest.log
+
       - name: Verify client against the LIVE Hummingbot API schema (fails the job on mismatch)
         if: always()
         working-directory: hummingbot-service
@@ -249,6 +256,7 @@ jobs:
         with:
           name: hummingbot-docker-report
           path: |
+            hummingbot-service/bridge_pytest.log
             hummingbot-service/bridge_health.json
             hummingbot-service/hummingbot_api_health.json
             hummingbot-service/hummingbot_api_openapi.json
