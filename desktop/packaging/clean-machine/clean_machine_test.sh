@@ -194,11 +194,35 @@ screenshot "01-running"
 
 log "waiting up to ${TRADE_WAIT_S}s for a live scan to route a paper trade"
 wait_for 120 '.supervisor.market.online != null'
-check LIVE_MARKET_DATA "$(st .supervisor.market.detail)" test "$(st .supervisor.market.online)" = true
+# #14: Hyperliquid's public API limits request weight per IP, and a CI runner's IP is
+# shared with every other job on it, so an HTTP 429 here is the environment, not a
+# defect. What must hold is that the app HANDLES it: new entries paused (fail closed,
+# no price invented), the probe backing off instead of hammering, and live data
+# confirmed as soon as the limit window rolls over. A non-429 failure still FAILs.
+if [ "$(st .supervisor.market.online)" = true ]; then
+  pass LIVE_MARKET_DATA "$(st .supervisor.market.detail)"
+elif [ "$(st .supervisor.market.rate_limited)" = true ]; then
+  log "market data rate limited at start ($(st .supervisor.market.detail)); verifying degraded mode"
+  wait_for 15 '.status.entries_paused == true'
+  check RATE_LIMIT_FAILS_CLOSED "entries_paused=$(st .status.entries_paused) reason=$(st .status.entries_paused_reason)" test "$(st .status.entries_paused)" = true
+  check RATE_LIMIT_PROBE_BACKS_OFF "consecutive 429 $(st .supervisor.market.consecutive_429), next probe in $(st .supervisor.market.next_probe_in_s)s" test "$(st '.supervisor.market.next_probe_in_s // 0')" -ge 30
+  if wait_for 420 '.supervisor.market.online == true'; then
+    pass LIVE_MARKET_DATA "recovered after rate limit: $(st .supervisor.market.detail)"
+  else
+    # Still limited 7 minutes later: that is the runner's shared IP, and the degraded
+    # mode was verified above. The app must still be up and still failing closed.
+    check LIVE_MARKET_DATA_DEGRADED "still rate limited: $(st .supervisor.market.detail); entries_paused=$(st .status.entries_paused)" \
+      test "$(st .status.entries_paused)" = true -a "$(st .execution_service.state)" = RUNNING
+  fi
+else
+  fail LIVE_MARKET_DATA "$(st .supervisor.market.detail)"
+fi
 # this process's own cycle count, not the trade/position count: on a reinstall those can
 # already be >=1 from state carried over, which would satisfy the trade wait instantly and
 # never actually prove this run's loop scanned anything.
 wait_for "$TRADE_WAIT_S" '(.loop.cycles_seen // 0) >= 1'
+# DEFERRED_RATE_LIMITED is a healthy cycle (discovery deferred on HTTP 429, nothing traded);
+# ERROR is not.
 check LIVE_SCAN_RAN "cycles $(st .loop.cycles_seen), last outcome $(st .loop.last_outcome)" test "$(st .loop.cycles_seen)" -ge 1 -a "$(st .loop.last_outcome)" != ERROR
 
 # a cycle can legitimately come back REJECTED (a market-data rate-limit blip pausing entries, or a

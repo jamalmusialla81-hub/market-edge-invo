@@ -33,6 +33,20 @@ pub const EXEC_WINDOW: Duration = Duration::from_secs(10 * 60);
 pub const MAX_LOOP_RESTARTS: usize = 3;
 pub const LOOP_WINDOW: Duration = Duration::from_secs(30 * 60);
 pub const PROBE_INTERVAL: Duration = Duration::from_secs(30);
+/// Longest the probe waits between attempts while Hyperliquid answers 429
+/// (#14): the probe backs off (30s, 60s, 120s, or the server's Retry-After,
+/// capped here) instead of adding to the per-IP limit. Entries stay paused
+/// the whole time -- a rate limit is never treated as fresh data.
+pub const MAX_RATE_LIMITED_PROBE_INTERVAL: Duration = Duration::from_secs(120);
+
+/// Next probe delay after `consecutive_429` rate-limited probes in a row.
+pub fn rate_limited_probe_interval(consecutive_429: u32, retry_after: Option<Duration>) -> Duration {
+    if consecutive_429 == 0 {
+        return PROBE_INTERVAL;
+    }
+    let exp = PROBE_INTERVAL * 2u32.pow(consecutive_429.saturating_sub(1).min(2));
+    exp.max(retry_after.unwrap_or_default()).min(MAX_RATE_LIMITED_PROBE_INTERVAL)
+}
 pub const DEFAULT_PROBE_URL: &str = "https://api.hyperliquid.xyz/info";
 
 pub const REASON_RECOVERY: &str = "SUPERVISOR_RECOVERY";
@@ -47,6 +61,11 @@ pub struct MarketState {
     pub offline_since_ms: Option<u64>,
     pub last_fresh_at_ms: Option<u64>,
     pub markets: usize,
+    /// true while the last probe(s) got HTTP 429 (temporary degradation,
+    /// distinct from unreachable); entries are paused either way.
+    pub rate_limited: bool,
+    pub consecutive_429: u32,
+    pub next_probe_in_s: u64,
 }
 
 #[derive(Debug, Clone, Default, Serialize)]
@@ -67,6 +86,7 @@ struct Inner {
     loop_restarts: VecDeque<Instant>,
     view: SupervisorView,
     last_probe: Option<Instant>,
+    probe_every: Duration,
 }
 
 pub struct Supervisor {
@@ -101,7 +121,7 @@ impl Supervisor {
             probe_url: Mutex::new(probe_url),
             probe_client: reqwest::blocking::Client::builder().timeout(Duration::from_secs(8)).build().expect("probe client"),
             backoff,
-            inner: Mutex::new(Inner { exec_restarts: VecDeque::new(), loop_restarts: VecDeque::new(), view: SupervisorView::default(), last_probe: None }),
+            inner: Mutex::new(Inner { exec_restarts: VecDeque::new(), loop_restarts: VecDeque::new(), view: SupervisorView::default(), last_probe: None, probe_every: PROBE_INTERVAL }),
             wants_loop: Mutex::new(false),
         })
     }
@@ -201,7 +221,10 @@ impl Supervisor {
         if let Some(crash) = self.services.take_loop_crash() {
             self.on_loop_crash(crash);
         }
-        let due = self.inner.lock().unwrap().last_probe.map(|t| t.elapsed() >= PROBE_INTERVAL).unwrap_or(true);
+        let due = {
+            let inner = self.inner.lock().unwrap();
+            inner.last_probe.map(|t| t.elapsed() >= inner.probe_every).unwrap_or(true)
+        };
         if due {
             self.probe_market();
         }
@@ -337,11 +360,18 @@ impl Supervisor {
         let url = self.probe_url.lock().unwrap().clone();
         let started = Instant::now();
         let result = self.probe_client.post(&url).json(&json!({"type": "allMids"})).send();
-        let (ok, markets, detail) = match result {
+        let mut retry_after: Option<Duration> = None;
+        let mut limited = false;
+        let (ok, markets, mut detail) = match result {
             Ok(r) if r.status().is_success() => {
                 let mids: Value = r.json().unwrap_or(Value::Null);
                 let n = mids.as_object().map(|m| m.values().filter(|v| v.as_str().and_then(|s| s.parse::<f64>().ok()).map(|p| p > 0.0).unwrap_or(false)).count()).unwrap_or(0);
                 (n > 0, n, format!("Hyperliquid allMids: {n} markets, {} ms", started.elapsed().as_millis()))
+            }
+            Ok(r) if r.status().as_u16() == 429 => {
+                limited = true;
+                retry_after = r.headers().get("retry-after").and_then(|v| v.to_str().ok()).and_then(|v| v.trim().parse::<u64>().ok()).map(Duration::from_secs);
+                (false, 0, "market data HTTP 429 (rate limited)".to_string())
             }
             Ok(r) => (false, 0, format!("market data HTTP {}", r.status().as_u16())),
             Err(e) => (false, 0, format!("market data unreachable: {e}")),
@@ -350,7 +380,16 @@ impl Supervisor {
         let was = {
             let mut inner = self.inner.lock().unwrap();
             inner.last_probe = Some(Instant::now());
+            let streak = if limited { inner.view.market.consecutive_429 + 1 } else { 0 };
+            inner.probe_every = rate_limited_probe_interval(streak, retry_after);
+            if limited {
+                detail = format!("{detail}; next probe in {}s", inner.probe_every.as_secs());
+            }
+            let next = inner.probe_every.as_secs();
             let m = &mut inner.view.market;
+            m.rate_limited = limited;
+            m.consecutive_429 = streak;
+            m.next_probe_in_s = next;
             let was = m.online;
             m.online = Some(ok);
             m.detail = detail.clone();
@@ -429,5 +468,21 @@ impl Supervisor {
         if std::fs::write(&tmp, serde_json::to_vec_pretty(&snapshot).unwrap_or_default()).is_ok() {
             let _ = std::fs::rename(tmp, path);
         }
+    }
+}
+
+#[cfg(test)]
+mod rate_limit_tests {
+    use super::*;
+
+    #[test]
+    fn probe_backs_off_on_429_and_resets() {
+        assert_eq!(rate_limited_probe_interval(0, None), PROBE_INTERVAL);
+        assert_eq!(rate_limited_probe_interval(1, None), Duration::from_secs(30));
+        assert_eq!(rate_limited_probe_interval(2, None), Duration::from_secs(60));
+        assert_eq!(rate_limited_probe_interval(3, None), Duration::from_secs(120));
+        assert_eq!(rate_limited_probe_interval(9, None), MAX_RATE_LIMITED_PROBE_INTERVAL);
+        assert_eq!(rate_limited_probe_interval(1, Some(Duration::from_secs(90))), Duration::from_secs(90), "Retry-After honoured");
+        assert_eq!(rate_limited_probe_interval(1, Some(Duration::from_secs(900))), MAX_RATE_LIMITED_PROBE_INTERVAL, "capped");
     }
 }

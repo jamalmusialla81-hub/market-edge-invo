@@ -306,8 +306,39 @@ def create_app(db_path: str = "market_edge_exec.sqlite3", hummingbot_mode: str =
         offline = [i for i in payload.get("offline_instruments") or [] if isinstance(i, str)]
         if offline:
             paper.set_monitor_offline(offline, str(payload.get("error") or "no live price from the monitor's market data source"))
+        if isinstance(payload.get("rate_limit"), dict):
+            _store_rate_limit({"source": "position-monitor", **payload.pop("rate_limit")})
         app.state.monitor = {**payload, "received_at_ms": int(time.time() * 1000)}
         return {"recorded": True, "flagged_offline": len(offline)}
+
+    # ---- rate-limit diagnostics (#14; the data contract for SIDE 1) -------
+    # Read-only counters. The Node forward loop / monitor report the shared
+    # Hyperliquid request budget; the chart fetcher here reports its own.
+    # Nothing here changes trading behaviour.
+    app.state.rate_limit_node = None
+
+    def _store_rate_limit(snapshot: dict) -> None:
+        app.state.rate_limit_node = {**snapshot, "received_at_ms": int(time.time() * 1000)}
+
+    def _rate_limit_view() -> dict:
+        fetcher = app.state.candle_fetcher
+        chart = fetcher.health() if hasattr(fetcher, "health") else None
+        node = app.state.rate_limit_node
+        age_s = (time.time() * 1000 - node["received_at_ms"]) / 1000 if node else None
+        return {"schema": "rate-limit-diagnostics/v1", "node_budget": node, "node_budget_age_s": age_s, "chart_candles": chart,
+                "priorities": ["P0_POSITION_MONITOR", "P1_RECONCILIATION", "P2_DISCOVERY", "P3_SHADOW_CAPTURE",
+                               "P4_SHADOW_RESOLUTION", "P5_CHART_HISTORY"]}
+
+    @app.post("/system/rate-limit", dependencies=[Depends(require_api_key)])
+    def report_rate_limit(payload: dict):
+        if not isinstance(payload, dict) or payload.get("schema") != "rate-limit-health/v1":
+            raise HTTPException(status_code=422, detail="expected a rate-limit-health/v1 snapshot")
+        _store_rate_limit(payload)
+        return {"recorded": True}
+
+    @app.get("/system/rate-limit", dependencies=[Depends(require_api_key)])
+    def rate_limit_view():
+        return _rate_limit_view()
 
     def _monitor_summary(now_ms: int) -> dict:
         max_age = paper.monitor_max_price_age_s()
@@ -528,6 +559,7 @@ def create_app(db_path: str = "market_edge_exec.sqlite3", hummingbot_mode: str =
             "last_reconcile": control.last_reconcile(), "latest_signal": signals[0] if signals else None,
             "open_positions": len(ledger.trades("OPEN")), "segments": ledger.runtime_segments()[-5:],
             "position_monitor": _monitor_summary(int(time.time() * 1000)),
+            "rate_limit": _rate_limit_view(),
             "control_audit": control.audit_log(20),
             "version": __version__, "build": build_info(), "migration": migration.to_dict(),
         }

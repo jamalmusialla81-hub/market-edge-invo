@@ -61,7 +61,9 @@ jobs:
           pip install $PY_DEPS
           python -m pytest -q | tee ../pytest.log
       - name: forward-loop tests
-        run: node --test signal-bridge/forward_loop.test.mjs signal-bridge/shadow_capture.test.mjs signal-bridge/position_monitor.test.mjs signal-bridge/research_universe.test.mjs | tee node-test.log
+        run: node --test signal-bridge/forward_loop.test.mjs signal-bridge/shadow_capture.test.mjs signal-bridge/position_monitor.test.mjs signal-bridge/research_universe.test.mjs signal-bridge/rate_limit.test.mjs | tee node-test.log
+      - name: Hyperliquid rate-limit evidence (headers from a runner IP; never fails the job)
+        run: node signal-bridge/probe_rate_limit.mjs | tee rate-limit-probe.log || true
       - name: repo test suite (production engines, unchanged)
         run: npm test 2>&1 | tail -40 | tee repo-npm-test.log
       - name: frontend install, typecheck, tests, build
