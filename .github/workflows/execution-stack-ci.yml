@@ -27,6 +27,15 @@ on:
       - 'hummingbot-service/**'
       - 'signal-bridge/**'
       - '.github/workflows/execution-stack-ci.yml'
+  # Gate pull requests into main too, whatever the head branch is called;
+  # previously only claude/** pushes ran this suite.
+  pull_request:
+    branches: [main]
+    paths:
+      - 'execution-service/**'
+      - 'hummingbot-service/**'
+      - 'signal-bridge/**'
+      - '.github/workflows/execution-stack-ci.yml'
 
 permissions:
   contents: read
