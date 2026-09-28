@@ -58,6 +58,15 @@ CREATE TABLE IF NOT EXISTS paper_signals (
     reason TEXT,
     payload TEXT NOT NULL
 );
+-- Post-outcome research labels (e.g. Universal Shadow Learning's optimal
+-- executable entry/TP/exit). Kept in their own table so hindsight can never
+-- be written into, or read back as, a trade's decision-time record.
+CREATE TABLE IF NOT EXISTS paper_hindsight (
+    trade_id TEXT PRIMARY KEY,
+    resolved_at_ms INTEGER NOT NULL,
+    source TEXT NOT NULL,
+    payload TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS paper_runtime (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     segment TEXT NOT NULL,
@@ -163,30 +172,47 @@ class PaperLedger:
             conn.commit()
 
     def apply_exit(self, trade: dict, kind: str, quantity: float, fill_price: float, level: float,
-                   pnl: float, fee: float, slippage_cost: float, at_ms: int) -> bool:
+                   pnl: float, fee: float, slippage_cost: float, at_ms: int, extra: Optional[dict] = None) -> bool:
         """Returns False (and changes nothing) if this exit kind was already
-        recorded for this trade -- a duplicate callback cannot double-close."""
+        recorded for this trade -- a duplicate callback cannot double-close.
+        `extra` (e.g. which trigger path observed the price) is recorded on
+        the exit, never used to change it."""
+        record = {"quantity": quantity, "fill_price": fill_price, "level": level, "pnl": pnl, "fee": fee, **(extra or {})}
         with closing(self._connect()) as conn:
             try:
                 conn.execute("INSERT INTO paper_trade_events (trade_id, kind, at_ms, payload) VALUES (?, ?, ?, ?)",
-                             (trade["trade_id"], kind, at_ms, json.dumps({"quantity": quantity, "fill_price": fill_price,
-                                                                         "level": level, "pnl": pnl, "fee": fee})))
+                             (trade["trade_id"], kind, at_ms, json.dumps(record)))
             except sqlite3.IntegrityError:
                 return False
             trade["remaining_qty"] = max(0.0, trade["remaining_qty"] - quantity)
             trade["realized_pnl"] += pnl
             trade["fees"] += fee
             trade["slippage_cost"] += slippage_cost
-            trade["exits"].append({"kind": kind, "quantity": quantity, "fill_price": fill_price, "level": level, "pnl": pnl, "at_ms": at_ms})
+            trade["exits"].append({"kind": kind, "quantity": quantity, "fill_price": fill_price, "level": level, "pnl": pnl,
+                                   "at_ms": at_ms, **(extra or {})})
+            # Milestone state is persisted with the trade so a restart
+            # resumes exactly where it left off (the UNIQUE (trade_id, kind)
+            # event row above is what makes each milestone fire only once).
             if kind == "TP1":
                 trade["tp1_hit"] = True
                 trade["status"] = "PARTIAL"
+                trade["tp1_fill_at_ms"], trade["tp1_fill_price"] = at_ms, fill_price
+                trade["stop_status"] = "BREAKEVEN"
+            elif kind == "TP2":
+                trade["tp2_status"] = "HIT"
+                trade["tp2_fill_at_ms"], trade["tp2_fill_price"] = at_ms, fill_price
+            elif kind in ("STOP", "BREAKEVEN_STOP"):
+                trade["stop_status"] = "HIT"
             if trade["remaining_qty"] <= 1e-12:
                 trade["remaining_qty"] = 0.0
                 trade["status"] = "CLOSED"
                 trade["closed_at_ms"] = at_ms
                 trade["exit_reason"] = kind
                 trade["unrealized_pnl"] = 0.0
+                if trade.get("stop_status") in ("ACTIVE", "BREAKEVEN", None):
+                    trade["stop_status"] = "CANCELLED"
+                if trade.get("tp2_status") in ("PENDING", None) and trade.get("tp2") is not None:
+                    trade["tp2_status"] = "CANCELLED"
             self._save_trade(conn, trade)
             conn.commit()
             return True
@@ -198,6 +224,32 @@ class PaperLedger:
         with closing(self._connect()) as conn:
             self._save_trade(conn, trade)
             conn.commit()
+
+    def save(self, trade: dict) -> None:
+        """Persist a trade's non-exit state (live price, excursions, monitor status)."""
+        with closing(self._connect()) as conn:
+            self._save_trade(conn, trade)
+            conn.commit()
+
+    def signal_payload(self, signal_id: str) -> Optional[dict]:
+        """The payload the forward loop sent when this signal was EXECUTED:
+        the original signal geometry plus display-only scan context (meta)."""
+        with closing(self._connect()) as conn:
+            row = conn.execute("SELECT payload FROM paper_signals WHERE signal_id = ? AND outcome = 'EXECUTED' ORDER BY id LIMIT 1",
+                               (signal_id,)).fetchone()
+        return json.loads(row["payload"]) if row else None
+
+    def record_hindsight(self, trade_id: str, resolved_at_ms: int, source: str, labels: dict) -> None:
+        with closing(self._connect()) as conn:
+            conn.execute("INSERT INTO paper_hindsight (trade_id, resolved_at_ms, source, payload) VALUES (?, ?, ?, ?) "
+                         "ON CONFLICT(trade_id) DO UPDATE SET resolved_at_ms=excluded.resolved_at_ms, source=excluded.source, payload=excluded.payload",
+                         (trade_id, resolved_at_ms, source, json.dumps(labels)))
+            conn.commit()
+
+    def hindsight(self, trade_id: str) -> Optional[dict]:
+        with closing(self._connect()) as conn:
+            row = conn.execute("SELECT resolved_at_ms, source, payload FROM paper_hindsight WHERE trade_id = ?", (trade_id,)).fetchone()
+        return {"resolved_at_ms": row["resolved_at_ms"], "source": row["source"], "labels": json.loads(row["payload"])} if row else None
 
     def record_equity(self, at_ms: Optional[int] = None) -> dict:
         t = self.totals()

@@ -41,6 +41,11 @@ export function signalMeta(scan) {
     rr1: pick('rr1'), rr2: pick('rr2'), strategy: pick('strategy'), entry_status: pick('entry_status'),
     strict_verdict: pick('strict_verdict'), current_price: pick('current_price'), source_count: pick('source_count'),
     regime: pick('regime'), scan_id: scan.scanId,
+    // Provenance shown on Trade Detail. Read from whatever the scan already
+    // returns; null when production does not report it (never inferred).
+    model_version: best.ml?.model_id ?? null, model_status: best.ml?.status ?? null,
+    feature_version: pick('feature_version'), observation_id: pick('observation_id'),
+    scan_snapshot_id: pick('scan_snapshot_id'),
   };
 }
 

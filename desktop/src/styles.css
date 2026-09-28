@@ -203,6 +203,38 @@ input:disabled { opacity: 0.5; }
 .banner-info { background: rgba(90,160,255,0.10); color: #b9d4ff; border-left: 4px solid #5aa0ff; }
 .btn-small { padding: 2px 8px; font-size: 11px; margin-left: 4px; }
 .btn-small.active { border-color: #5aa0ff; color: #b9d4ff; }
-tr.clickable { cursor: pointer; }
-tr.clickable:hover td { background: rgba(255,255,255,0.03); }
 .panel-research { border-color: rgba(245,176,65,0.45); }
+
+/* clickable rows -> Trade Detail */
+tr.clickable { cursor: pointer; }
+tr.clickable:hover td { background: #1d2430; }
+tr.clickable:focus-visible { outline: 2px solid var(--info); outline-offset: -2px; }
+
+/* trade detail */
+.detail-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.detail-head h1 { margin: 0; font-size: 18px; letter-spacing: 0.04em; }
+.chart-foot { margin-top: 6px; }
+.hindsight-toggle { display: inline-flex; align-items: center; gap: 5px; margin-left: 12px; font-size: 11px; color: #c792ea; cursor: pointer; letter-spacing: 0.04em; }
+.hindsight-toggle.disabled { color: var(--muted); cursor: not-allowed; }
+.hindsight-note { margin-top: 8px; padding: 6px 10px; border-left: 3px solid #c792ea; background: rgba(199,146,234,0.08); color: #e2c8f5; font-size: 12px; }
+.panel-hindsight { border-color: rgba(199,146,234,0.5); }
+.candle-chart .candle line { stroke-width: 1; }
+.candle-chart .candle.up line, .candle-chart .candle.up rect { stroke: var(--pos); fill: var(--pos); }
+.candle-chart .candle.down line, .candle-chart .candle.down rect { stroke: var(--neg); fill: var(--neg); }
+.candle-chart .candle.forming rect { fill-opacity: 0.35; }
+.candle-chart .level { stroke-width: 1.2; }
+.candle-chart .lvl-entry { stroke: var(--info); fill: var(--info); }
+.candle-chart .lvl-stop { stroke: var(--neg); fill: var(--neg); stroke-dasharray: 6 4; }
+.candle-chart .lvl-tp { stroke: var(--pos); fill: var(--pos); stroke-dasharray: 6 4; }
+.candle-chart .lvl-tp2 { stroke: #1f9e61; fill: #4fdc97; stroke-dasharray: 2 4; }
+.candle-chart .lvl-be { stroke: var(--warn); fill: var(--warn); stroke-dasharray: 3 3; }
+.candle-chart .lvl-current { stroke: var(--text); fill: var(--text); stroke-dasharray: 1 3; }
+.candle-chart .lvl-hindsight { stroke: #c792ea; fill: #c792ea; stroke-dasharray: 8 3 2 3; }
+.candle-chart text.level-label { stroke: none; font-size: 10.5px; font-family: var(--mono); }
+.candle-chart .marker path { stroke: var(--bg); stroke-width: 1; }
+.candle-chart .marker-label { font-size: 10px; font-weight: 700; fill: var(--text); font-family: var(--mono); }
+.candle-chart .mk-entry path { fill: var(--info); }
+.candle-chart .mk-tp path { fill: var(--pos); }
+.candle-chart .mk-stop path { fill: var(--neg); }
+.candle-chart .mk-other path { fill: var(--warn); }
+table.exits { margin-top: 10px; }

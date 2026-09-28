@@ -2,10 +2,11 @@ import { api, Health } from '../api';
 import { LineChart } from '../components/Charts';
 import { Badge, Dot, ErrorBanner, Panel, Stat, usePoll } from '../components/ui';
 import { ago, DASH, lev, pct, price, ts, tone, usd } from '../format';
+import { openRow } from './Positions';
 
 const isoMs = (s: string | null | undefined) => (s ? Date.parse(s) : null);
 
-export function Dashboard({ health }: { health: Health | null }) {
+export function Dashboard({ health, onOpen }: { health: Health | null; onOpen?: (id: string) => void }) {
   const account = usePoll(api.account, 3000);
   const positions = usePoll(api.positions, 5000);
   const perf = usePoll(api.performance, 15000);
@@ -24,7 +25,7 @@ export function Dashboard({ health }: { health: Health | null }) {
           sub={a ? pct((a.total_pnl / a.starting_equity) * 100, 2, { sign: true }) : DASH} />
         <Stat big label="Daily PnL" value={usd(a?.daily_pnl, { sign: true })} tone={tone(a?.daily_pnl)} sub="since 00:00 UTC, net of fees" />
         <Stat label="Realized PnL" value={usd(a?.realized_pnl, { sign: true })} tone={tone(a?.realized_pnl)} sub={a ? <>fees {usd(a.fees)}</> : DASH} />
-        <Stat label="Unrealized PnL" value={usd(a?.unrealized_pnl, { sign: true })} tone={tone(a?.unrealized_pnl)} sub="marked at last 5m close" />
+        <Stat label="Unrealized PnL" value={usd(a?.unrealized_pnl, { sign: true })} tone={tone(a?.unrealized_pnl)} sub="live monitor price (~10s)" />
         <Stat label="Max drawdown" value={pct(perf.data?.max_drawdown_pct)} tone={perf.data && perf.data.max_drawdown_pct > 0 ? 'neg' : ''} sub={a ? <>current {pct(a.drawdown_pct)}</> : DASH} />
         <Stat label="Exposure" value={pct(a?.exposure_pct)} sub={a ? <>{usd(a.open_notional)} notional</> : DASH} />
         <Stat label="Leverage" value={lev(a?.effective_leverage ?? null)} sub="open notional / equity" />
@@ -65,7 +66,7 @@ export function Dashboard({ health }: { health: Health | null }) {
           {positions.data?.positions.length ? (
             <table className="compact"><tbody>
               {positions.data.positions.map((p) => (
-                <tr key={p.signal_id}>
+                <tr key={p.signal_id} {...openRow(p.trade_id ?? p.signal_id, onOpen)}>
                   <td><b>{p.asset}</b></td>
                   <td className={p.direction === 'long' ? 'pos' : 'neg'}>{p.direction.toUpperCase()}</td>
                   <td>{lev(p.leverage)}</td>

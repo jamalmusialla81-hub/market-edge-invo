@@ -44,6 +44,16 @@ export async function fetchMid(coin, { fetchImpl = fetch, now = Date.now, retrie
   throw new Error(`allMids failed after ${retries + 1} attempts: ${lastError?.message}`);
 }
 
+// One allMids read serves every open position (batched: a single request
+// regardless of how many positions are open). No retry loop here: the open-
+// position monitor simply tries again on its next ~10s heartbeat, and a
+// failure is reported as MARKET_DATA_OFFLINE rather than papered over.
+export async function fetchAllMids({ fetchImpl = fetch, now = Date.now, timeoutMs = 5000 } = {}) {
+  const mids = await post(fetchImpl, { type: 'allMids' }, timeoutMs);
+  if (!mids || typeof mids !== 'object') throw new Error('allMids returned no data');
+  return { mids, at: now() };
+}
+
 export function parseCompletedCandles(rows, now, intervalMs = FIVE_MINUTES) {
   return (Array.isArray(rows) ? rows : [])
     .map((row) => ({ time: Number(row?.t), open: Number(row?.o), high: Number(row?.h), low: Number(row?.l), close: Number(row?.c) }))

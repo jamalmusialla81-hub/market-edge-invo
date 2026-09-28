@@ -1,5 +1,5 @@
 // EXPLICIT TEST FIXTURES ONLY. Never imported by application code.
-import type { AppInfo, Health, Position, SignalRow, Trade } from '../api';
+import type { AppInfo, CandleSet, Health, Position, SignalRow, Trade, TradeDetail } from '../api';
 
 export const signalFixture: SignalRow = {
   row_id: 1, signal_id: 'scan-abc-ETH', at_ms: 1_790_000_000_000, outcome: 'EXECUTED', accepted: true, reason: null,
@@ -49,4 +49,57 @@ export function healthFixture(over: { halted?: string | null; paused?: boolean; 
     supervisor: { exec_restarts_in_window: 0, loop_restarts_in_window: 0, exec_gave_up: over.gaveUp ?? null, loop_gave_up: null, last_action: null, recovering: false, market: { online: true, detail: '', checked_at_ms: 1, offline_since_ms: null, last_fresh_at_ms: 1, markets: 200 } },
     startup: { phase: over.phase ?? 'READY', message: 'services running', first_run: { first_run: false, upgraded_from: null } },
   };
+}
+
+export function tradeDetailFixture(over: { open?: boolean; price?: number; monitor?: 'LIVE' | 'STALE' | 'MARKET_DATA_OFFLINE'; hindsight?: boolean } = {}): TradeDetail {
+  const open = over.open ?? true;
+  const p = over.price ?? 104;
+  const t0 = 1_790_000_000_000;
+  const exits = open ? [] : [
+    { kind: 'TP1', quantity: 5, fill_price: 109.97, level: 110, pnl: 49.85, at_ms: t0 + 3_600_000, trigger: 'WS_TRADE' },
+    { kind: 'BREAKEVEN_STOP', quantity: 5, fill_price: 100.0, level: 100.03, pnl: 0, at_ms: t0 + 7_200_000, trigger: 'POLL_HEARTBEAT' },
+  ];
+  return {
+    trade_id: 'scan-abc-ETH', status: open ? 'OPEN' : 'CLOSED', is_open: open, opened_at_ms: t0, closed_at_ms: open ? null : t0 + 7_200_000,
+    exit_reason: open ? null : 'BREAKEVEN_STOP',
+    decision: {
+      asset: 'ETH', instrument: 'ETH-PERP', coin: 'ETH', direction: 'long', entry_time_ms: t0, signal_timestamp: t0 - 5000, signal_entry: 100,
+      entry_price: 100.03, mark_at_entry: 100, quantity: 10, notional: 1000.3, risk_amount: 100, requested_leverage: 1, approved_leverage: 1,
+      original_stop: 90, original_tp1: 110, original_tp2: 120, original_rr1: 1, original_rr2: 2, strategy: 'TREND CONTINUATION', regime: 'UPTREND',
+      quant_score: 71, ml_score: 0.61, combined_score: 72.5, rank: 1, scan_id: 'scan-abc', observation_id: null, model_version: 'm-7',
+      model_status: 'SHADOW', feature_version: null, market_price_source: 'HYPERLIQUID_ALLMIDS_LIVE', market_price_timestamp: t0 - 2000,
+      market_price_age_ms: 2000, execution_mode: 'PAPER', backend: 'NAUTILUS_NATIVE', execution_status: open ? 'OPEN' : 'CLOSED',
+    },
+    live: {
+      monitor: { status: open ? (over.monitor ?? 'LIVE') : 'CLOSED', detail: over.monitor === 'MARKET_DATA_OFFLINE' ? 'allMids: HTTP 503' : null,
+        price: p, price_at_ms: Date.now() - 3000, price_source: 'HYPERLIQUID_ALLMIDS_LIVE', price_age_s: over.monitor === 'STALE' ? 95 : 3, max_price_age_s: 30 },
+      current_price: p, unrealized_pnl: open ? (p - 100.03) * 10 : null, unrealized_r: open ? ((p - 100.03) * 10) / 100 : null, active_stop: 90,
+      distance_to_stop: open ? { price: p - 90, pct: ((p - 90) / p) * 100 } : null, distance_to_tp1: open ? { price: 110 - p, pct: ((110 - p) / p) * 100 } : null,
+      distance_to_tp2: open ? { price: 120 - p, pct: ((120 - p) / p) * 100 } : null, best_price: 111, worst_price: 97,
+      mfe: { price: 10.97, pct: 10.97, usd: 109.7, r: 1.1 }, mae: { price: -3.03, pct: -3.03, usd: -30.3, r: -0.3 },
+      position_age_s: 5400, remaining_qty: open ? 10 : 0,
+      milestones: { tp1_hit: !open, tp1_fill_timestamp: open ? null : t0 + 3_600_000, tp1_fill_price: open ? null : 109.97, remaining_quantity: open ? 10 : 0,
+        stop_status: open ? 'ACTIVE' : 'HIT', tp2_status: open ? 'PENDING' : 'CANCELLED' },
+    },
+    levels: [
+      { kind: 'ENTRY', price: 100.03, label: 'ENTRY (LONG)' }, { kind: 'STOP', price: 90, label: 'STOP (below entry, LONG)' },
+      { kind: 'TP1', price: 110, label: 'TP1 (LONG)' }, { kind: 'TP2', price: 120, label: 'TP2 (LONG)' },
+    ],
+    markers: [
+      { kind: 'ENTRY', at_ms: t0, price: 100.03, side: 'BUY', label: 'LONG ENTRY (BUY)', quantity: 10 },
+      ...exits.map((e) => ({ kind: e.kind, at_ms: e.at_ms, price: e.fill_price, side: 'SELL' as const, label: `${e.kind} (SELL ${e.quantity})`, quantity: e.quantity, trigger: e.trigger })),
+    ],
+    exits, realized_pnl: open ? 0 : 49.85, fees: 1.2, net_pnl: open ? -1.2 : 48.65,
+    hindsight: over.hindsight
+      ? { label: 'POST-OUTCOME / HINDSIGHT - computed after the trade resolved; the live model did not know this', post_outcome: true, known_at_decision_time: false,
+        available: true, reason: null, resolved_at_ms: t0 + 9_000_000, source: 'USL-shadow', levels: { optimal_entry: 98, optimal_tp1: 112.5, optimal_tp2: 125, optimal_exit: 124 } }
+      : { label: 'POST-OUTCOME / HINDSIGHT', post_outcome: true, known_at_decision_time: false, available: false, reason: open ? 'OUTCOME_NOT_RESOLVED' : 'NO_RESOLVED_RESEARCH_LABEL' },
+    generated_at_ms: Date.now(),
+  };
+}
+
+export function candleSetFixture(n = 60): CandleSet {
+  const t0 = 1_790_000_000_000 - 4 * 3_600_000;
+  const candles = Array.from({ length: n }, (_, i) => ({ time: t0 + i * 300_000, open: 100 + (i % 5), high: 102 + (i % 5), low: 98 + (i % 5), close: 101 + (i % 5) - (i % 2) * 2, volume: 5, complete: i < n - 1 }));
+  return { available: true, reason: null, interval: '5m', coin: 'ETH', source: 'HYPERLIQUID_CANDLESNAPSHOT', start_ms: t0, end_ms: t0 + n * 300_000, candles, intervals: ['1m', '5m', '15m', '1h'] };
 }
