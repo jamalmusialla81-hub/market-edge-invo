@@ -94,6 +94,29 @@ export interface SecretsStatus {
   service_api_key: { persisted: boolean; created: boolean; store: string; warning: string | null } | null;
 }
 
+// Shadow learning (research only): observation, never execution.
+export interface ShadowSummary {
+  since_ms: number; research_only: boolean; scans: number; no_trade_scans: number; observations: number;
+  candidate_observations: number; market_state_observations: number; no_trade_states: number; paper_executed: number;
+  rejected_but_tracked: number; not_submitted_tracked: number; invalid_snapshots: number; resolved: number;
+  partially_resolved: number; unresolved: number; classifications: Record<string, number>; missed_opportunities: number;
+  bad_trades_avoided: number; clusters: number; episodes: number; db_bytes: number;
+}
+export interface ShadowRow {
+  observation_id: string; scan_id: string; kind: 'CANDIDATE' | 'MARKET_STATE'; asset: string; direction: 'long' | 'short' | null;
+  strategy: string | null; decision_ts: number; production_rank: number | null; scan_candidate_rank: number | null;
+  is_production_pick: number; production_state: string | null; execution_status: string; execution_rejection_reason: string | null;
+  research_candidate_valid: number; invalid_reason: string | null; observation_cluster_id: string; market_episode_id: string;
+  overlap_fraction: number; resolution_status: string | null; classification: string | null;
+}
+export interface ShadowDetail extends Omit<ShadowRow, 'resolution_status' | 'classification'> {
+  resolution: { resolution_status: string; batches_done: string; next_due_ts: number | null } | null;
+  decision_hash_ok: boolean;
+  DECISION_TIME_DATA: Record<string, unknown> & { candidate?: Record<string, unknown>; market?: Record<string, unknown> };
+  FUTURE_LABEL_DATA: Record<string, { label_status: string; window_end_ts: number; labels: Record<string, Record<string, unknown>>; label_hash_ok: boolean }>;
+  POST_OUTCOME_RESEARCH_ONLY: (Record<string, unknown> & { notice: string; classification: string }) | null;
+}
+
 export const api = {
   appInfo: () => invoke<AppInfo>('app_info'),
   health: () => invoke<Health>('system_health'),
@@ -118,6 +141,10 @@ export const api = {
   inspectBackup: () => invoke<{ cancelled?: boolean; path?: string; manifest?: BackupManifest; validation?: Record<string, unknown> }>('inspect_backup'),
   restoreBackup: (confirm: string) => invoke<{ restored: string; previous_database_kept_at: string | null; reconciled: boolean }>('restore_backup', { confirm }),
   setMode: (mode: Mode) => invoke<Mode>('set_mode', { mode }),
+  shadowSummary: () => invoke<ShadowSummary>('get_shadow_summary'),
+  shadowObservations: (filter: { limit?: number; kind?: string; execution_status?: string; classification?: string } = {}) =>
+    invoke<{ observations: ShadowRow[] }>('get_shadow_observations', { filter }),
+  shadowObservation: (id: string) => invoke<ShadowDetail>('get_shadow_observation', { id }),
   secretsStatus: () => invoke<SecretsStatus>('secrets_status'),
   setSecret: (name: string, value: string) => invoke<SecretsStatus>('set_secret', { name, value }),
   deleteSecret: (name: string) => invoke<SecretsStatus>('delete_secret', { name }),

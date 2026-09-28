@@ -24,6 +24,26 @@ const DATASETS = Object.freeze({
     approvedAt: '2026-09-27',
     reason: 'Separate version, approved 2026-09-27. 5m/15m/1h strictly from Coinbase spot 5m (no fill, fail closed); 4h from native Coinbase spot 1h and 1d from native Coinbase spot daily candles, point-in-time only. Never mixed with strict V2-CLEAN rows.'
   }),
+  // Forward shadow learning (desktop execution-service, research-only SQLite
+  // file). Collected continuously; NOT trainable until the labels and the
+  // diagnostic classifications have been validated and a grouped (cluster /
+  // episode) evaluation plan is approved. Paper-executed rows are a separate
+  // store and are never silently mixed with shadow rows.
+  'FORWARD-SHADOW-RAW-V1': Object.freeze({
+    status: 'COLLECTING',
+    trainable: false,
+    reason: 'Decision-time observations of every candidate and market state per scan; immutable. Not evidence until resolved and validated.'
+  }),
+  'FORWARD-SHADOW-RESOLVED-V1': Object.freeze({
+    status: 'COLLECTING',
+    trainable: false,
+    reason: 'Same-venue counterfactual labels and post-outcome hindsight labels (research only). Hindsight fields are targets/diagnostics, never features (shadow-leakage-guard.js). Validate before training.'
+  }),
+  'FORWARD-PAPER-EXECUTED-V1': Object.freeze({
+    status: 'COLLECTING',
+    trainable: false,
+    reason: 'Copies of paper trades actually accepted; the paper ledger stays authoritative. Too few rows to train on.'
+  }),
   'HISTORICAL-RANK-V2-CLEAN': Object.freeze({
     status: 'ACTIVE',
     trainable: true,

@@ -9,8 +9,10 @@ import { PerformanceScreen } from './screens/Performance';
 import { Risk } from './screens/Risk';
 import { SystemScreen } from './screens/System';
 import { About } from './screens/About';
+import { Shadow } from './screens/Shadow';
 
-const SCREENS = ['Dashboard', 'Signals', 'Positions', 'Trades', 'Performance', 'Risk', 'System', 'About'] as const;
+// Shadow is last so the existing Ctrl+1..8 shortcuts keep their screens.
+const SCREENS = ['Dashboard', 'Signals', 'Positions', 'Trades', 'Performance', 'Risk', 'System', 'About', 'Shadow'] as const;
 type Screen = (typeof SCREENS)[number];
 
 export function ModeBar({ info, mode, onSelect }: { info: AppInfo | null; mode: Mode; onSelect: (m: Mode) => void }) {
@@ -197,6 +199,7 @@ export default function App() {
           {screen === 'Trades' && <Trades />}
           {screen === 'Performance' && <PerformanceScreen />}
           {screen === 'Risk' && <Risk />}
+          {screen === 'Shadow' && <Shadow />}
           {screen === 'System' && <SystemScreen health={h} info={info} />}
           {screen === 'About' && <About info={info} />}
         </main>

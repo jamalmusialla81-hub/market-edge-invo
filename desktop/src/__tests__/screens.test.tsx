@@ -11,6 +11,7 @@ import { SignalTable } from '../screens/Signals';
 import { PositionTable } from '../screens/Positions';
 import { TradeTable } from '../screens/Trades';
 import { UsageRow } from '../screens/Risk';
+import { ShadowDetailView, ShadowTable } from '../screens/Shadow';
 import { appInfoFixture, healthFixture, positionFixture, rejectedFixture, signalFixture, tradeFixture } from './fixtures';
 
 afterEach(() => { cleanup(); invoke.mockReset(); });
@@ -167,5 +168,45 @@ describe('about and backup', () => {
     fireEvent.change(screen.getByLabelText('Log file'), { target: { value: 'reconciliation' } });
     expect(await screen.findByText('line from reconciliation')).toBeInTheDocument();
     expect(invoke).toHaveBeenCalledWith('get_logs', { file: 'reconciliation', limit: 1500 });
+  });
+});
+
+describe('shadow learning (research only)', () => {
+  const row = {
+    observation_id: 'obs-1', scan_id: 'scan-1', kind: 'CANDIDATE' as const, asset: 'ETH', direction: 'long' as const, strategy: 'TREND CONTINUATION',
+    decision_ts: 1790000000000, production_rank: 2, scan_candidate_rank: 3, is_production_pick: 1, production_state: 'RANKED_WITH_GEOMETRY',
+    execution_status: 'REJECTED', execution_rejection_reason: 'ENTRIES_PAUSED', research_candidate_valid: 1, invalid_reason: null,
+    observation_cluster_id: 'clu-ETH-CANDIDATE-long-TREND-1790000000000', market_episode_id: 'ep-ETH-1', overlap_fraction: 0.98,
+    resolution_status: 'PENDING', classification: null,
+  };
+
+  it('lists rejected candidates as tracked, with the execution reason kept separate', () => {
+    const onOpen = vi.fn();
+    render(<ShadowTable rows={[row, { ...row, observation_id: 'obs-2', kind: 'MARKET_STATE', direction: null, strategy: null, production_state: 'NO_TRADE', execution_status: 'NOT_APPLICABLE', execution_rejection_reason: null }]} onOpen={onOpen} />);
+    expect(screen.getByText('REJECTED')).toBeInTheDocument();
+    expect(screen.getByText(/ENTRIES_PAUSED/)).toBeInTheDocument();
+    expect(screen.getByText('NO-TRADE STATE')).toBeInTheDocument();
+    fireEvent.click(screen.getAllByText('ETH')[0]);
+    expect(onOpen).toHaveBeenCalledWith('obs-1');
+  });
+
+  it('shows no future labels before the window closes', () => {
+    render(<ShadowDetailView d={{ ...row, resolution: { resolution_status: 'PENDING', batches_done: '[]', next_due_ts: 1 }, decision_hash_ok: true,
+      DECISION_TIME_DATA: { market: { price: 100 }, candidate: { entry: 100, stop: 98 } }, FUTURE_LABEL_DATA: {}, POST_OUTCOME_RESEARCH_ONLY: null }} />);
+    expect(screen.getByText(/No window has closed yet/)).toBeInTheDocument();
+    expect(screen.getByText(/Available only after the full 72h window/)).toBeInTheDocument();
+    expect(screen.getByText('hash verified')).toBeInTheDocument();
+  });
+
+  it('labels hindsight as POST-OUTCOME RESEARCH ONLY, never as a prediction', () => {
+    render(<ShadowDetailView d={{ ...row, resolution: null, decision_hash_ok: true, DECISION_TIME_DATA: { market: { price: 100 } },
+      FUTURE_LABEL_DATA: { B1: { label_status: 'OK', window_end_ts: 1, label_hash_ok: true, labels: { '1h': { label_status: 'OK', mfe_pct: 0.02, mae_pct: 0.01, stop_hit: false, tp1_hit: true, tp2_hit: false, first_touch_order: 'TP1', policy_r: 0.8 } } } },
+      POST_OUTCOME_RESEARCH_ONLY: { notice: 'Hindsight labels describe what the market offered after the fact. They are not predictions and are never model features.', classification: 'GOOD_TRADE_MISSED',
+        current_policy_outcome_r: 0.8, executable_within_stop_r: 1.6, strategy_efficiency: 0.5, best_direction: 'long', optimal_long_net_pct: 0.03, optimal_short_net_pct: 0, theoretical_long_move_pct: 0.04, theoretical_short_move_pct: 0.01, optimal_entry: 99, optimal_exit: 102 } }} />);
+    expect(screen.getByText('POST-OUTCOME RESEARCH ONLY')).toBeInTheDocument();
+    expect(screen.getByText(/They are not predictions/)).toBeInTheDocument();
+    expect(screen.getByText('GOOD_TRADE_MISSED')).toBeInTheDocument();
+    expect(screen.getByText(/unvalidated; not a training target/)).toBeInTheDocument();
+    expect(screen.getAllByText('0.80R')).toHaveLength(2);   // horizon policy R and the current-policy result
   });
 });

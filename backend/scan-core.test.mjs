@@ -81,3 +81,18 @@ assert.equal(chart.source,'HYPERLIQUID');
 assert.ok(chart.candles.length>=60);
 await assert.rejects(()=>fetchLiveMarketChart({asset:'BTC',timeframe:'2m',fetchImpl:fixtureFetch,now:NOW}),/Unsupported chart timeframe/);
 console.log('Customer scan adapter tests passed');
+
+// Research capture is opt-in and additive: the default response carries no
+// `research` key, and turning it on changes nothing else in the response.
+{
+  const base=await runLiveScan({fetchImpl:fixtureFetch,now:NOW,settings:{balance:1000,riskPct:.01,maxLeverage:5,maxExposurePct:.2}});
+  const withResearch=await runLiveScan({fetchImpl:fixtureFetch,now:NOW,settings:{balance:1000,riskPct:.01,maxLeverage:5,maxExposurePct:.2},includeResearch:true});
+  assert.equal('research' in base,false);
+  const {research,...rest}=withResearch;
+  assert.deepEqual(rest,base);
+  assert.equal(research.markets.length,1);
+  assert.equal(research.markets[0].symbol,'BTC');
+  assert.ok(Array.isArray(research.markets[0].candidates));
+  assert.ok(research.markets[0].timeframes.m5.length>=60);
+  assert.equal(research.assetCtxs.BTC.openInterest,'1000');
+}

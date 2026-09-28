@@ -68,14 +68,18 @@ async function postSignal(signal) {
   return { status: response.status, body };
 }
 
-export async function runOnce({ fetchImpl = fetch, now = Date.now(), dryRun = false } = {}) {
-  const scan = await runLiveScan({ fetchImpl, now });
+// includeResearch (research only): also return the full scan with every
+// candidate and the point-in-time candles, for shadow learning. The signal
+// itself is derived exactly as before.
+export async function runOnce({ fetchImpl = fetch, now = Date.now(), dryRun = false, includeResearch = false } = {}) {
+  const scan = await runLiveScan({ fetchImpl, now, includeResearch });
   const signal = bestTradeNowToAlphaSignal(scan);
+  const extra = includeResearch ? { scan } : {};
   if (!signal) {
-    return { scanId: scan.scanId, scannedAt: scan.scannedAt, status: scan.status, signal: null, reason: 'NO_VALID_CANDIDATE', posted: null };
+    return { scanId: scan.scanId, scannedAt: scan.scannedAt, status: scan.status, signal: null, reason: 'NO_VALID_CANDIDATE', posted: null, ...extra };
   }
   if (dryRun) {
-    return { scanId: scan.scanId, scannedAt: scan.scannedAt, status: scan.status, signal, coin: toCoin(scan), meta: signalMeta(scan), posted: null };
+    return { scanId: scan.scanId, scannedAt: scan.scannedAt, status: scan.status, signal, coin: toCoin(scan), meta: signalMeta(scan), posted: null, ...extra };
   }
   const posted = await postSignal(signal);
   return { scanId: scan.scanId, scannedAt: scan.scannedAt, status: scan.status, signal, posted };

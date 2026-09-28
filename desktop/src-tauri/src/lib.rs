@@ -123,6 +123,38 @@ async fn get_trades(state: tauri::State<'_, AppState>) -> CmdResult<Value> {
 async fn get_signals(state: tauri::State<'_, AppState>, limit: Option<u32>) -> CmdResult<Value> {
     state.get(&format!("/paper/signals?limit={}", limit.unwrap_or(500).clamp(1, 5000))).await
 }
+// Shadow learning (research only): read-only views of the execution-service's
+// separate shadow research store. Filter values come from the webview, so only
+// known keys with [A-Z_] values (and a bounded limit) are forwarded.
+fn shadow_token_ok(value: &str) -> bool {
+    !value.is_empty() && value.len() <= 64 && value.chars().all(|c| c.is_ascii_uppercase() || c == '_')
+}
+#[tauri::command]
+async fn get_shadow_summary(state: tauri::State<'_, AppState>) -> CmdResult<Value> {
+    state.get("/shadow/summary").await
+}
+#[tauri::command]
+async fn get_shadow_observations(state: tauri::State<'_, AppState>, filter: Option<Value>) -> CmdResult<Value> {
+    let filter = filter.unwrap_or(Value::Null);
+    let limit = filter.get("limit").and_then(Value::as_u64).unwrap_or(200).clamp(1, 1000);
+    let mut path = format!("/shadow/observations?limit={limit}");
+    for key in ["kind", "execution_status", "classification"] {
+        if let Some(v) = filter.get(key).and_then(Value::as_str) {
+            if !shadow_token_ok(v) {
+                return Err(format!("invalid shadow filter {key}"));
+            }
+            path.push_str(&format!("&{key}={v}"));
+        }
+    }
+    state.get(&path).await
+}
+#[tauri::command]
+async fn get_shadow_observation(state: tauri::State<'_, AppState>, id: String) -> CmdResult<Value> {
+    if id.len() > 64 || !id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
+        return Err("invalid observation id".into());
+    }
+    state.get(&format!("/shadow/observations/{id}")).await
+}
 #[tauri::command]
 async fn get_performance(state: tauri::State<'_, AppState>) -> CmdResult<Value> {
     state.get("/paper/performance").await
@@ -814,6 +846,9 @@ pub fn run() {
             get_trades,
             get_signals,
             get_performance,
+            get_shadow_summary,
+            get_shadow_observations,
+            get_shadow_observation,
             get_risk_config,
             get_risk_usage,
             update_risk_config,
