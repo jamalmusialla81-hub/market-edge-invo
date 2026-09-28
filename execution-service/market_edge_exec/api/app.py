@@ -18,6 +18,7 @@ from contextlib import closing
 from fastapi import Depends, FastAPI, Header, HTTPException
 
 from market_edge_exec import __version__
+from market_edge_exec.export import research as research_export
 from market_edge_exec.buildinfo import build_info
 from market_edge_exec.control.settings import BOUNDS as SETTINGS_BOUNDS, ControlStore, SettingsError
 from market_edge_exec.domain.contracts import ContractError, ExecutionIntent
@@ -270,6 +271,21 @@ def create_app(db_path: str = "market_edge_exec.sqlite3", hummingbot_mode: str =
         if found is None:
             raise HTTPException(status_code=404, detail="NOT_FOUND")
         return found
+
+    @app.get("/research/export", dependencies=[Depends(require_api_key)])
+    def research_export_info():
+        return {"formats": ["csv"] + (["parquet"] if research_export.parquet_available() else []),
+                "not_yet_available": [{"category": k, "reason": v} for k, v in research_export.NOT_YET_AVAILABLE.items()]}
+
+    @app.post("/research/export", dependencies=[Depends(require_api_key)])
+    def research_export_run(payload: dict):
+        """Read-only export for offline analysis; opens both databases in
+        SQLite read-only mode and writes into a new folder under out_dir."""
+        try:
+            return research_export.export_research(db_path, app.state.shadow.path, str(payload.get("out_dir") or ""),
+                                                   fmt=str(payload.get("format") or "csv"))
+        except (ValueError, FileExistsError) as error:
+            raise HTTPException(status_code=422, detail=str(error))
 
     @app.post("/paper/no-trade", dependencies=[Depends(require_api_key)])
     def paper_no_trade(payload: dict):
