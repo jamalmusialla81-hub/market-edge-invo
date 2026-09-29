@@ -97,9 +97,9 @@ fn starts_real_service_runs_and_stops_loop_and_shuts_down_cleanly() {
     assert_eq!(sys["paper_only"], true);
     assert_eq!(sys["nautilus"]["ok"], true, "{sys}");
     assert_eq!(sys["sqlite"]["quick_check"], "ok");
-    assert_eq!(sys["version"], "0.1.0");
+    assert_eq!(sys["version"], "0.2.0");
     let health = reqwest::blocking::Client::builder().no_proxy().build().unwrap().get(format!("{}/health", cfg.base_url())).send().unwrap().json::<Value>().unwrap();
-    assert_eq!(health["version"], "0.1.0");
+    assert_eq!(health["version"], "0.2.0");
     assert!(health["schema_version"].as_u64().unwrap() >= 2, "{health}");
     if cfg.layout.kind == LayoutKind::Bundled {
         assert_eq!(health["build"]["frozen"], true, "{health}");
