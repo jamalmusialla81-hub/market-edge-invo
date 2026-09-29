@@ -102,6 +102,11 @@ def _quant_score(decision: dict) -> Optional[float]:
     return float(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else None
 
 
+def _regime(decision: dict) -> Optional[str]:
+    v = (decision.get("candidate") or {}).get("regime") or decision.get("regime")
+    return str(v) if v else None
+
+
 def _components(units: dict[str, dict]) -> list[list[str]]:
     """Connected components of scans linked by a shared cluster id or market episode id."""
     parent = {s: s for s in units}
@@ -164,7 +169,7 @@ CREATE TABLE snapshot_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE TABLE snapshot_rows (
     observation_id TEXT PRIMARY KEY, scan_id TEXT NOT NULL, cluster_id TEXT NOT NULL, episode_id TEXT NOT NULL, split TEXT NOT NULL,
     decision_ts INTEGER NOT NULL, window_end_ts INTEGER NOT NULL, asset TEXT NOT NULL, strategy TEXT, direction TEXT,
-    features TEXT NOT NULL, quant_score REAL, target REAL NOT NULL
+    features TEXT NOT NULL, quant_score REAL, regime TEXT, target REAL NOT NULL
 );
 CREATE INDEX snapshot_rows_split ON snapshot_rows (split, decision_ts);
 """
@@ -229,7 +234,7 @@ def build_snapshot(shadow_db_path: str, out_dir: str, *, date: str, as_of_ms: Op
             continue
         out_rows.append({"observation_id": r["observation_id"], "scan_id": r["scan_id"], "cluster_id": r["observation_cluster_id"], "episode_id": r["market_episode_id"],
                          "split": split_of[r["scan_id"]], "decision_ts": r["decision_ts"], "window_end_ts": r["label_window_end"], "asset": r["asset"],
-                         "strategy": r["strategy"], "direction": r["direction"], "features": {p: _get(k["decision"], p) for p in paths}, "quant_score": _quant_score(k["decision"]), "target": k["y"]})
+                         "strategy": r["strategy"], "direction": r["direction"], "features": {p: _get(k["decision"], p) for p in paths}, "quant_score": _quant_score(k["decision"]), "regime": _regime(k["decision"]), "target": k["y"]})
     out_rows.sort(key=lambda x: (x["decision_ts"], x["observation_id"]))
     if not out_rows:
         raise SnapshotError("NO_VALID_RESOLVED_ROWS: nothing to freeze yet (" + json.dumps(dict(excluded), sort_keys=True) + ")")
@@ -247,9 +252,9 @@ def build_snapshot(shadow_db_path: str, out_dir: str, *, date: str, as_of_ms: Op
     snap_path = os.path.join(folder, "snapshot.sqlite3")
     with closing(sqlite3.connect(snap_path)) as conn:
         conn.executescript(SNAP_SCHEMA)
-        conn.executemany("INSERT INTO snapshot_rows VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)", [
+        conn.executemany("INSERT INTO snapshot_rows VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)", [
             (x["observation_id"], x["scan_id"], x["cluster_id"], x["episode_id"], x["split"], x["decision_ts"], x["window_end_ts"], x["asset"],
-             x["strategy"], x["direction"], _canon(x["features"]), x["quant_score"], x["target"]) for x in out_rows])
+             x["strategy"], x["direction"], _canon(x["features"]), x["quant_score"], x["regime"], x["target"]) for x in out_rows])
         conn.executemany("INSERT INTO snapshot_meta VALUES (?,?)", [("version", version), ("content_hash", content_hash), ("target", f"{horizon}.{target}")])
         for op in ("UPDATE", "DELETE"):
             for table in ("snapshot_rows", "snapshot_meta"):

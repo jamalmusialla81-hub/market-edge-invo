@@ -33,7 +33,7 @@ def load_snapshot(folder: str) -> dict:
     canon = json.dumps({"paths": paths, "target": manifest["target"]["name"], "rows": [
         {"observation_id": r["observation_id"], "scan_id": r["scan_id"], "cluster_id": r["cluster_id"], "episode_id": r["episode_id"], "split": r["split"],
          "decision_ts": r["decision_ts"], "window_end_ts": r["window_end_ts"], "asset": r["asset"], "strategy": r["strategy"], "direction": r["direction"],
-         "features": json.loads(r["features"]), "quant_score": r["quant_score"], "target": r["target"]} for r in rows]}, sort_keys=True, separators=(",", ":"), allow_nan=False)
+         "features": json.loads(r["features"]), "quant_score": r["quant_score"], "regime": r["regime"], "target": r["target"]} for r in rows]}, sort_keys=True, separators=(",", ":"), allow_nan=False)
     if hashlib.sha256(canon.encode()).hexdigest() != manifest["content_hash"]:
         raise TrainingError("SNAPSHOT_HASH_MISMATCH: the snapshot no longer matches its manifest")
     return {"manifest": manifest, "paths": paths, "rows": rows}
