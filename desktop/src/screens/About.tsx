@@ -9,15 +9,42 @@ function shadowText(m: BackupManifest): string {
   return m.shadow_included ? `${m.shadow_counts?.shadow_observations ?? 0} shadow observations` : 'no shadow research database';
 }
 
+function bytesText(n: number | undefined): string {
+  if (typeof n !== 'number' || !Number.isFinite(n)) return DASH;
+  if (n < 1024) return `${n} B`;
+  return n < 1024 * 1024 ? `${(n / 1024).toFixed(1)} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`;
+}
+
+/** What a backup manifest actually says. Shadow and off-device come from the manifest, never assumed. */
+export function BackupSummary({ manifest: m, path }: { manifest: BackupManifest; path?: string }) {
+  const databases = ['paper database', ...(m.shadow_included ? ['shadow research database'] : [])];
+  return (
+    <dl className="kv" aria-label="Backup contents">
+      {path && <><dt>File</dt><dd className="mono small">{path}</dd></>}
+      <dt>Created</dt><dd>{str(m.created_at)} <span className="muted small">by Market Edge {str(m.app_version)}</span></dd>
+      <dt>Size</dt><dd>{bytesText(m.db_bytes)} <span className="muted small">paper database</span></dd>
+      <dt>Databases</dt><dd>{databases.join(' + ')}</dd>
+      <dt>Schema</dt><dd>v{str(m.schema_version)} <span className="muted small">backup format v{str(m.format_version)}</span></dd>
+      <dt>Shadow research included</dt>
+      <dd>{m.shadow_included ? <Badge kind="pos">YES</Badge> : <Badge kind="warn">NO</Badge>} <span className="muted small">{shadowText(m)}</span></dd>
+      <dt>Off-device backup</dt>
+      <dd>{m.cloud_backup ? <Badge kind="pos">YES</Badge> : <Badge kind="warn">NO</Badge>} <span className="muted small">{m.cloud_backup ? 'as the manifest records' : 'local file only; copy it somewhere safe yourself'}</span></dd>
+      <dt>Secrets included</dt><dd>{m.secrets_included ? <Badge kind="neg">YES</Badge> : <Badge kind="pos">NO</Badge>}</dd>
+    </dl>
+  );
+}
+
 function Backups() {
   const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [last, setLast] = useState<{ path?: string; manifest: BackupManifest } | null>(null);
   const [pending, setPending] = useState<{ path: string; manifest: BackupManifest } | null>(null);
 
   const exportBackup = async () => {
     setBusy(true); setMsg(null);
     try {
       const r = await api.exportBackup();
+      if (!r.cancelled && r.manifest) setLast({ path: r.path, manifest: r.manifest });
       if (!r.cancelled && r.manifest) setMsg({ kind: 'ok', text: `Backup written to ${r.path} (schema v${r.manifest.schema_version}, ${r.manifest.counts.paper_trades ?? 0} trades, ${r.manifest.counts.paper_signals ?? 0} signals; ${shadowText(r.manifest)}; no secrets; local file only)` });
     } catch (e) { setMsg({ kind: 'err', text: `Export failed: ${errorText(e)}` }); } finally { setBusy(false); }
   };
@@ -45,12 +72,14 @@ function Backups() {
         <button className="btn btn-warn" disabled={busy} onClick={importBackup}>IMPORT BACKUP</button>
       </div>
       {msg && <div className={`control-msg ${msg.kind}`} role="status">{msg.text}</div>}
+      {last && <><h4 className="small">Last backup this session</h4><BackupSummary manifest={last.manifest} path={last.path} /></>}
       {pending && (
         <ConfirmDialog title="Restore this backup?" word="RESTORE" confirmLabel="Restore backup"
           body={<>
             <p><b>{pending.path}</b></p>
             <p>Created {pending.manifest.created_at} by Market Edge {pending.manifest.app_version}; schema v{pending.manifest.schema_version}; {pending.manifest.counts.paper_trades ?? 0} trades, {pending.manifest.counts.paper_signals ?? 0} signals; {shadowText(pending.manifest)}. Checksums and database integrity verified.</p>
             {!pending.manifest.shadow_included && <p>This backup has no shadow research database; the current one is kept as it is.</p>}
+            <BackupSummary manifest={pending.manifest} />
             <p>The paper loop stops, the current database is kept in the backups folder, the backup replaces it, and a reconciliation runs. New entries stay paused until you resume.</p>
           </>}
           onCancel={() => setPending(null)} onConfirm={() => void restore()} />

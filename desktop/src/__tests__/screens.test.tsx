@@ -5,7 +5,7 @@ const invoke = vi.fn();
 vi.mock('@tauri-apps/api/core', () => ({ invoke: (...args: unknown[]) => invoke(...args) }));
 
 import { Controls, ModeBar, StartupScreen, Warnings } from '../App';
-import { About, commitsDiffer, versionReport } from '../screens/About';
+import { About, BackupSummary, commitsDiffer, versionReport } from '../screens/About';
 import { LogView } from '../screens/System';
 import { RateLimitView } from '../screens/RateLimit';
 import { SignalTable } from '../screens/Signals';
@@ -333,5 +333,27 @@ describe('rate-limit panel (#30)', () => {
     render(<RateLimitView data={diag(null)} error={null} />);
     expect(screen.getByText(/has not reported a request budget yet/)).toBeInTheDocument();
     expect(screen.getByText('NO REPORT YET')).toBeInTheDocument();
+  });
+});
+
+describe('backup summary (#36)', () => {
+  const base = { format: 'market-edge-backup', format_version: 2, created_at: '2026-09-29T01:00:00Z', app_version: '0.2.0', git_sha: 'x', schema_version: 4,
+    db_sha256: 'h', db_bytes: 2_621_440, counts: { paper_trades: 3 }, starting_equity: 10000, secrets_included: false, contents: [] };
+  it('shows time, size, databases, schema, shadow and off-device from the manifest', () => {
+    render(<BackupSummary manifest={{ ...base, shadow_included: true, shadow_counts: { shadow_observations: 12 }, cloud_backup: false }} path="/b/x.mebackup" />);
+    const dl = screen.getByLabelText('Backup contents');
+    expect(within(dl).getByText(/2026-09-29T01:00:00Z/)).toBeInTheDocument();
+    expect(within(dl).getByText('2.5 MB')).toBeInTheDocument();
+    expect(within(dl).getByText('paper database + shadow research database')).toBeInTheDocument();
+    expect(within(dl).getByText('v4')).toBeInTheDocument();
+    expect(within(dl).getByText('Shadow research included').nextElementSibling!.textContent).toMatch(/^YES/);
+    expect(within(dl).getByText('Off-device backup').nextElementSibling!.textContent).toMatch(/^NO.*local file only/);
+  });
+  it('says NO for shadow when the manifest has none, and never claims off-device backup unless the manifest does', () => {
+    render(<BackupSummary manifest={base} />);
+    const dl = screen.getByLabelText('Backup contents');
+    expect(within(dl).getByText('Shadow research included').nextElementSibling!.textContent).toMatch(/^NO/);
+    expect(within(dl).getByText('Off-device backup').nextElementSibling!.textContent).toMatch(/^NO/);
+    expect(within(dl).getByText('Databases').nextElementSibling!.textContent).toBe('paper database');
   });
 });
