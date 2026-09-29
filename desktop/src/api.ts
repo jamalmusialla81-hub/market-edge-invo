@@ -12,6 +12,11 @@ export interface AppConfigView {
   layout: 'BUNDLED' | 'DEV_REPO'; resource_dir: string | null; repo_root: string | null; execution_service: string; node: string;
   forward_loop: string; port: number; db_path: string; logs_dir: string; backups_dir: string; cycle_interval_ms: number; hummingbot_mode: string;
 }
+export interface ResearchExportFile { file: string; rows: number; columns: string[]; section: 'DECISION' | 'LEDGER' | 'OUTCOME' | 'HINDSIGHT'; source: string }
+export interface ResearchExportManifest {
+  schema: string; created_at: string; format: 'csv' | 'parquet'; folder: string; read_only: boolean;
+  files: ResearchExportFile[]; skipped: { file: string; reason: string }[]; not_yet_available: { category: string; reason: string }[];
+}
 // Reported by the backend's /health from the live shadow database and the
 // running code; never inferred on the client.
 export interface ResearchVersions {
@@ -219,6 +224,8 @@ export const api = {
   shadowObservations: (filter: { limit?: number; kind?: string; execution_status?: string; classification?: string } = {}) =>
     invoke<{ observations: ShadowRow[] }>('get_shadow_observations', { filter }),
   shadowObservation: (id: string) => invoke<ShadowDetail>('get_shadow_observation', { id }),
+  researchExportInfo: () => invoke<{ formats: ('csv' | 'parquet')[]; not_yet_available: { category: string; reason: string }[] }>('get_research_export_info'),
+  exportResearch: (format: 'csv' | 'parquet') => invoke<ResearchExportManifest & { cancelled?: boolean }>('export_research', { format }),
   secretsStatus: () => invoke<SecretsStatus>('secrets_status'),
   setSecret: (name: string, value: string) => invoke<SecretsStatus>('set_secret', { name, value }),
   deleteSecret: (name: string) => invoke<SecretsStatus>('delete_secret', { name }),
