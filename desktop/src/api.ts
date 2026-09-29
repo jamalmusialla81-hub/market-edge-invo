@@ -177,6 +177,24 @@ export interface PositionMonitorStatus {
   state: string; mode?: string; ws_state?: string; interval_ms?: number; market_ok?: boolean; error?: string | null;
   open_positions: number; stale_positions: number; max_price_age_s: number;
 }
+export interface RateLimitEndpoint {
+  requests: number; ok: number; errors: number; http_429: number; last_429_at_ms: number | null; deduplicated: number; deferred: number; retry_after_seen: number;
+}
+export interface RateLimitNodeBudget {
+  schema: string; source?: string; host: string; at_ms: number; received_at_ms: number; state: 'OK' | 'RECOVERING' | 'BACKOFF';
+  cooldown_until_ms: number | null; consecutive_429: number; last_retry_after_ms: number | null; weight_used_last_60s: number;
+  weight_limit_per_min: number | null; pacing: string; hyperliquid_limit_per_min: number; in_flight: number; queue_depth: number;
+  queue_depth_by_priority: Record<string, number>; by_priority: Record<string, { started: number; deferred: number; waited_ms: number }>;
+  endpoints: Record<string, RateLimitEndpoint>;
+  totals: { requests: number; http_429: number; deduplicated: number; deferred: number; last_429_at_ms: number | null; last_ok_at_ms: number | null };
+}
+export interface RateLimitChartHealth {
+  schema: string; source: string; priority: string; state: 'OK' | 'BACKOFF'; backoff_remaining_s: number; consecutive_429: number;
+  cached_series: number; requests?: number; http_429?: number; deferred?: number; bars_from_cache?: number; last_429_wall_ms?: number | null;
+}
+export interface RateLimitDiagnostics {
+  schema: string; node_budget: RateLimitNodeBudget | null; node_budget_age_s: number | null; chart_candles: RateLimitChartHealth | null; priorities: string[];
+}
 export interface GroupStats { trades_opened: number; trades_closed: number; wins: number; losses: number; win_rate_pct: number | null; net_realized_pnl: number }
 export interface Performance {
   starting_equity: number; ending_equity: number; return_pct: number; win_rate_pct: number | null; expectancy_per_trade: number | null;
@@ -254,6 +272,7 @@ export const api = {
   inspectBackup: () => invoke<{ cancelled?: boolean; path?: string; manifest?: BackupManifest; validation?: Record<string, unknown> }>('inspect_backup'),
   restoreBackup: (confirm: string) => invoke<{ restored: string; previous_database_kept_at: string | null; reconciled: boolean }>('restore_backup', { confirm }),
   setMode: (mode: Mode) => invoke<Mode>('set_mode', { mode }),
+  rateLimit: () => invoke<RateLimitDiagnostics>('get_rate_limit'),
   shadowSummary: () => invoke<ShadowSummary>('get_shadow_summary'),
   shadowObservations: (filter: { limit?: number; kind?: string; execution_status?: string; classification?: string } = {}) =>
     invoke<{ observations: ShadowRow[] }>('get_shadow_observations', { filter }),

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { api, AppInfo, errorText, Health, Level, LogEntry, LogFile, SecretsStatus } from '../api';
 import { Badge, Dot, Panel, Table } from '../components/ui';
 import { DASH, duration, ts } from '../format';
+import { RateLimitPanel } from './RateLimit';
 import { ResearchExport } from './ResearchExport';
 
 const LEVELS: Level[] = ['INFO', 'WARN', 'ERROR', 'RISK', 'EXECUTION'];
@@ -126,6 +127,7 @@ export function SystemScreen({ health, info }: { health: Health | null; info: Ap
           </dl>
         </Panel>
       </div>
+      <RateLimitPanel monitor={health?.status?.position_monitor} />
       <LogView />
       <ResearchExport />
       <Secrets />

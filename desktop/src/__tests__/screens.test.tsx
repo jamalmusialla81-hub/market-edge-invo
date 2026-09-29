@@ -7,6 +7,7 @@ vi.mock('@tauri-apps/api/core', () => ({ invoke: (...args: unknown[]) => invoke(
 import { Controls, ModeBar, StartupScreen, Warnings } from '../App';
 import { About, commitsDiffer, versionReport } from '../screens/About';
 import { LogView } from '../screens/System';
+import { RateLimitView } from '../screens/RateLimit';
 import { SignalTable } from '../screens/Signals';
 import { PositionTable } from '../screens/Positions';
 import { TradeTable } from '../screens/Trades';
@@ -292,5 +293,45 @@ describe('risk sizing V2', () => {
     expect(screen.getByText('COUNTERFACTUAL RISK SIZING')).toBeInTheDocument();
     expect(screen.getByRole('note')).toHaveTextContent(/RESEARCH ONLY · NOT USED FOR EXECUTION/);
     expect(screen.getByText(/this is the size actually used/)).toHaveTextContent('Executed quantity 10');
+  });
+});
+
+describe('rate-limit panel (#30)', () => {
+  const budget = (over: Record<string, unknown> = {}) => ({
+    schema: 'rate-limit-health/v1', host: 'https://api.hyperliquid.xyz/info', at_ms: 1_000_000, received_at_ms: 1_000_000, state: 'OK' as const,
+    cooldown_until_ms: null, consecutive_429: 0, last_retry_after_ms: null, weight_used_last_60s: 120, weight_limit_per_min: 600,
+    pacing: 'WEIGHT_BUDGET', hyperliquid_limit_per_min: 1200, in_flight: 1, queue_depth: 3,
+    queue_depth_by_priority: { P0_POSITION_MONITOR: 0, P2_DISCOVERY: 3 },
+    by_priority: { P0_POSITION_MONITOR: { started: 50, deferred: 0, waited_ms: 0 }, P2_DISCOVERY: { started: 20, deferred: 4, waited_ms: 8000 } },
+    endpoints: { allMids: { requests: 70, ok: 68, errors: 0, http_429: 2, last_429_at_ms: 900_000, deduplicated: 5, deferred: 4, retry_after_seen: 1 } },
+    totals: { requests: 70, http_429: 2, deduplicated: 5, deferred: 4, last_429_at_ms: 900_000, last_ok_at_ms: 999_000 }, ...over,
+  });
+  const diag = (node: ReturnType<typeof budget> | null, over: Record<string, unknown> = {}) => ({
+    schema: 'rate-limit-diagnostics/v1', node_budget: node, node_budget_age_s: node ? 4 : null,
+    chart_candles: { schema: 'rate-limit-health/v1', source: 'x', priority: 'P5_CHART_HISTORY', state: 'OK' as const, backoff_remaining_s: 0, consecutive_429: 0, cached_series: 2, http_429: 0, deferred: 0 },
+    priorities: ['P0_POSITION_MONITOR', 'P1_RECONCILIATION', 'P2_DISCOVERY', 'P3_SHADOW_CAPTURE', 'P4_SHADOW_RESOLUTION', 'P5_CHART_HISTORY'], ...over,
+  });
+  it('shows counts, tiers, endpoints and websocket state in the normal case', () => {
+    render(<RateLimitView data={diag(budget())} error={null} monitor={{ state: 'LIVE', ws_state: 'CONNECTED', open_positions: 1, stale_positions: 0, max_price_age_s: 30 }} nowMs={1_000_000} />);
+    expect(screen.getAllByText('OK').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText('CONNECTED')).toBeInTheDocument();
+    expect(screen.getByText('P2 discovery')).toBeInTheDocument();
+    expect(screen.getByText('allMids')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.getByText('120 / 600')).toBeInTheDocument();
+  });
+  it('shows the backoff clearly while backing off', () => {
+    const b = budget({ state: 'BACKOFF', cooldown_until_ms: 1_030_000, consecutive_429: 3, last_retry_after_ms: 30_000 });
+    render(<RateLimitView data={diag(b)} error={null} nowMs={1_000_000} />);
+    expect(screen.getByRole('alert').textContent).toMatch(/Backing off after HTTP 429/);
+    expect(screen.getByText('BACKOFF')).toBeInTheDocument();
+  });
+  it('says so, without crashing, when the endpoint is unavailable or nothing was reported yet', () => {
+    render(<RateLimitView data={null} error="404 not found" />);
+    expect(screen.getByText(/No rate-limit data: 404 not found/)).toBeInTheDocument();
+    cleanup();
+    render(<RateLimitView data={diag(null)} error={null} />);
+    expect(screen.getByText(/has not reported a request budget yet/)).toBeInTheDocument();
+    expect(screen.getByText('NO REPORT YET')).toBeInTheDocument();
   });
 });

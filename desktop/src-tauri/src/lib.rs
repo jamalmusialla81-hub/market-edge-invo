@@ -148,6 +148,11 @@ async fn get_signals(state: tauri::State<'_, AppState>, limit: Option<u32>) -> C
 fn shadow_token_ok(value: &str) -> bool {
     !value.is_empty() && value.len() <= 64 && value.chars().all(|c| c.is_ascii_uppercase() || c == '_')
 }
+// Rate-limit diagnostics (read-only display; no control of any budget).
+#[tauri::command]
+async fn get_rate_limit(state: tauri::State<'_, AppState>) -> CmdResult<Value> {
+    state.get("/system/rate-limit").await
+}
 #[tauri::command]
 async fn get_shadow_summary(state: tauri::State<'_, AppState>) -> CmdResult<Value> {
     state.get("/shadow/summary").await
@@ -908,6 +913,7 @@ pub fn run() {
             get_trade_candles,
             get_signals,
             get_performance,
+            get_rate_limit,
             get_shadow_summary,
             get_shadow_observations,
             get_research_export_info,
