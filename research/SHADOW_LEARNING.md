@@ -293,3 +293,22 @@ Calibration (regression test `test_the_calibration_false_positive_rate_on_null_d
 - Isolation, each with a test: the `/shadow/scan` response and the stored production observations are identical with and without a deployed challenger; equity, balance, positions, intents, orders, fills and paper trades do not move; a failure while predicting is swallowed and the scan is still stored; the same scan twice gives one prediction; the package imports no execution, risk, paper or network module. The JS scan (`bestTradeNow`) is not touched at all, so its byte-for-byte test is unaffected.
 - Outcomes are joined at read time from the shadow labels (`GET .../predictions`): `PENDING` until the final label batch exists.
 - Limit: only exercised with a synthetic challenger. No real challenger has passed the gate, so nothing is deployed anywhere.
+
+## Forward model validation (DATA 10)
+
+`market_edge_exec/evaluation/forward.py` judges a Shadow-deployed challenger only on what DATA 9 froze before the outcome and what resolved
+afterwards (never training data, never the sealed OOS split). A prediction counts only if its record hash still matches, every candidate
+in its scan has an OK 72h label, and it was frozen before its own outcome window closed.
+
+- Unit of evidence is the scan; the pick's after-cost 72h R is compared with production's actual pick and with random (mean R of the scan).
+- Evidence counts are always reported and each must clear a floor: 60 resolved scans, 30 independent episodes, 20 choice scans
+  (agreement with production carries no information), 14 forward days, 4 assets, 2 regimes, no asset above 50% of picks.
+  `evidence_missing` lists every shortfall with the real numbers. Elapsed days is one count among these and never rescues a thin sample.
+- Below any floor the verdict is INSUFFICIENT_EVIDENCE; the performance numbers are still shown but are not used.
+- Above the floors: cluster-bootstrap CI on the paired delta versus both comparators, chronological-block stability, a
+  leave-the-best-block-out interval, a 0.05R execution-cost haircut check, rank monotonicity (score terciles), turnover, per-asset and per-regime.
+- DATA 8's calibration can tighten the interval (`skepticism_alpha`).
+- The best verdict is FORWARD_PROMISING, logged as PROMISING in the experiment registry. `promotable` is always false; only DATA 11 can change state.
+- Thresholds are this task's own and documented in the module, not copied from promotion-readiness.js.
+- API: `GET /research/shadow-models/{key}/validation` (not logged), `POST .../validate` (logged). Tests: `tests/test_forward_validation.py`.
+- Not yet run against real forward data: no challenger has been deployed and none has accumulated resolved scans.

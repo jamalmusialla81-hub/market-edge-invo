@@ -44,6 +44,7 @@ from market_edge_exec.risk import sizing_runtime, sizing_v2
 from market_edge_exec.risk.engine import RiskLimits, approve
 from market_edge_exec.routing.router import BACKEND_HUMMINGBOT, BACKEND_NAUTILUS_NATIVE, ExecutionRouter, RouterError
 from market_edge_exec.signal_bridge.bridge import process_signal
+from market_edge_exec.evaluation import forward as forward_validation
 from market_edge_exec.experiments.registry import ExperimentRegistry, RegistryError as ExperimentError, STATUSES as EXPERIMENT_STATUSES
 from market_edge_exec.quality import runner as quality_runner
 from market_edge_exec.shadow import contracts as shadow_contracts
@@ -540,6 +541,16 @@ def create_app(db_path: str = "market_edge_exec.sqlite3", hummingbot_mode: str =
     def shadow_model_predictions(model_key: str, limit: int = 200):
         return {"label": "RESEARCH ONLY · SHADOW OBSERVATION · ZERO CAPITAL · NO ORDERS · NEVER CHANGES PRODUCTION",
                 "predictions": shadow_models.predictions(app.state.shadow, model_key, min(max(limit, 1), 1000))}
+
+    @app.get("/research/shadow-models/{model_key}/validation", dependencies=[Depends(require_api_key)])
+    def shadow_model_validation(model_key: str):
+        """Forward validation, computed on the spot and NOT logged (DATA 10). Read-only."""
+        return forward_validation.run(app.state.shadow, experiments, model_key, log=False)
+
+    @app.post("/research/shadow-models/{model_key}/validate", dependencies=[Depends(require_api_key)])
+    def shadow_model_validate(model_key: str):
+        """Same evaluation, recorded in the experiment registry. Never promotes anything."""
+        return forward_validation.run(app.state.shadow, experiments, model_key, log=True)
 
     def _experiment_call(fn, *args, **kwargs):
         try:
