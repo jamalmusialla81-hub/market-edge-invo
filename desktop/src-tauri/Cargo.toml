@@ -1,6 +1,6 @@
 [package]
 name = "market-edge-desktop"
-version = "0.1.0"
+version = "0.2.0"
 description = "Market Edge desktop shell: control/monitoring over the paper execution-service"
 edition = "2021"
 publish = false

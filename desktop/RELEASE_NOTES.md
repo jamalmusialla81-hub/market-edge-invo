@@ -1,13 +1,40 @@
-# Market Edge desktop 0.1.0 (paper trading only)
+# Market Edge desktop 0.2.0 (paper trading only)
 
-First standalone release of the Market Edge desktop app.
+Second release of the standalone Market Edge desktop app.
+
+## What's new since 0.1.0
+
+- **Shadow learning.** Every scan candidate and market state is recorded as an
+  immutable, hashed observation next to your paper trades (own database file,
+  included in backup v2). Shadow rows never use paper capital and never place
+  orders. New Shadow screen with filters (asset, direction, strategy, rank,
+  resolution, dates, episode/cluster).
+- **Fast open-position monitor and Trade Detail.** Open positions are watched
+  live (websocket prints plus a 10-second reconciliation). Click a trade for a
+  candlestick chart with entry, stop, TP1 and TP2, live figures, and an
+  optional research overlay that is off by default and labelled as hindsight.
+- **Profit giveback.** Trade Detail now shows how much of the peak unrealized
+  profit a trade has given back.
+- **Rate-limit resilience.** One shared request budget with backoff, request
+  de-duplication and priorities (open-position monitoring first, chart history
+  last), so a temporary Hyperliquid rate limit defers discovery instead of
+  looking like an outage. Stale data still fails closed.
+- **Research export.** System > Research export writes a read-only CSV or Parquet
+  folder of the shadow and paper data, with decision-time, outcome and
+  hindsight columns kept in separate files.
+- **Versions panel.** About shows the app and service build, shadow schema,
+  label and classification versions, with a copy button for support.
+- Dashboard "Leverage" is now "Gross exposure".
+
+Not included: Risk Sizing V2 and adaptive exits are not part of this release.
+
 
 ## Supported
 
 - **macOS on Apple Silicon (M1 or newer).** Intel Macs and Linux are not supported.
 - Windows x64 installers are attached only when the release says so below.
 
-## What it is
+## What it is (unchanged from 0.1.0)
 
 - A standalone desktop app: no Python, Node or repository checkout needed. The
   execution service (with the full NautilusTrader package bundled and self-tested at build time) and

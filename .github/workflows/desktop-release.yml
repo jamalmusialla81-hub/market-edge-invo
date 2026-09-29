@@ -5,7 +5,7 @@ name: Desktop release (publish installers from a green build)
 # exact bytes CI installed on a fresh machine. The release targets that run's
 # commit, which must be on main.
 #   run_id           id of a Desktop app (desktop-app.yml) run on main
-#   tag              e.g. v0.1.0 (must match the app version)
+#   tag              e.g. v0.2.0 (must match the app version)
 #   include_windows  also publish the .exe/.msi from the same run
 #   prerelease       mark the release as a pre-release
 #   draft            create a draft (visible only to collaborators); default true
