@@ -20,8 +20,9 @@ import re
 from typing import Any, Iterable
 
 # v2 (DATA 1): source_commit on scans/observations, forward_execution_quality table.
-# v3 (DATA 2): data_quality_verdicts (append-only validity verdicts). Additive only.
-SHADOW_SCHEMA_VERSION = 3
+# v3 (DATA 2): data_quality_verdicts (append-only validity verdicts).
+# v4 (DATA 5): experiment_events (append-only experiment lifecycle). Additive only.
+SHADOW_SCHEMA_VERSION = 4
 LABEL_VERSION = "SHADOW-LABELS-V1"
 CLASSIFICATION_VERSION = "SHADOW-CLASS-V1-DIAGNOSTIC"
 

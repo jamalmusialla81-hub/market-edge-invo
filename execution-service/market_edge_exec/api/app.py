@@ -42,6 +42,7 @@ from market_edge_exec.risk import sizing_runtime, sizing_v2
 from market_edge_exec.risk.engine import RiskLimits, approve
 from market_edge_exec.routing.router import BACKEND_HUMMINGBOT, BACKEND_NAUTILUS_NATIVE, ExecutionRouter, RouterError
 from market_edge_exec.signal_bridge.bridge import process_signal
+from market_edge_exec.experiments.registry import ExperimentRegistry, RegistryError as ExperimentError, STATUSES as EXPERIMENT_STATUSES
 from market_edge_exec.quality import runner as quality_runner
 from market_edge_exec.shadow import contracts as shadow_contracts
 from market_edge_exec.shadow.store import ShadowStore, default_path as shadow_default_path
@@ -468,6 +469,38 @@ def create_app(db_path: str = "market_edge_exec.sqlite3", hummingbot_mode: str =
     @app.get("/research/data-quality", dependencies=[Depends(require_api_key)])
     def data_quality_summary():
         return {"label": "RESEARCH ONLY · CLASSIFICATION · ROWS ARE NEVER EDITED", **quality_runner.summarize(app.state.shadow)}
+
+    # ---- experiment registry (DATA 5): bookkeeping only; nothing here trains, promotes or deploys ----
+    experiments = ExperimentRegistry(app.state.shadow)
+
+    def _experiment_call(fn, *args, **kwargs):
+        try:
+            return fn(*args, **kwargs)
+        except ExperimentError as error:
+            raise HTTPException(status_code=409 if str(error).startswith(("ILLEGAL", "EXPERIMENT_EXISTS", "SHADOW_CANDIDATE_REFUSED")) else 422,
+                                detail=str(error))
+
+    @app.post("/research/experiments", dependencies=[Depends(require_api_key)])
+    def experiment_create(payload: dict):
+        return _experiment_call(experiments.create, payload.get("config") or {}, experiment_id=payload.get("experiment_id"),
+                                actor=str(payload.get("actor") or "API"))
+
+    @app.post("/research/experiments/{experiment_id}/status", dependencies=[Depends(require_api_key)])
+    def experiment_status(experiment_id: str, payload: dict):
+        return _experiment_call(experiments.transition, experiment_id, str(payload.get("status") or ""), results=payload.get("results"),
+                                confidence_intervals=payload.get("confidence_intervals"), promotion_status=payload.get("promotion_status"),
+                                note=payload.get("note"), actor=str(payload.get("actor") or "API"))
+
+    @app.get("/research/experiments", dependencies=[Depends(require_api_key)])
+    def experiment_list(status: str = None, limit: int = 100):
+        return {"experiments": experiments.list(status=status, limit=min(max(limit, 1), 500)), "statuses": list(EXPERIMENT_STATUSES)}
+
+    @app.get("/research/experiments/{experiment_id}", dependencies=[Depends(require_api_key)])
+    def experiment_get(experiment_id: str):
+        found = experiments.history(experiment_id)
+        if found is None:
+            raise HTTPException(status_code=404, detail="UNKNOWN_EXPERIMENT")
+        return found
 
     @app.post("/paper/hindsight", dependencies=[Depends(require_api_key)])
     def record_hindsight(payload: dict):
