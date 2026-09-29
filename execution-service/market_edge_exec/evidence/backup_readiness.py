@@ -124,8 +124,9 @@ def assess(paper_db: Optional[str], shadow_db: Optional[str]) -> dict:
         _gate("#25", "MAJOR 4 paper adaptive exit rollout", bool(passing),
               f"{ex_have}; passing policies: {', '.join(passing) or 'none'}", f"a 3H PASS (bar {bar['version']})",
               "READY means a policy passed 3H; activating PAPER mode is still a separate owner decision."),
-        _gate("#26", "MAJOR 5 forward data diagnostic batch", diagnostic is not None,
-              "shadow database present" if diagnostic else "no shadow database in this backup", "a backup that includes the shadow database",
+        _gate("#26", "MAJOR 5 forward data diagnostic batch", bool(diagnostic) and diagnostic["evidence"]["counts"]["resolved_candidates"] > 0,
+              (f"shadow database with {diagnostic['evidence']['counts']['resolved_candidates']} resolved candidates" if diagnostic
+               else "no shadow database in this backup"), "a shadow database holding resolved forward data",
               (f"diagnostic evidence {'SUFFICIENT' if diagnostic['evidence']['sufficient'] else 'INSUFFICIENT'}"
                + ("" if diagnostic["evidence"]["sufficient"] else ": " + "; ".join(diagnostic["evidence"]["missing"]))) if diagnostic else None),
         _gate("#27", "MAJOR 6 forward risk sizing review", bool(sizing) and sizing["verdict"] != "INSUFFICIENT_EVIDENCE",

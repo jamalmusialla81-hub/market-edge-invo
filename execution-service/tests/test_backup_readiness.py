@@ -113,3 +113,9 @@ def test_cli_prints_the_gate_table(tmp_path, dbs, capsys):
     assert BR.main([make_backup(tmp_path, paper, shadow)]) == 0
     out = capsys.readouterr().out
     assert "#26  READY" in out and "#29  NOT_ASSESSABLE" in out
+
+
+def test_an_empty_shadow_database_does_not_make_major5_ready(tmp_path):
+    paper, shadow = str(tmp_path / "p.sqlite3"), str(tmp_path / "s.sqlite3")
+    create_app(db_path=paper, shadow_db_path=shadow)
+    assert status(BR.run(make_backup(tmp_path, paper, shadow)))["#26"] == "BLOCKED"

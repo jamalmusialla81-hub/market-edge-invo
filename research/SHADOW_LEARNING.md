@@ -401,7 +401,7 @@ databases to a scratch directory, and opens them read-only. It then runs the
 3H exit evaluation, the V2 sizing review (`evaluation/sizing_review.py`) and the
 forward diagnostic (`analysis/forward_diagnostic.py`). The report's gate table
 shows READY or BLOCKED, with have-vs-need counts, for #25 (a 3H PASS), #26 (a
-shadow database is present), #27 (the sizing review's floor) and #28 (3H's
+shadow database holding resolved forward data), #27 (the sizing review's floor) and #28 (3H's
 floor). #29 always shows NOT_ASSESSABLE, since a backup holds no L2 data. Every
 status comes from those modules' own counts and verdicts. It flips no issue and
 activates nothing. Keep the backup and the `--out` directory out of the repo.
