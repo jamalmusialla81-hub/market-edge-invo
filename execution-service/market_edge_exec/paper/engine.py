@@ -14,11 +14,13 @@ slippage assumptions production's forward engine uses (lifecycle.py).
 """
 from __future__ import annotations
 
+import os
 import threading
 import time
 from dataclasses import dataclass, field
 from typing import Callable, Optional
 
+from market_edge_exec.exits.shadow import ExitShadow
 from market_edge_exec.domain.contracts import AlphaSignal, ContractError, ExecutionIntent, RiskDecision
 from market_edge_exec.paper import lifecycle
 from market_edge_exec.paper.ledger import PaperLedger
@@ -130,6 +132,15 @@ class PaperEngine:
         # trade's lifecycle happens under this lock so neither overwrites the
         # other's exit or excursion update.
         self._lifecycle_lock = threading.RLock()
+        # Adaptive Exit Manager V1 (MAJOR 3): RESEARCH ONLY. Records what this
+        # engine observes and replays counterfactual exit policies beside it.
+        # It only reads the trade dict, never writes a trade, and every call is
+        # isolated so it cannot affect a real exit. MARKET_EDGE_EXIT_SHADOW=0 turns it off.
+        self.exit_shadow = ExitShadow(ledger) if os.environ.get("MARKET_EDGE_EXIT_SHADOW", "1") != "0" else None
+
+    def _shadow(self, label: str, method: str, *args) -> None:
+        if self.exit_shadow is not None:
+            self.exit_shadow.safe(label, getattr(self.exit_shadow, method), *args)
 
     def monitor_max_price_age_s(self) -> float:
         entry_guard = self._max_mark_age_provider() if self._max_mark_age_provider else MAX_MARK_AGE_SECONDS
@@ -399,6 +410,7 @@ class PaperEngine:
                 trade["direction"], trade["entry_fill"], trade["stop"], trade["tp1"], trade["tp2"], trade["remaining_qty"],
                 trade["quantity"], trade["tp1_hit"], trade["opened_at_ms"], fresh, now_ms,
             )
+            self._shadow("record_candles", "record_candles", trade, fresh, now_ms)
             result.exits = self._route_exits(trade, instrument, events, "CANDLE_5M")
             last_close = fresh[-1]["close"]
             if trade["status"] != "CLOSED":
@@ -406,6 +418,7 @@ class PaperEngine:
                 trade["last_checked_ms"] = fresh[-1]["time"]
                 self._refresh_unrealized(trade)
                 self.ledger.save(trade)
+            self._shadow("update", "update", trade, trade["status"] == "CLOSED")
             result.mark_price = last_close
         self.ledger.record_equity(now_ms)
         return result
@@ -455,10 +468,13 @@ class PaperEngine:
                     trade["direction"], trade["entry_fill"], trade["stop"], trade["tp1"], trade["tp2"], trade["remaining_qty"],
                     trade["quantity"], trade["tp1_hit"], trade["opened_at_ms"], float(price), at_ms,
                 )
+                self._shadow("record_tick", "record_tick", trade, float(price), at_ms, observed_high if _finite_positive(observed_high) else None,
+                             observed_low if _finite_positive(observed_low) else None, now_ms)
             result.exits = self._route_exits(trade, instrument, events, trigger, observed_price=float(price))
             if trade["status"] != "CLOSED":
                 self._refresh_unrealized(trade)
                 self.ledger.save(trade)
+            self._shadow("update", "update", trade, trade["status"] == "CLOSED")
             result.price, result.monitor_status = float(price), trade.get("monitor_status")
         if result.exits:
             self.ledger.record_equity(now_ms)

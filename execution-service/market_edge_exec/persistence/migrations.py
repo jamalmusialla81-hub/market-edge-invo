@@ -197,7 +197,8 @@ def inspect_database(path: str, directory: Optional[Path] = None) -> dict:
             tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
             counts = {t: conn.execute(f"SELECT count(*) FROM {t}").fetchone()[0]
                       for t in ("paper_trades", "paper_signals", "paper_equity", "positions",
-                                "risk_sizing_decisions", "risk_sizing_outcomes") if t in tables}
+                                "risk_sizing_decisions", "risk_sizing_outcomes",
+                                "exit_path_observations", "exit_policy_counterfactuals") if t in tables}
             policies = sorted(r[0] for r in conn.execute("SELECT DISTINCT policy_version FROM risk_sizing_decisions")) \
                 if "risk_sizing_decisions" in tables else []
             equity = conn.execute("SELECT starting_equity FROM paper_account WHERE id = 1").fetchone() if "paper_account" in tables else None

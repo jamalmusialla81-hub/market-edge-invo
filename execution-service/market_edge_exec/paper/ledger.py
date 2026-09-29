@@ -19,6 +19,7 @@ import time
 from contextlib import closing
 from typing import Optional
 
+from market_edge_exec.exits.store import DDL as EXIT_DDL
 from market_edge_exec.risk.engine import AccountState
 
 DEFAULT_STARTING_EQUITY = 10_000.0
@@ -116,6 +117,7 @@ class PaperLedger:
         self.path = path
         with closing(self._connect()) as conn:
             conn.executescript(SCHEMA)
+            conn.executescript(EXIT_DDL)
             conn.execute("INSERT OR IGNORE INTO paper_account (id, starting_equity, created_at) VALUES (1, ?, ?)",
                          (starting_equity, time.time()))
             conn.commit()

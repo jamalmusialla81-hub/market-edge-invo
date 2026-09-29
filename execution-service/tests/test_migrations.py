@@ -82,13 +82,13 @@ def test_legacy_database_is_backed_up_then_migrated_with_data_preserved(tmp_path
     app = create_app(db_path=str(db))
     report = app.state.migration
     assert report.from_version == 0 and report.to_version == migrations.target_version()
-    assert report.applied == ["0001_baseline", "0002_schema_history_and_indexes", "0003_risk_sizing_v2"]
+    assert report.applied == ["0001_baseline", "0002_schema_history_and_indexes", "0003_risk_sizing_v2", "0004_exit_shadow"]
     assert _rows(db) == before
     backup = Path(report.backup_path)
     assert backup.is_file() and backup.parent == tmp_path / "backups"
     assert migrations.current_version(str(backup)) == 0 and _rows(backup) == before
     with closing(sqlite3.connect(db)) as conn:
-        assert [r[0] for r in conn.execute("SELECT version FROM schema_history ORDER BY version")] == [1, 2, 3]
+        assert [r[0] for r in conn.execute("SELECT version FROM schema_history ORDER BY version")] == [1, 2, 3, 4]
     # the service still reads the migrated data
     client = TestClient(app, headers={"X-API-Key": KEY})
     assert client.get("/risk/config").json()["starting_equity"] == 25000

@@ -24,6 +24,10 @@ from market_edge_exec.control.settings import BOUNDS as SETTINGS_BOUNDS, Control
 from market_edge_exec.domain.contracts import ContractError, ExecutionIntent
 from market_edge_exec.hummingbot.factory import build_hummingbot_client
 from market_edge_exec.nautilus.portfolio import NautilusPortfolio
+from market_edge_exec.exits import EXIT_MANAGER_VERSION
+from market_edge_exec.exits.evaluation import evaluate as evaluate_exit_policies, render_markdown as render_exit_report
+from market_edge_exec.exits.policies import POLICY_REGISTRY_VERSION, registry_view as exit_policy_view
+from market_edge_exec.exits.store import ExitStore
 from market_edge_exec.paper.candles import CachedCandleFetcher, hyperliquid_fetcher, trade_candles
 from market_edge_exec.paper.engine import PaperEngine
 from market_edge_exec.paper.trade_detail import HINDSIGHT_FIELDS, build_trade_detail, monitor_status
@@ -432,6 +436,27 @@ def create_app(db_path: str = "market_edge_exec.sqlite3", hummingbot_mode: str =
     @app.get("/paper/trade/candles", dependencies=[Depends(require_api_key)])
     def trade_chart_candles(trade_id: str, interval: str = "5m"):
         return trade_candles(_trade_or_404(trade_id), interval, int(time.time() * 1000), app.state.candle_fetcher)
+
+    # ---- Adaptive Exit Manager V1 (MAJOR 3): research only, read only ------------------
+    exit_store = ExitStore(ledger._connect)
+    EXIT_LABEL = "RESEARCH ONLY · COUNTERFACTUAL · NOT AN ACTUAL FILL · NOT USED FOR EXECUTION"
+
+    @app.get("/research/exit-policies", dependencies=[Depends(require_api_key)])
+    def exit_policy_registry():
+        return {"label": EXIT_LABEL, "manager_version": EXIT_MANAGER_VERSION, "registry_version": POLICY_REGISTRY_VERSION,
+                "policies": exit_policy_view(), "records": exit_store.counts(), "authoritative": False}
+
+    @app.get("/research/exit-policies/trade", dependencies=[Depends(require_api_key)])
+    def exit_policy_trade(trade_id: str):
+        trade = _trade_or_404(trade_id)
+        rows = exit_store.load(trade["trade_id"])
+        return {"label": EXIT_LABEL, "trade_id": trade["trade_id"], "trade_status": trade["status"],
+                "counterfactuals": {name: {"finalized": r["finalized"], **r["record"]} for name, r in sorted(rows.items())}}
+
+    @app.get("/research/exit-policies/evaluation", dependencies=[Depends(require_api_key)])
+    def exit_policy_evaluation():
+        result = evaluate_exit_policies(exit_store.finalized_records())
+        return {"label": EXIT_LABEL, **result, "markdown": render_exit_report(result)}
 
     @app.post("/paper/hindsight", dependencies=[Depends(require_api_key)])
     def record_hindsight(payload: dict):
