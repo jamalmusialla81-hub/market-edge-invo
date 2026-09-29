@@ -20,6 +20,11 @@ on:
       leverage_rotation:
         description: 'Endurance only: requested paper leverage rotation; risk approves or walks it down per trade'
         default: '1,2,3,5,10'
+  # Daily forward-paper evidence (Jakob, 2026-09-29): one ~1-hour endurance
+  # segment (12 cycles at the 5-minute cadence) continuing the cached paper
+  # session. Only the endurance job runs on this trigger.
+  schedule:
+    - cron: '0 14 * * *'
   push:
     branches: ['claude/**']
     paths:
@@ -44,6 +49,7 @@ jobs:
   nautilus-matrix:
     name: Nautilus (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
+    if: github.event_name != 'schedule'
     strategy:
       fail-fast: false
       matrix:
@@ -131,6 +137,7 @@ jobs:
   hummingbot-docker:
     name: Hummingbot container + bridge (Docker)
     runs-on: ubuntu-latest
+    if: github.event_name != 'schedule'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -284,6 +291,7 @@ jobs:
   binance-testnet:
     name: Binance USDT-M Futures Testnet connectivity (conditional on secrets)
     runs-on: ubuntu-latest
+    if: github.event_name != 'schedule'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -311,6 +319,7 @@ jobs:
   node-tests:
     name: Node production test suite (must stay green — proves no production impact)
     runs-on: ubuntu-latest
+    if: github.event_name != 'schedule'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -398,9 +407,9 @@ jobs:
           retention-days: 90
 
   endurance-harness:
-    name: Forward-paper endurance segment ${{ matrix.segment }} (manual trigger; persistent state via cache)
+    name: Forward-paper endurance segment ${{ matrix.segment }} (manual or daily; persistent state via cache)
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
     timeout-minutes: 360
     # One writer at a time: overlapping segments would race on the saved state.
     concurrency:
