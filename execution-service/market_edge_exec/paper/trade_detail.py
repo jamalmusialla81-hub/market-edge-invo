@@ -85,6 +85,8 @@ def live_metrics(trade: dict, now_ms: int, max_age_s: float) -> dict:
         "distance_to_tp1": None if trade["tp1_hit"] or trade["status"] == "CLOSED" else room_to_target(trade["tp1"]),
         "distance_to_tp2": None if trade["status"] == "CLOSED" else room_to_target(trade["tp2"]),
         "best_price": best, "worst_price": worst,
+        "best_price_at_ms": trade.get("best_price_at_ms"), "best_price_precision": trade.get("best_price_precision"),
+        "worst_price_at_ms": trade.get("worst_price_at_ms"), "worst_price_precision": trade.get("worst_price_precision"),
         "mfe": {"price": fav, "pct": _pct(fav, entry), "usd": fav * qty, "r": mfe_r},
         "mae": {"price": adv, "pct": _pct(adv, entry), "usd": adv * qty, "r": (adv / per_unit_risk) if per_unit_risk else None},
         "position_age_s": ((trade.get("closed_at_ms") or now_ms) - trade["opened_at_ms"]) / 1000.0,

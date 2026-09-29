@@ -95,9 +95,18 @@ export interface LiveMetrics {
   monitor: { status: MonitorStatus; detail: string | null; price: number | null; price_at_ms: number | null; price_source: string | null; price_age_s: number | null; max_price_age_s: number };
   current_price: number | null; unrealized_pnl: number | null; unrealized_r: number | null; active_stop: number;
   distance_to_stop: Distance | null; distance_to_tp1: Distance | null; distance_to_tp2: Distance | null;
-  best_price: number; worst_price: number; mfe: Excursion; mae: Excursion; position_age_s: number; remaining_qty: number; milestones: Milestones;
+  best_price: number; worst_price: number; best_price_at_ms?: number | null; best_price_precision?: string | null;
+  worst_price_at_ms?: number | null; worst_price_precision?: string | null; mfe: Excursion; mae: Excursion; position_age_s: number; remaining_qty: number; milestones: Milestones;
   /** Display-only profit-giveback view of the trade's own live figures (computed in the backend). */
   giveback?: Giveback;
+}
+/** One candidate exit policy replayed beside a real trade. RESEARCH ONLY: a counterfactual, never a fill. */
+export interface ExitCounterfactual {
+  finalized: number; status: 'EXITED' | 'OPEN' | string; counterfactual_exit_time: number | null; counterfactual_exit_price: number | null;
+  counterfactual_R: number | null; reason: string | null; observations: number;
+}
+export interface ExitCounterfactuals {
+  label: string; trade_id: string; trade_status: string; counterfactuals: Record<string, ExitCounterfactual>;
 }
 export interface Giveback {
   /** Most favourable price since entry: the HIGHEST for a long, the LOWEST for a short. */
@@ -272,6 +281,7 @@ export const api = {
   inspectBackup: () => invoke<{ cancelled?: boolean; path?: string; manifest?: BackupManifest; validation?: Record<string, unknown> }>('inspect_backup'),
   restoreBackup: (confirm: string) => invoke<{ restored: string; previous_database_kept_at: string | null; reconciled: boolean }>('restore_backup', { confirm }),
   setMode: (mode: Mode) => invoke<Mode>('set_mode', { mode }),
+  exitCounterfactuals: (tradeId: string) => invoke<ExitCounterfactuals>('get_exit_counterfactuals', { tradeId }),
   rateLimit: () => invoke<RateLimitDiagnostics>('get_rate_limit'),
   shadowSummary: () => invoke<ShadowSummary>('get_shadow_summary'),
   shadowObservations: (filter: { limit?: number; kind?: string; execution_status?: string; classification?: string } = {}) =>

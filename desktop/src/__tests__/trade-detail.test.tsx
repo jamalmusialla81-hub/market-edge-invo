@@ -12,7 +12,7 @@ import { appInfoFixture, candleSetFixture, healthFixture, positionFixture, trade
 
 afterEach(() => { cleanup(); invoke.mockReset(); });
 
-function backend(detail = () => tradeDetailFixture(), candles = () => candleSetFixture()) {
+function backend(detail = () => tradeDetailFixture(), candles = () => candleSetFixture(), cf: () => unknown = () => ({ label: 'RESEARCH ONLY', trade_id: 'scan-abc-ETH', trade_status: 'OPEN', counterfactuals: {} })) {
   invoke.mockImplementation(async (cmd: string) => {
     switch (cmd) {
       case 'app_info': return appInfoFixture;
@@ -21,6 +21,7 @@ function backend(detail = () => tradeDetailFixture(), candles = () => candleSetF
       case 'get_trades': return { trades: [{ ...tradeFixture, trade_id: 'scan-abc-ETH' }] };
       case 'get_trade_detail': return detail();
       case 'get_trade_candles': return candles();
+      case 'get_exit_counterfactuals': return cf();
       default: return null;
     }
   });
@@ -202,5 +203,64 @@ describe('profit giveback (SIDE 2)', () => {
     backend();
     render(<TradeDetailView tradeId="scan-abc-ETH" onBack={() => {}} />);
     expect(await screen.findByLabelText('Profit giveback')).toBeInTheDocument();
+  });
+});
+
+describe('chart polish and exit-policy overlay (#33, #32)', () => {
+  it('draws MFE / PEAK and MAE markers at the right height, apart from the real markers', async () => {
+    backend();
+    const { container } = render(<TradeDetailView tradeId="scan-abc-ETH" onBack={() => undefined} />);
+    await screen.findByRole('img', { name: 'ETH LONG trade chart' });
+    const mfe = container.querySelector('[data-excursion="MFE"] circle')!;
+    const mae = container.querySelector('[data-excursion="MAE"] circle')!;
+    expect(mfe).not.toBeNull();
+    expect(Number(mfe.getAttribute('cy'))).toBeLessThan(Number(mae.getAttribute('cy')));   // 111 (best) is above 97 (worst)
+    expect(container.querySelector('[data-excursion="MFE"] text')!.textContent).toBe('MFE/PEAK');
+    expect(container.querySelector('[data-excursion="MFE"] title')!.textContent).toMatch(/time reached not recorded/);
+    expect(container.querySelectorAll('[data-marker]')).toHaveLength(1);   // real markers untouched
+    expect(container.querySelectorAll('[data-tick]').length).toBe(3);
+    expect(container.querySelector('[data-current-tag]')).not.toBeNull();
+  });
+  it('places the MFE marker at the time it was reached when the backend knows it', async () => {
+    const t0 = 1_790_000_000_000;
+    backend(() => {
+      const d = tradeDetailFixture();
+      d.live.best_price_at_ms = t0 + 1_800_000; d.live.best_price_precision = 'CANDLE_CLOSE_BOUND';
+      return d;
+    });
+    const { container } = render(<TradeDetailView tradeId="scan-abc-ETH" onBack={() => undefined} />);
+    await screen.findByRole('img', { name: 'ETH LONG trade chart' });
+    expect(container.querySelector('[data-excursion="MFE"] title')!.textContent).toMatch(/CANDLE_CLOSE_BOUND/);
+  });
+  it('exit-policy overlay is off by default and nothing is fetched until it is switched on', async () => {
+    backend(() => tradeDetailFixture({ open: false }), undefined, () => ({
+      label: 'RESEARCH ONLY', trade_id: 'scan-abc-ETH', trade_status: 'CLOSED',
+      counterfactuals: {
+        'BREAKEVEN_V1_R0.5': { finalized: 1, status: 'EXITED', counterfactual_exit_time: 1_790_000_000_000 + 4_000_000, counterfactual_exit_price: 104.2, counterfactual_R: 0.31, reason: 'POLICY_STOP', observations: 20 },
+        TIME_DECAY_V1_H12: { finalized: 1, status: 'OPEN', counterfactual_exit_time: null, counterfactual_exit_price: null, counterfactual_R: null, reason: null, observations: 20 },
+      },
+    }));
+    const { container } = render(<TradeDetailView tradeId="scan-abc-ETH" onBack={() => undefined} />);
+    await screen.findByRole('img', { name: 'ETH LONG trade chart' });
+    expect(container.querySelector('[data-counterfactual]')).toBeNull();
+    expect(screen.queryByText(/NOT AN ACTUAL FILL/)).toBeNull();
+    expect(invoke).not.toHaveBeenCalledWith('get_exit_counterfactuals', expect.anything());
+    fireEvent.click(screen.getByLabelText(/SHOW EXIT-POLICY COUNTERFACTUALS/));
+    expect(await screen.findByText(/NOT AN ACTUAL FILL/)).toBeInTheDocument();
+    expect(await screen.findByText('BREAKEVEN_V1_R0.5')).toBeInTheDocument();
+    // only the policy that exited is drawn, as its own marker type, never as a real one
+    expect(container.querySelectorAll('[data-counterfactual]')).toHaveLength(1);
+    expect(container.querySelector('[data-counterfactual="BREAKEVEN_V1_R0.5"] title')!.textContent).toMatch(/COUNTERFACTUAL · NOT A FILL/);
+    expect(container.querySelector('[data-counterfactual]')!.getAttribute('data-marker')).toBeNull();
+    expect(container.querySelectorAll('[data-marker]')).toHaveLength(3);   // ENTRY, TP1, BREAKEVEN_STOP: unchanged
+    expect(screen.getByText('still open')).toBeInTheDocument();
+  });
+  it('shows a graceful empty state for a trade with no counterfactuals', async () => {
+    backend();
+    const { container } = render(<TradeDetailView tradeId="scan-abc-ETH" onBack={() => undefined} />);
+    await screen.findByRole('img', { name: 'ETH LONG trade chart' });
+    fireEvent.click(screen.getByLabelText(/SHOW EXIT-POLICY COUNTERFACTUALS/));
+    expect(await screen.findByText(/No counterfactual records for this trade/)).toBeInTheDocument();
+    expect(container.querySelector('[data-counterfactual]')).toBeNull();
   });
 });

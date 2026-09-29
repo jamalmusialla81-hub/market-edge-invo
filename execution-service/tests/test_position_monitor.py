@@ -458,3 +458,4 @@ def test_candle_bound_is_candle_close_and_survives_restart(db):
     assert r["best_price_at_ms"] == t["best_price_at_ms"] and r["worst_price_at_ms"] == t["worst_price_at_ms"]
     live = TestClient(restarted).get("/paper/trade", params={"trade_id": "sig-1"}, headers=HEADERS).json()["live"]
     assert live["giveback"]["time_since_mfe_precision"] == "CANDLE_CLOSE_BOUND"
+    assert live["best_price_at_ms"] == t["best_price_at_ms"] and live["worst_price_precision"] == "CANDLE_CLOSE_BOUND"

@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useState } from 'react';
 import { api, CandleInterval, Distance, Excursion, TradeDetail } from '../api';
-import { CandleChart, HindsightLine } from '../components/CandleChart';
+import { CandleChart, CounterfactualPoint, ExcursionPoint, HindsightLine } from '../components/CandleChart';
 import { Badge, ErrorBanner, Panel, Stat, usePoll } from '../components/ui';
 import { ago, DASH, duration, lev, num, pct, price, qty, tone, ts, usd } from '../format';
 import { TradeRiskSizingView } from './RiskSizing';
@@ -38,6 +38,34 @@ export function GivebackStats({ g, open }: { g: NonNullable<TradeDetail['live'][
   );
 }
 
+/** Labelled list of the counterfactual exits. Never styled or worded as a fill. */
+export function ExitCounterfactualNote({ data, error }: { data: import('../api').ExitCounterfactuals | null; error: string | null }) {
+  const rows = data ? Object.entries(data.counterfactuals) : [];
+  return (
+    <div className="cf-note" role="note">
+      <b>RESEARCH ONLY · COUNTERFACTUAL · NOT AN ACTUAL FILL.</b> Alternative exit policies replayed on the prices seen during this trade; they never changed the real exits and used no capital. Hollow diamonds on the chart mark where each would have exited. No policy has been shown to work.
+      {error && <div className="neg small">Could not load counterfactuals: {error}</div>}
+      {data && !rows.length && <div className="muted small">No counterfactual records for this trade (it was opened before exit shadowing existed, or the switch is off).</div>}
+      {rows.length > 0 && (
+        <table className="compact">
+          <thead><tr><th>Policy</th><th>Would have</th><th>At</th><th>Price</th><th>R (after fees)</th></tr></thead>
+          <tbody>
+            {rows.map(([name, r]) => (
+              <tr key={name} data-counterfactual-row={name}>
+                <td className="mono small">{name}</td>
+                <td className="small">{r.status === 'EXITED' ? `exited (${r.reason ?? DASH})` : 'still open'}</td>
+                <td className="nowrap small">{r.counterfactual_exit_time ? ts(r.counterfactual_exit_time) : DASH}</td>
+                <td className="num">{r.counterfactual_exit_price === null ? DASH : price(r.counterfactual_exit_price)}</td>
+                <td className={`num ${tone(r.counterfactual_R)}`}>{r.counterfactual_R === null ? DASH : `${num(r.counterfactual_R, 2)}R`}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
 export function MonitorBanner({ d }: { d: TradeDetail }) {
   if (!d.is_open) return null;
   const m = d.live.monitor;
@@ -59,11 +87,15 @@ export function TradeDetailView({ tradeId, onBack, pollMs = 2000, candlePollMs =
 }) {
   const [interval, setIntervalSel] = useState<CandleInterval>('5m');
   const [showHindsight, setShowHindsight] = useState(false);
+  const [showExitCf, setShowExitCf] = useState(false);
   const detail = usePoll(() => api.tradeDetail(tradeId), pollMs, [tradeId]);
   const d = detail.data;
   // Open trades refresh their candles while the view is open; a closed
   // trade's window is fixed, so it is read once per timeframe.
   const candles = usePoll(() => api.tradeCandles(tradeId, interval), d && !d.is_open ? 24 * 3_600_000 : candlePollMs, [tradeId, interval, d?.is_open]);
+
+  // Counterfactual exits are read only when the overlay is switched on; off by default.
+  const cf = usePoll(() => (showExitCf ? api.exitCounterfactuals(tradeId) : Promise.resolve(null)), 15000, [tradeId, showExitCf]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onBack(); };
@@ -83,6 +115,14 @@ export function TradeDetailView({ tradeId, onBack, pollMs = 2000, candlePollMs =
     ? Object.entries(hs.levels).filter(([, v]) => typeof v === 'number').map(([k, v]) => ({ key: k, label: HINDSIGHT_LABELS[k] ?? k, price: v as number }))
     : [];
   const cs = candles.data;
+  const excursions = ([
+    { kind: 'MFE', price: live.best_price, at_ms: live.best_price_at_ms ?? null, precision: live.best_price_precision },
+    { kind: 'MAE', price: live.worst_price, at_ms: live.worst_price_at_ms ?? null, precision: live.worst_price_precision },
+  ] as ExcursionPoint[]).filter((e) => Number.isFinite(e.price) && e.price !== dec.entry_price);
+  const cfRows = showExitCf && cf.data ? Object.entries(cf.data.counterfactuals) : [];
+  const cfPoints: CounterfactualPoint[] = cfRows
+    .filter(([, r]) => r.status === 'EXITED' && typeof r.counterfactual_exit_price === 'number' && typeof r.counterfactual_exit_time === 'number')
+    .map(([name, r]) => ({ key: name, label: name, price: r.counterfactual_exit_price as number, at_ms: r.counterfactual_exit_time as number, r: r.counterfactual_R }));
   const netR = dec.risk_amount ? d.net_pnl / dec.risk_amount : null;
 
   return (
@@ -131,19 +171,25 @@ export function TradeDetailView({ tradeId, onBack, pollMs = 2000, candlePollMs =
             <input type="checkbox" checked={showHindsight} disabled={!hs.available} onChange={(e) => setShowHindsight(e.target.checked)} />
             SHOW RESEARCH OVERLAY
           </label>
+          <label className="hindsight-toggle cf-toggle" title="Alternative exits replayed beside this trade. Research only; never a fill.">
+            <input type="checkbox" checked={showExitCf} onChange={(e) => setShowExitCf(e.target.checked)} />
+            SHOW EXIT-POLICY COUNTERFACTUALS
+          </label>
         </div>
       }>
         <ErrorBanner error={candles.error} />
         {cs && !cs.available && <div className="chart-empty">Candles unavailable ({cs.reason}). {cs.reason === 'RANGE_TOO_LARGE_FOR_INTERVAL' ? 'Pick a coarser timeframe.' : 'Nothing is drawn in their place.'}</div>}
         {cs?.available && (
           <CandleChart label={`${dec.asset} ${dir} trade chart`} candles={cs.candles} interval={interval} levels={d.levels} markers={d.markers}
-            currentPrice={d.is_open ? live.current_price : null} hindsight={hindsightLines} />
+            currentPrice={d.is_open ? live.current_price : null} hindsight={hindsightLines}
+            excursions={excursions} counterfactuals={cfPoints} />
         )}
         {!cs && !candles.error && <div className="muted">Loading candles…</div>}
         <div className="muted small chart-foot">
           {cs ? <>Source {cs.source} ({cs.coin}) · {ts(cs.start_ms)} → {ts(cs.end_ms)}{d.is_open ? ` · refreshes every ${Math.round(candlePollMs / 1000)}s` : ''}. </> : null}
           {dec.direction === 'long' ? 'LONG: stop below entry, targets above; entry is a BUY, exits are SELLs.' : 'SHORT: stop above entry, targets below; entry is a SELL, exits are BUYs.'}
         </div>
+        {showExitCf && <ExitCounterfactualNote data={cf.data} error={cf.error} />}
         {showHindsight && hs.available && (
           <div className="hindsight-note" role="note"><b>POST-OUTCOME / HINDSIGHT.</b> {hs.label}. Source {hs.source}, resolved {ts(hs.resolved_at_ms)}. Shown for research only; it never changes the original trade record.</div>
         )}

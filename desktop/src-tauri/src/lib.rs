@@ -134,6 +134,11 @@ fn with_query(path: &str, params: &[(&str, &str)]) -> String {
 async fn get_trade_detail(state: tauri::State<'_, AppState>, trade_id: String) -> CmdResult<Value> {
     state.get(&with_query("/paper/trade", &[("trade_id", &trade_id)])).await
 }
+// Adaptive-exit counterfactuals for one trade (RESEARCH ONLY; read-only).
+#[tauri::command]
+async fn get_exit_counterfactuals(state: tauri::State<'_, AppState>, trade_id: String) -> CmdResult<Value> {
+    state.get(&with_query("/research/exit-policies/trade", &[("trade_id", &trade_id)])).await
+}
 #[tauri::command]
 async fn get_trade_candles(state: tauri::State<'_, AppState>, trade_id: String, interval: String) -> CmdResult<Value> {
     state.get(&with_query("/paper/trade/candles", &[("trade_id", &trade_id), ("interval", &interval)])).await
@@ -910,6 +915,7 @@ pub fn run() {
             get_positions,
             get_trades,
             get_trade_detail,
+            get_exit_counterfactuals,
             get_trade_candles,
             get_signals,
             get_performance,
