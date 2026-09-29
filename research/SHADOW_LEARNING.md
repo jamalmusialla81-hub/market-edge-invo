@@ -328,3 +328,16 @@ ranking models, risk sizing, adaptive exits and strategy variants: RESEARCH -> S
   NO_EVIDENCE); thin evidence retains and is never counted as support; a drift or strategy-health ALERT only recommends.
 - API under `/research/lifecycle/policies`. MAJOR 4 and MAJOR 6 are not retrofitted here (their own mode flags are untouched); they can
   report through this once their own issues are ready. Nothing in this module can start, size or place anything.
+
+## Replay / reproduction report (DATA 16)
+
+`market_edge_exec/replay/report.py`, `GET /research/replay?id=<trade|signal|scan id>`. Read-only (both databases opened `mode=ro`; a test
+proves the files are byte- and mtime-identical afterwards). Joins the paper ledger, sizing decisions, exit-policy counterfactuals and the
+shadow store on the shared signal_id: source commit, dataset/feature/generator/model versions, risk-policy version, exit-policy and manager
+versions, the stored decision-time inputs (hash-verified), the market price source/timestamp/age recorded per trade, and the post-entry price path count.
+
+- Every field is `{recorded: true, value}` or `{recorded: false, note}`; `gaps` lists every hole. Nothing is recomputed, so a field that was
+  never stored (older trades, no source_commit before DATA 1) is said to be missing and never approximated. Zero/False count as recorded.
+- Post-outcome research labels are not included (only whether they exist), so the report cannot be read back as decision-time input.
+- Raw candles are not stored anywhere, so the report shows the derived decision-time values exactly as stored and says the candles are not reconstructed.
+- Not yet checked against a real recent paper trade in Jakob's desktop app.
