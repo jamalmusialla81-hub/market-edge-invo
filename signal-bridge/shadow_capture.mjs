@@ -14,7 +14,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-export const FEATURE_VERSION = 'shadow-features-v1';
+export const FEATURE_VERSION = 'shadow-features-v2';   // v2 (DATA 14): adds basis_mark_oracle, basis_mid_oracle and derivatives_provenance; nothing removed
 const FIVE_MINUTES = 5 * 60 * 1000;
 
 function sourceHash(relative) {
@@ -70,11 +70,38 @@ export function marketFeatures(timeframes) {
   return out;
 }
 
+// A venue price only if it is really there: null, '' and non-positive values are missing, never 0.
+const price = (v) => (v === null || v === undefined || v === '' ? null : num(v) > 0 ? num(v) : null);
+// Relative gap between two venue prices; null (never an estimate) unless both are finite and the reference is positive.
+const relGap = (a, b) => (Number.isFinite(a) && Number.isFinite(b) && b > 0 ? round(a / b - 1) : null);
+
 export function derivatives(ctx) {
   if (!ctx) return null;
   const pick = (k) => round(num(ctx[k]));
+  const mark = price(ctx.markPx), oracle = price(ctx.oraclePx), mid = price(ctx.midPx);
   return { funding: pick('funding'), open_interest: pick('openInterest'), premium: pick('premium'), day_notional_volume: pick('dayNtlVlm'),
-    mark_px: pick('markPx'), oracle_px: pick('oraclePx'), prev_day_px: pick('prevDayPx') };
+    mark_px: pick('markPx'), oracle_px: pick('oraclePx'), prev_day_px: pick('prevDayPx'),
+    // DATA 14: basis against the venue's own oracle (Hyperliquid's oracle is a spot-index price). Same venue, same snapshot.
+    basis_mark_oracle: relGap(mark, oracle), basis_mid_oracle: relGap(mid, oracle) };
+}
+
+// Where each derivatives-context value came from, or why it is absent. Every populated value names its source
+// and inputs; every missing one says why. Nothing is estimated, interpolated or borrowed from another venue.
+export function derivativesProvenance(ctx) {
+  const source = 'HYPERLIQUID_metaAndAssetCtxs';
+  const d = derivatives(ctx);
+  const field = (name, formula, inputs) => (d && d[name] !== null
+    ? { status: 'OK', source, formula, inputs }
+    : { status: 'UNAVAILABLE', source, formula, inputs, reason: ctx ? 'INPUT_MISSING_OR_NON_POSITIVE_REFERENCE' : 'NO_VENUE_CONTEXT_FOR_ASSET' });
+  return {
+    source, captured: 'DECISION_TIME_SNAPSHOT',
+    basis_mark_oracle: field('basis_mark_oracle', 'markPx / oraclePx - 1', ['markPx', 'oraclePx']),
+    basis_mid_oracle: field('basis_mid_oracle', 'midPx / oraclePx - 1', ['midPx', 'oraclePx']),
+    // Not built, on purpose (DATA 14): no spot price for the asset in this feed, so perp/spot divergence would be
+    // the same number as the basis above; and no verified public liquidation feed exists in what the scan fetches.
+    perp_spot_divergence: { status: 'NOT_CAPTURED', reason: 'NOT_DISTINCT_FROM_BASIS_NO_SPOT_FEED_IN_SCAN_DATA' },
+    liquidation_context: { status: 'UNAVAILABLE', reason: 'NO_VERIFIED_PUBLIC_SOURCE_IN_SCAN_DATA' },
+  };
 }
 
 // Breadth and BTC context from the same scan -- every market's features are
@@ -153,7 +180,7 @@ export function buildShadowPayload(result, execution, { observationIntervalMs = 
     };
     const rankedRow = ranked.get(m.symbol);
     const productionState = supplement ? OUTSIDE_PRODUCTION_UNIVERSE : rankedRow?.market_geometry === 'COMPLETE' ? 'RANKED_WITH_GEOMETRY' : 'NO_TRADE';
-    const common = { market, features: featuresBySymbol[m.symbol], cross_market: cross, derivatives: derivatives(ctxs[m.symbol]),
+    const common = { market, features: featuresBySymbol[m.symbol], cross_market: cross, derivatives: derivatives(ctxs[m.symbol]), derivatives_provenance: derivativesProvenance(ctxs[m.symbol]),
       regime: pick.regime || rankedRow?.regime || null, provenance: { generator_version: GENERATOR_VERSION, feature_version: FEATURE_VERSION, scan_id: scanId, scan_scope: scope } };
     observations.push({ kind: 'MARKET_STATE', asset: m.symbol, coin: m.symbol, production_state: productionState,
       decision: { ...common, production: { rank: rankedRow?.rank ?? null, verdict: rankedRow?.strict_verdict ?? null, entry_status: rankedRow?.entry_status ?? null, candidates: cands.length } } });

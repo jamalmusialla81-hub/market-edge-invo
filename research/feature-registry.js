@@ -20,8 +20,8 @@
 
 const crypto = require('node:crypto');
 
-const FEATURE_SET_VERSION = 'FEATURE-SET-V1';
-const SHADOW_FEATURE_VERSION = 'shadow-features-v1';   // signal-bridge/shadow_capture.mjs FEATURE_VERSION this registry documents
+const FEATURE_SET_VERSION = 'FEATURE-SET-V2';
+const SHADOW_FEATURE_VERSION = 'shadow-features-v2';   // signal-bridge/shadow_capture.mjs FEATURE_VERSION this registry documents
 
 const CALC = Object.freeze({
   legacy: { file: 'backend/scan-core.mjs', function: 'features' },
@@ -96,6 +96,13 @@ for (const [name, src, range] of [['funding', 'funding', [-0.05, 0.05]], ['open_
   ['day_notional_volume', 'dayNtlVlm', [0, 1e13]], ['mark_px', 'markPx', [0, 1e9]], ['oracle_px', 'oraclePx', [0, 1e9]], ['prev_day_px', 'prevDayPx', [0, 1e9]]]) {
   derivs.push(entry({ name, path: `derivatives.${name}`, group: 'shadow_derivatives', calc: CALC.deriv, source_fields: [`metaAndAssetCtxs.${src}`], range,
     calc_note: `venue asset context field ${src}, rounded to 6 significant digits`, missing: 'OBJECT_NULL', timeframe: 'snapshot', lookback: 'snapshot at decision time', allowed_use: ALLOWED.shadow }));
+}
+// DATA 14 (added in FEATURE-SET-V2): basis against the venue's own oracle. NULL when an input is missing; never estimated.
+// Per-value provenance is captured beside the block as derivatives_provenance. No claim that these carry edge.
+for (const [name, formula, src, range] of [['basis_mark_oracle', 'markPx / oraclePx - 1', ['metaAndAssetCtxs.markPx', 'metaAndAssetCtxs.oraclePx'], [-0.2, 0.2]],
+  ['basis_mid_oracle', 'midPx / oraclePx - 1', ['metaAndAssetCtxs.midPx', 'metaAndAssetCtxs.oraclePx'], [-0.2, 0.2]]]) {
+  derivs.push(entry({ name, path: `derivatives.${name}`, group: 'shadow_derivatives', calc: CALC.deriv, source_fields: src, range,
+    calc_note: `${formula}, rounded to 6 significant digits; same venue, same snapshot`, missing: 'NULL', timeframe: 'snapshot', lookback: 'snapshot at decision time', allowed_use: ALLOWED.shadow }));
 }
 
 const cross = [];

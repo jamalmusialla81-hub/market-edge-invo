@@ -49,8 +49,8 @@ test('registry names are unique and every entry is complete', () => {
 });
 
 test('the registry cannot change without a FEATURE_SET_VERSION bump (pinned content hash)', () => {
-  assert.equal(R.FEATURE_SET_VERSION, 'FEATURE-SET-V1');
-  assert.equal(R.registryHash(), 'fce956921f87d83b5d671ed71449b1baa5a6828175d341221548d4b99535bb91',
+  assert.equal(R.FEATURE_SET_VERSION, 'FEATURE-SET-V2');
+  assert.equal(R.registryHash(), 'd5fbc35d7927c0104cfc96cecf22c00e14cf17d69d04cd04201676b2a4a63309',
     'registry content changed: bump FEATURE_SET_VERSION in research/feature-registry.js and update this pinned hash');
 });
 
@@ -90,7 +90,7 @@ test('shadow frame, derivatives and cross-market features are exactly what shado
   assert.deepEqual(Object.keys(all).sort(), ['d1', 'h1', 'h4', 'm15', 'm5']);
   assert.equal(frameFeatures(candles(29)), null, 'fewer than 30 candles omits the frame (FRAME_OMITTED)');
 
-  const ctx = { funding: 0.0001, openInterest: 5, premium: 0.001, dayNtlVlm: 9, markPx: 100, oraclePx: 100, prevDayPx: 99 };
+  const ctx = { funding: 0.0001, openInterest: 5, premium: 0.001, dayNtlVlm: 9, markPx: 100, oraclePx: 100, prevDayPx: 99, midPx: 100 };
   assert.deepEqual(new Set(Object.keys(derivatives(ctx))), new Set(R.FEATURES.filter((f) => f.group === 'shadow_derivatives').map((f) => f.name)));
   assert.equal(derivatives(null), null, 'no venue context is OBJECT_NULL');
 

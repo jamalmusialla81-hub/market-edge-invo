@@ -218,3 +218,13 @@ Findings while building it: the legacy vector **zero-fills** missing inputs (`??
 - A proposal is not applied. Additions still have to pass the fetch and usability checks (F1-F3, minimum development candidates). Approval is a human commit that adds a **new** dataset version (`proposeDatasetVersion`, status `PROPOSED`, not trainable); an existing version is never edited and a version name is never reused.
 - It does not change `signal-bridge/research_universe.mjs`; the forward shadow rotation list only changes by a human editing it, which its own test ties to the dataset manifest.
 - Not yet run against the live market list from this environment (no Coinbase access here); the first scheduled run is the manual-validation step.
+
+## Derivatives enrichment (DATA 14, shadow-features-v2 / FEATURE-SET-V2)
+
+Funding, open interest, premium, mark and oracle price were already captured. Added to the same decision-time `derivatives` block: `basis_mark_oracle` (`markPx / oraclePx - 1`) and `basis_mid_oracle` (`midPx / oraclePx - 1`), both against the venue's own oracle in the same snapshot. Each is `null` when an input is missing, empty, zero or non-numeric (a missing mid price is never read as 0). A new `derivatives_provenance` block beside it names the source and formula of every populated value and gives a reason for every missing one. The shadow feature version moved to `shadow-features-v2` and the registry to `FEATURE-SET-V2` (pinned hash updated); nothing was removed, and old rows keep their v1 stamp.
+
+Deliberately not built:
+- **Perp/spot divergence** as its own field. The scan data has no spot price for the asset, so it would be the same number as the basis; a proxy from another venue would break the same-venue rule.
+- **Liquidation context.** Nothing in the data the scan already fetches is a verified public liquidation feed, so it is recorded as `UNAVAILABLE` in the provenance block. It was not checked against the live Hyperliquid API from this environment (no access); if a trustworthy source is confirmed later it needs its own provenanced field.
+
+No claim that any of this adds edge. It is data for later experiments. Not yet checked on a real live observation from this environment.
