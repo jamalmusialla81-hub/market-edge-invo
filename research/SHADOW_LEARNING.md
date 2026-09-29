@@ -157,3 +157,19 @@ untouched.
   id and resolved/pending horizons, and its hindsight overlay uses the
   observation's post-outcome record only after the trade closed and the 72h
   window resolved.
+
+## DATA 1 gap closure (schema v2)
+
+Most of the field list was already captured; this closes the specific gaps. Additive only, no new trades, no change to candidate generation, ranking or the sealed holdout.
+
+| Gap | Where it lives now |
+| --- | --- |
+| Git SHA of the running build (distinct from the `generator_version` content hash) | `source_commit` on `shadow_scans`, `shadow_observations`, `forward_execution_quality` (shadow DB) and `risk_sizing_decisions` (paper DB). `dev` in a source checkout. Rows written before this change keep NULL; nothing is backfilled. |
+| Fees, slippage, latency to fill, stop overshoot | `forward_execution_quality` (shadow DB, immutable, one row per closed paper trade, first write wins). Copied from the paper ledger's own figures when the trade closes, never recomputed. `field_class = OUTCOME_EVENT`: it is only knowable after the fill, so the leakage guard refuses `execution_quality`, `latency_to_fill_ms`, `stop_overshoot`, `entry_slippage_cost`, `exit_fills` and `fees` as features. |
+| Time MFE / MAE were reached | `best_price_at_ms` / `worst_price_at_ms` and a precision label (`TICK`, `STREAM_EXTREME_BY_HEARTBEAT`, `CANDLE_CLOSE_BOUND`), carried in `forward_execution_quality.record` (from #41). |
+| Adaptive-exit counterfactuals | Already written by MAJOR 3 to `exit_policy_counterfactuals` (paper DB), keyed by trade id. No extra column was needed. |
+| One join key | `signal_id` (= paper `trade_id`) joins `forward_paper_executed`, `forward_execution_quality`, `risk_sizing_decisions`, `risk_sizing_outcomes`, `exit_policy_counterfactuals` and the paper trade. `forward_paper_executed.observation_id` / `scan_id` link back to the shadow observation and scan. `tests/test_data_ingestion.py` proves the join for one real trade and that a missing side is absent (NULL), not mismatched. |
+
+Two databases, one key: the shadow store and the paper ledger are separate SQLite files by design (the shadow store cannot reach the ledger), so the join is by value on `signal_id`, not a foreign key.
+
+A v1 shadow database upgrades in place (`ALTER TABLE ... ADD COLUMN`, nullable). A v1 backup is still a valid restore source; a newer-than-supported database is still refused.

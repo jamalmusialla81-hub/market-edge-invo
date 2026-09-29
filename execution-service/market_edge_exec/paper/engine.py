@@ -154,6 +154,17 @@ class PaperEngine:
         # isolated so it cannot affect a real exit. MARKET_EDGE_EXIT_SHADOW=0 turns it off.
         self.exit_shadow = ExitShadow(ledger) if os.environ.get("MARKET_EDGE_EXIT_SHADOW", "1") != "0" else None
 
+    def _closed(self, trade: dict) -> None:
+        """Optional research hook run once a paper trade has closed (set by the
+        app; used to copy execution quality into the research store). A failure
+        here is logged and can never touch the trade."""
+        hook = getattr(self, "on_trade_closed", None)
+        if hook is not None and trade.get("status") == "CLOSED":
+            try:
+                hook(dict(trade))
+            except Exception as error:  # noqa: BLE001
+                log_event("trade_closed_hook_error", reason=str(error)[:300])
+
     def _shadow(self, label: str, method: str, *args) -> None:
         if self.exit_shadow is not None:
             self.exit_shadow.safe(label, getattr(self.exit_shadow, method), *args)
@@ -438,6 +449,7 @@ class PaperEngine:
                 self._refresh_unrealized(trade)
                 self.ledger.save(trade)
             self._shadow("update", "update", trade, trade["status"] == "CLOSED")
+            self._closed(trade)
             result.mark_price = last_close
         self.ledger.record_equity(now_ms)
         return result
@@ -495,6 +507,7 @@ class PaperEngine:
                 self._refresh_unrealized(trade)
                 self.ledger.save(trade)
             self._shadow("update", "update", trade, trade["status"] == "CLOSED")
+            self._closed(trade)
             result.price, result.monitor_status = float(price), trade.get("monitor_status")
         if result.exits:
             self.ledger.record_equity(now_ms)

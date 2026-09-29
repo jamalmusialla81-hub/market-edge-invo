@@ -19,7 +19,8 @@ import json
 import re
 from typing import Any, Iterable
 
-SHADOW_SCHEMA_VERSION = 1
+# v2 (DATA 1): source_commit on scans/observations, forward_execution_quality table. Additive only.
+SHADOW_SCHEMA_VERSION = 2
 LABEL_VERSION = "SHADOW-LABELS-V1"
 CLASSIFICATION_VERSION = "SHADOW-CLASS-V1-DIAGNOSTIC"
 
@@ -74,7 +75,9 @@ FUTURE_LABEL_KEYS: set[str] = set()
 HINDSIGHT_PATTERN = re.compile(
     r"(optimal|hindsight|best_achievable|best_direction|best_holding|mfe|mae|future|outcome|reali[sz]ed_(?!vol)|"
     r"classification|efficiency|excursion|time_to_|policy_|_hit$|hit_at|first_touch|label|resolved|"
-    r"missed|opportunity|window_end)", re.IGNORECASE)
+    r"missed|opportunity|window_end|"
+    # DATA 1: execution quality is only knowable after the fill (outcome/event data)
+    r"execution_quality|latency_to_fill|stop_overshoot|entry_slippage_cost|exit_fills?|^fees$)", re.IGNORECASE)
 
 
 class LeakageError(ValueError):

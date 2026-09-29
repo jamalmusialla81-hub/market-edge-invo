@@ -113,11 +113,16 @@ def _now_ms() -> int:
 
 
 class PaperLedger:
-    def __init__(self, path: str, starting_equity: float = DEFAULT_STARTING_EQUITY):
+    def __init__(self, path: str, starting_equity: float = DEFAULT_STARTING_EQUITY, source_commit: Optional[str] = None):
         self.path = path
+        self.source_commit = source_commit   # git SHA of the running build, stamped on new sizing decisions
         with closing(self._connect()) as conn:
             conn.executescript(SCHEMA)
             conn.executescript(EXIT_DDL)
+            # DATA 1: additive, nullable; old rows keep NULL (never backfilled). Adding a column is not an UPDATE,
+            # so the immutability triggers are unaffected.
+            if "source_commit" not in {r[1] for r in conn.execute("PRAGMA table_info(risk_sizing_decisions)")}:
+                conn.execute("ALTER TABLE risk_sizing_decisions ADD COLUMN source_commit TEXT")
             conn.execute("INSERT OR IGNORE INTO paper_account (id, starting_equity, created_at) VALUES (1, ?, ?)",
                          (starting_equity, time.time()))
             conn.commit()
@@ -260,9 +265,11 @@ class PaperLedger:
         digest = hashlib.sha256(body.encode()).hexdigest()
         decision_id = f"siz-{digest[:20]}-{role[:4].lower()}"
         with closing(self._connect()) as conn:
-            conn.execute("INSERT OR IGNORE INTO risk_sizing_decisions VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            conn.execute("INSERT OR IGNORE INTO risk_sizing_decisions (decision_id, signal_id, asset, mode, role, policy_version, approved, "
+                         "reason, created_at_ms, record, record_hash, source_commit) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
                          (decision_id, signal_id, asset, mode, role, record.get("sizing_rule_version") or "UNKNOWN",
-                          int(bool(record.get("approved"))), record.get("rejection_reason"), at_ms, body, digest))
+                          int(bool(record.get("approved"))), record.get("rejection_reason"), at_ms, body, digest,
+                          getattr(self, "source_commit", None)))
             conn.commit()
         return decision_id
 

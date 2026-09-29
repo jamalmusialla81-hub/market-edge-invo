@@ -90,7 +90,7 @@ def create_app(db_path: str = "market_edge_exec.sqlite3", hummingbot_mode: str =
     portfolio = NautilusPortfolio(store)
     mode = hummingbot_mode or os.environ.get("HUMMINGBOT_MODE", "disabled")
     hummingbot = None if mode == "disabled" else build_hummingbot_client(mode)
-    ledger = PaperLedger(db_path)
+    ledger = PaperLedger(db_path, source_commit=build_info().get("git_sha"))
     control = ControlStore(db_path)
     migration = migrations.apply(migration)
     limits_provider = (lambda: risk_limits) if risk_limits is not None else control.risk_limits
@@ -118,7 +118,8 @@ def create_app(db_path: str = "market_edge_exec.sqlite3", hummingbot_mode: str =
     # Shadow learning (research only): its own database file, no access to
     # the router, the ledger, the portfolio or risk -- it cannot place,
     # size, block or modify any paper trade.
-    app.state.shadow = ShadowStore(shadow_db_path or shadow_default_path(db_path))
+    app.state.shadow = ShadowStore(shadow_db_path or shadow_default_path(db_path), source_commit=build_info().get("git_sha"))
+    paper.on_trade_closed = app.state.shadow.record_execution_quality
     app.state.candle_fetcher = candle_fetcher or CachedCandleFetcher(hyperliquid_fetcher())
     # Latest heartbeat from the open-position monitor (runtime only; the
     # per-position state it produces is persisted on the trades themselves).

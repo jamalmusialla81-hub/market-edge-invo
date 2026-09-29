@@ -30,7 +30,8 @@ from market_edge_exec.shadow import contracts as C
 from market_edge_exec.shadow import resolve as R
 
 DATA_EXPIRY_MS = 7 * 24 * C.HOUR   # a batch no candle set covered by then is closed as unavailable
-IMMUTABLE = ("shadow_scans", "shadow_observations", "shadow_labels", "shadow_hindsight", "forward_paper_executed")
+IMMUTABLE = ("shadow_scans", "shadow_observations", "shadow_labels", "shadow_hindsight", "forward_paper_executed",
+             "forward_execution_quality")
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS shadow_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -68,6 +69,13 @@ CREATE TABLE IF NOT EXISTS forward_paper_executed (
     signal_id TEXT PRIMARY KEY, observation_id TEXT, scan_id TEXT NOT NULL, decision_ts INTEGER NOT NULL,
     dataset_version TEXT NOT NULL, trade BLOB NOT NULL, created_at_ms INTEGER NOT NULL
 );
+-- DATA 1: what execution actually cost, copied from the paper ledger when a
+-- paper trade closed (the ledger stays authoritative). OUTCOME / EVENT data:
+-- only knowable after the fill, so it is never a decision-time feature.
+CREATE TABLE IF NOT EXISTS forward_execution_quality (
+    signal_id TEXT PRIMARY KEY, observation_id TEXT, scan_id TEXT, dataset_version TEXT NOT NULL, field_class TEXT NOT NULL,
+    source TEXT NOT NULL, source_commit TEXT, record BLOB NOT NULL, record_hash TEXT NOT NULL, created_at_ms INTEGER NOT NULL
+);
 CREATE TABLE IF NOT EXISTS shadow_resolution (
     observation_id TEXT PRIMARY KEY, coin TEXT NOT NULL, first_bar_ts INTEGER NOT NULL, batches_done TEXT NOT NULL,
     resolution_status TEXT NOT NULL, next_due_ts INTEGER, updated_at_ms INTEGER NOT NULL
@@ -94,7 +102,7 @@ def default_path(paper_db_path: str) -> str:
 
 
 SHADOW_TABLES = ("shadow_meta", "shadow_scans", "shadow_observations", "shadow_labels", "shadow_hindsight",
-                 "forward_paper_executed", "shadow_resolution")
+                 "forward_paper_executed", "forward_execution_quality", "shadow_resolution")
 
 
 def inspect_database(path: str) -> dict:
@@ -117,18 +125,26 @@ def inspect_database(path: str) -> dict:
     problems = []
     if integrity != "ok":
         problems.append(f"INTEGRITY_CHECK_FAILED: {integrity}")
-    missing = [t for t in SHADOW_TABLES if t not in tables]
+    optional_v2 = {"forward_execution_quality"} if version_of(meta) < 2 else set()
+    missing = [t for t in SHADOW_TABLES if t not in tables and t not in optional_v2]
     if missing:
         problems.append(f"MISSING_TABLES: {missing}")
     version = int(meta.get("schema_version") or 0)
     if version > C.SHADOW_SCHEMA_VERSION:
         problems.append(f"SHADOW_SCHEMA_NEWER: v{version} > supported v{C.SHADOW_SCHEMA_VERSION}")
-    missing_guards = [f"{t}_no_{op}" for t in IMMUTABLE for op in ("update", "delete") if f"{t}_no_{op}" not in triggers]
+    missing_guards = [f"{t}_no_{op}" for t in IMMUTABLE if t not in optional_v2 for op in ("update", "delete") if f"{t}_no_{op}" not in triggers]
     if missing_guards and not missing:
         problems.append(f"MISSING_IMMUTABILITY_TRIGGERS: {missing_guards}")
     return {"ok": not problems, "problems": problems, "path": path, "kind": "shadow_research",
             "shadow_schema_version": version, "supported_shadow_schema_version": C.SHADOW_SCHEMA_VERSION,
             "integrity": integrity, "counts": counts, "dataset_versions": datasets}
+
+
+def version_of(meta: dict) -> int:
+    try:
+        return int(meta.get("schema_version") or 0)
+    except (TypeError, ValueError):
+        return 0
 
 
 def backup_database(src: str, dst: str) -> str:
@@ -150,16 +166,32 @@ def _next_due(decision_ts: int, first_bar_ts: int, done: list[str]) -> Optional[
 
 
 class ShadowStore:
-    def __init__(self, path: str):
+    def __init__(self, path: str, source_commit: Optional[str] = None):
         self.path = path
+        # The git SHA of the running build (not a content hash). "dev" in a
+        # source checkout; None only when a caller did not say.
+        self.source_commit = source_commit
         with closing(self._connect()) as conn:
             conn.executescript(SCHEMA)
+            self._migrate(conn)
             for table in IMMUTABLE:
                 for op in ("UPDATE", "DELETE"):
                     conn.execute(f"CREATE TRIGGER IF NOT EXISTS {table}_no_{op.lower()} BEFORE {op} ON {table} "
                                  f"BEGIN SELECT RAISE(ABORT, 'SHADOW_RESEARCH_ROW_IMMUTABLE'); END;")
             conn.execute("INSERT OR IGNORE INTO shadow_meta VALUES ('schema_version', ?)", (str(C.SHADOW_SCHEMA_VERSION),))
+            conn.execute("UPDATE shadow_meta SET value=? WHERE key='schema_version' AND CAST(value AS INTEGER) < ?",
+                         (str(C.SHADOW_SCHEMA_VERSION), C.SHADOW_SCHEMA_VERSION))
             conn.commit()
+
+    @staticmethod
+    def _migrate(conn: sqlite3.Connection) -> None:
+        """Forward-only, additive: a v1 database gains nullable columns. Old
+        rows keep NULL (never backfilled with a guess); the immutability
+        triggers are unaffected because adding a column is not an UPDATE."""
+        for table in ("shadow_scans", "shadow_observations"):
+            cols = {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
+            if "source_commit" not in cols:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN source_commit TEXT")
 
     def versions(self) -> dict:
         """Version identifiers for the About screen / bug reports. The schema
@@ -242,12 +274,14 @@ class ShadowStore:
             state = ("RESEARCH_SUPPLEMENT" if scan.get("scan_scope") == "RESEARCH_SUPPLEMENT"
                      else "TRADE_SELECTED" if scan.get("submitted_signal_id") else "NO_TRADE")
             conn.execute(
-                "INSERT INTO shadow_scans VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "INSERT INTO shadow_scans (scan_id, decision_ts, scan_status, scan_state, execution_decision, execution_reason, "
+                "submitted_signal_id, n_markets, n_candidates, observation_interval_ms, generator_version, feature_version, model_version, "
+                "dataset_version, detail, created_at_ms, source_commit) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (scan_id, ts, scan.get("scan_status"), state, exec_decision, execution.get("reason"), scan.get("submitted_signal_id"),
                  int(scan.get("n_markets") or 0), n_cand, scan.get("observation_interval_ms"), versions["generator_version"],
                  versions["feature_version"], versions["model_version"], C.DATASET_RAW,
                  _blob({"failures": scan.get("failures") or [], "universe": scan.get("universe"), "cross_market": scan.get("cross_market"),
-                        "scan_scope": scan.get("scan_scope") or "PRODUCTION_SCAN"}), now_ms))
+                        "scan_scope": scan.get("scan_scope") or "PRODUCTION_SCAN"}), now_ms, self.source_commit))
             for obs in observations:
                 kind, decision = obs["kind"], obs.get("decision") or {}
                 asset, coin = str(obs.get("asset") or ""), str(obs.get("coin") or obs.get("asset") or "")
@@ -268,12 +302,16 @@ class ShadowStore:
                 first_bar = R.first_bar_open(ts)
                 full_decision = {**decision, "production_state": obs.get("production_state"), "kind": kind, "asset": asset, "coin": coin}
                 cur = conn.execute(
-                    "INSERT OR IGNORE INTO shadow_observations VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    "INSERT OR IGNORE INTO shadow_observations (observation_id, scan_id, kind, asset, coin, direction, strategy, decision_ts, "
+                    "first_bar_ts, production_rank, scan_candidate_rank, is_production_pick, production_state, execution_status, "
+                    "execution_rejection_reason, research_candidate_valid, invalid_reason, observation_cluster_id, market_episode_id, "
+                    "overlap_fraction, generator_version, feature_version, model_version, dataset_version, outcome_venue, outcome_interval, "
+                    "decision, decision_hash, created_at_ms, source_commit) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     (oid, scan_id, kind, asset, coin, direction, strategy, ts, first_bar, cand.get("production_rank"),
                      cand.get("scan_candidate_rank"), int(bool(cand.get("is_production_pick"))), obs.get("production_state"),
                      status, reason, int(valid), invalid, cluster, f"ep-{asset}-{ts // C.EPISODE_MS}", overlap,
                      versions["generator_version"], versions["feature_version"], versions["model_version"], C.DATASET_RAW,
-                     C.OUTCOME_VENUE, C.OUTCOME_INTERVAL, _blob(full_decision), C.content_hash(full_decision), now_ms))
+                     C.OUTCOME_VENUE, C.OUTCOME_INTERVAL, _blob(full_decision), C.content_hash(full_decision), now_ms, self.source_commit))
                 if cur.rowcount:
                     inserted += 1
                     conn.execute("INSERT OR IGNORE INTO shadow_resolution VALUES (?,?,?,?,?,?,?)",
@@ -285,6 +323,61 @@ class ShadowStore:
                                   _blob(execution.get("trade") or {}), now_ms))
             conn.commit()
         return {"scan_id": scan_id, "inserted": inserted, "duplicate": False}
+
+    # ---- execution quality (outcome data, copied from the paper ledger) --------
+    @staticmethod
+    def execution_quality_of(trade: dict) -> dict:
+        """The execution-quality view of a CLOSED paper trade, read from the
+        ledger's own figures (never recomputed from prices). Latency is
+        signal time -> paper fill time; stop overshoot is how far past its
+        level a stop exit filled (adverse, >= 0)."""
+        long = trade.get("direction") == "long"
+        exits = trade.get("exits") or []
+        overshoot = []
+        for e in exits:
+            level, fill = e.get("level"), e.get("fill_price")
+            if "STOP" in str(e.get("kind")) and isinstance(level, (int, float)) and isinstance(fill, (int, float)):
+                overshoot.append({"kind": e["kind"], "level": level, "fill_price": fill,
+                                  "overshoot": max(0.0, (level - fill) if long else (fill - level))})
+        signal_ts, opened = trade.get("signal_timestamp"), trade.get("opened_at_ms")
+        return {
+            "signal_id": trade.get("signal_id"), "trade_id": trade.get("trade_id"), "asset": trade.get("asset"), "direction": trade.get("direction"),
+            "opened_at_ms": opened, "closed_at_ms": trade.get("closed_at_ms"), "exit_reason": trade.get("exit_reason"),
+            "entry_fill": trade.get("entry_fill"), "signal_entry": trade.get("signal_entry"), "quantity": trade.get("quantity"),
+            "fees": trade.get("fees"), "entry_slippage_cost": trade.get("slippage_cost"),
+            "latency_to_fill_ms": (opened - signal_ts) if isinstance(opened, int) and isinstance(signal_ts, int) else None,
+            "stop_overshoot": overshoot,
+            "exit_fills": [{"kind": e.get("kind"), "quantity": e.get("quantity"), "fill_price": e.get("fill_price"),
+                            "level": e.get("level"), "at_ms": e.get("at_ms"), "trigger": e.get("trigger")} for e in exits],
+            "best_price": trade.get("best_price"), "best_price_at_ms": trade.get("best_price_at_ms"), "best_price_precision": trade.get("best_price_precision"),
+            "worst_price": trade.get("worst_price"), "worst_price_at_ms": trade.get("worst_price_at_ms"), "worst_price_precision": trade.get("worst_price_precision"),
+        }
+
+    def record_execution_quality(self, trade: dict, now_ms: Optional[int] = None) -> bool:
+        """Once per closed paper trade (first write wins; immutable)."""
+        if trade.get("status") != "CLOSED" or not trade.get("signal_id"):
+            return False
+        now_ms = now_ms or int(time.time() * 1000)
+        record = self.execution_quality_of(trade)
+        with closing(self._connect()) as conn:
+            link = conn.execute("SELECT observation_id, scan_id FROM forward_paper_executed WHERE signal_id=?", (trade["signal_id"],)).fetchone()
+            cur = conn.execute(
+                "INSERT OR IGNORE INTO forward_execution_quality (signal_id, observation_id, scan_id, dataset_version, field_class, source, "
+                "source_commit, record, record_hash, created_at_ms) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                (trade["signal_id"], link["observation_id"] if link else None, link["scan_id"] if link else None, C.DATASET_PAPER_EXECUTED,
+                 "OUTCOME_EVENT", "PAPER_LEDGER", self.source_commit, _blob(record), C.content_hash(record), now_ms))
+            conn.commit()
+            return bool(cur.rowcount)
+
+    def execution_quality(self, signal_id: str) -> Optional[dict]:
+        with closing(self._connect()) as conn:
+            r = conn.execute("SELECT * FROM forward_execution_quality WHERE signal_id=?", (signal_id,)).fetchone()
+        if r is None:
+            return None
+        record = _unblob(r["record"])
+        return {"signal_id": r["signal_id"], "observation_id": r["observation_id"], "scan_id": r["scan_id"], "field_class": r["field_class"],
+                "source": r["source"], "source_commit": r["source_commit"], "record": record,
+                "record_hash_ok": C.content_hash(record) == r["record_hash"]}
 
     # ---- resolution ------------------------------------------------------
     def pending(self, now_ms: Optional[int] = None, limit: int = 50) -> list[dict]:

@@ -42,6 +42,8 @@ def test_every_immutable_shadow_table_refuses_update_and_delete(tmp_path):
     store.record_scan(scan_payload(submitted_signal_id="scan-1-BTC",
                                    execution={"decision": "EXECUTED", "signal_id": "scan-1-BTC", "trade": {"qty": 1}},
                                    observations=[{"kind": "CANDIDATE", "asset": "BTC", "submitted": True, "decision": decision(cand=candidate())}]))
+    store.record_execution_quality({"status": "CLOSED", "signal_id": "scan-1-BTC", "trade_id": "scan-1-BTC", "direction": "long",
+                                    "exits": [], "opened_at_ms": T0 + 5, "signal_timestamp": T0})
     first = R.first_bar_open(T0)
     closes = [100 + min(i, 60) * 0.1 for i in range(C.FULL_WINDOW_MS // BAR + 2)]
     store.resolve("BTC", bars_path(first, closes, spread=0.05), "HYPERLIQUID", "5m", now_ms=T0 + C.FULL_WINDOW_MS + C.HOUR)
