@@ -341,3 +341,17 @@ versions, the stored decision-time inputs (hash-verified), the market price sour
 - Post-outcome research labels are not included (only whether they exist), so the report cannot be read back as decision-time input.
 - Raw candles are not stored anywhere, so the report shows the derived decision-time values exactly as stored and says the candles are not reconstructed.
 - Not yet checked against a real recent paper trade in Jakob's desktop app.
+
+## Counterfactual portfolio learning (DATA 18)
+
+`market_edge_exec/analysis/portfolio.py`, `GET /research/counterfactual-portfolio`. Findings only; it proposes nothing and changes nothing.
+
+- R is always the shadow resolver's own after-cost 72h `policy_r`, which is built from the paper lifecycle's FEE_PCT and SLIPPAGE_PCT.
+  The module has no cost constants and never re-costs, so no counterfactual can be cheaper than real execution. A test recomputes
+  R for the same fills with the real model and requires equality, and another shows the R moves when the shared constants move.
+- An alternative counts only if it was research-valid at decision time, its data-quality verdict is VALID and its final outcome is OK;
+  everything else is excluded and counted by reason. Nothing is assumed to have executed.
+- Reports: rank #1 vs #2 and #3 (cluster bootstrap), chosen vs rejected candidates and regret, concentration (selections sharing an
+  episode within 24h, and the drawdown of the actual sequence versus first-selection-per-episode), and picks the exposure or
+  concurrent-position caps blocked. All hypothetical figures are labelled HYPOTHETICAL. Below 30 scans a comparison says NOT_ENOUGH_SCANS.
+- Not yet run on real forward data (none is resolved yet), and the manual spot-check of one real scan is still open.
