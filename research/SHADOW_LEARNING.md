@@ -209,3 +209,12 @@ Findings while building it: the legacy vector **zero-fills** missing inputs (`??
 - Output: `NONE / FLAG / ALERT / RECOMMEND_REVIEW` (an execution-cost dimension in ALERT, or 3+ dimensions in ALERT). It never edits a policy, threshold, model or trade. Its only write is the append-only `drift_alerts` row, written when a dimension's level changes.
 - Endpoints: `POST/GET /research/drift/baselines`, `GET /research/drift?baseline=NAME&window_days=7`, `GET /research/drift/alerts`.
 - Limit: there is no forward trade history yet, so nothing has a real baseline; the tests use synthetic data.
+
+## Dataset expansion scheduler (DATA 13, EXPANSION-SCHEDULER-V1) — proposal only
+
+`research/dataset-expansion/scheduler.mjs`, run monthly by `.github/workflows/research-expansion-rescreen.yml` (or by hand). It reuses `screen-universe.mjs` and `expansion.js` unchanged and only turns the screen report into a proposal for a human: additions (passed every screen rule, ranked by the existing liquidity order, at most 5 per proposal), removals (an approved asset that is no longer an active spot market), and every excluded asset with its failed rules.
+
+- The screen criteria are pinned in `scheduler.mjs`; changing them makes the scheduler refuse to run, so more assets can never be bought by loosening a rule.
+- A proposal is not applied. Additions still have to pass the fetch and usability checks (F1-F3, minimum development candidates). Approval is a human commit that adds a **new** dataset version (`proposeDatasetVersion`, status `PROPOSED`, not trainable); an existing version is never edited and a version name is never reused.
+- It does not change `signal-bridge/research_universe.mjs`; the forward shadow rotation list only changes by a human editing it, which its own test ties to the dataset manifest.
+- Not yet run against the live market list from this environment (no Coinbase access here); the first scheduled run is the manual-validation step.

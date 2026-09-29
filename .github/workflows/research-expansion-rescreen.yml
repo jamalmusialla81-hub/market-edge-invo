@@ -1,0 +1,41 @@
+name: Research — dataset expansion re-screen (proposal only)
+
+# DATA 13. Runs the EXISTING universe screen (research/dataset-expansion/screen-universe.mjs,
+# unchanged criteria, pinned in scheduler.mjs) against the full Coinbase USD product list and
+# writes a PROPOSAL for a human to review. It applies nothing: no dataset is created or edited,
+# the shadow rotation list is not changed, no D1 or Worker access, no production code touched.
+# Approving a proposal is a human commit that adds a NEW dataset version (see SHADOW_LEARNING.md).
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 6 1 * *'   # monthly, 06:17 UTC on the 1st
+
+permissions:
+  contents: read
+
+concurrency:
+  group: research-expansion-rescreen
+  cancel-in-progress: false
+
+jobs:
+  rescreen:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Screen the full market list (native daily candles, outcome-free)
+        working-directory: research/dataset-expansion
+        run: node screen-universe.mjs
+      - name: Build the human-review proposal
+        working-directory: research/dataset-expansion
+        run: node propose-expansion.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: expansion-proposal
+          path: |
+            research/dataset-expansion/expansion-proposal.json
+            research/dataset-expansion/expansion-proposal.md
+            research/dataset-expansion/screen-report.json
