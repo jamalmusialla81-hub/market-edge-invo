@@ -119,3 +119,32 @@ def test_an_empty_shadow_database_does_not_make_major5_ready(tmp_path):
     paper, shadow = str(tmp_path / "p.sqlite3"), str(tmp_path / "s.sqlite3")
     create_app(db_path=paper, shadow_db_path=shadow)
     assert status(BR.run(make_backup(tmp_path, paper, shadow)))["#26"] == "BLOCKED"
+
+
+def test_database_mode_reads_live_files_via_a_snapshot(tmp_path, dbs, capsys):
+    paper, shadow = dbs
+    before = sha(paper), sha(shadow)
+    r = BR.run_databases(paper, shadow, str(tmp_path / "o"), source="CI endurance session")
+    assert status(r)["#26"] == "READY" and r["sizing_review"]["trades"] == 1
+    assert (sha(paper), sha(shadow)) == before
+    assert "Source: CI endurance session" in open(tmp_path / "o" / "readiness.md", encoding="utf-8").read()
+    assert BR.main(["--paper", paper, "--shadow", shadow]) == 0 and "#27" in capsys.readouterr().out
+
+
+def test_database_mode_missing_shadow_keeps_major5_blocked(tmp_path, dbs):
+    paper, _ = dbs
+    assert status(BR.run_databases(paper, str(tmp_path / "nope.sqlite3")))["#26"] == "BLOCKED"
+
+
+def test_cli_needs_exactly_one_input_mode(tmp_path, dbs):
+    paper, shadow = dbs
+    with pytest.raises(SystemExit):
+        BR.main([])
+    with pytest.raises(SystemExit):
+        BR.main([make_backup(tmp_path, paper, shadow), "--paper", paper])
+
+
+def test_database_mode_empty_shadow_database_keeps_major5_blocked(tmp_path):
+    paper, shadow = str(tmp_path / "p.sqlite3"), str(tmp_path / "s.sqlite3")
+    create_app(db_path=paper, shadow_db_path=shadow)
+    assert status(BR.run_databases(paper, shadow))["#26"] == "BLOCKED"
