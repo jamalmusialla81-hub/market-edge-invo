@@ -276,3 +276,29 @@ LIVE is not a sizing mode, and it stays disabled.
 - Restart keeps budgets. TP1 lowers current risk without touching the original.
   Records are immutable. Racing signals cannot share the last cluster budget.
   Shadow counterfactuals consume no capital.
+
+## Forward review (MAJOR 6, #27; harness from #70)
+
+`execution-service/market_edge_exec/evaluation/sizing_review.py` is the
+comparison MAJOR 6 runs once enough SHADOW trades have closed:
+
+```
+cd execution-service
+python -m market_edge_exec.evaluation.sizing_review /path/to/market_edge_paper.sqlite3 [--json]
+```
+
+It opens the ledger read-only and pairs, per closed SHADOW trade, the legacy
+AUTHORITATIVE record with V2's COUNTERFACTUAL record. V2's P&L is the realised
+P&L times `v2_qty / legacy_qty`. That is exact for the paper engine (a test runs
+the same path with V2 authoritative and gets the same number); a trade V2 would
+have rejected counts as 0. Records whose hash does not match are excluded and
+counted. Open trades and PAPER-mode trades (no counterfactual) are excluded.
+
+Evidence bar `SIZING-EVIDENCE-BAR-V1`: at least 30 closed trades in 30
+independent 24h episodes (the same floor and cluster bootstrap as MAJOR 3H),
+then all of: V2's stop overshoot rate at most 10% of its losing trades and no
+worse than legacy's; the cluster-CI lower bound of the per-trade return
+difference no worse than -0.10% of equity; V2's max drawdown and 5th-percentile
+trade no worse than legacy's. The output is `INSUFFICIENT_EVIDENCE`, `FAIL` or
+`PASS`. A PASS is a recommendation: switching to PAPER stays a separate,
+owner-authorised action, and nothing reads the verdict.
