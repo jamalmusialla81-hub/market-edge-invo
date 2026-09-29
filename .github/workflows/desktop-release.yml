@@ -9,6 +9,8 @@ name: Desktop release (publish installers from a green build)
 #   include_windows  also publish the .exe/.msi from the same run
 #   prerelease       mark the release as a pre-release
 #   draft            create a draft (visible only to collaborators); default true
+#   skip_test_gates  Mac-only: require just Package macos-arm64 (skip the Linux
+#                    tests and the clean-machine job); the release notes say so
 #
 # Gates (all fail closed):
 #   - the run is a desktop-app.yml run and its commit is on main
@@ -47,6 +49,10 @@ on:
         description: 'Create as a draft (not public until published by hand)'
         type: boolean
         default: true
+      skip_test_gates:
+        description: 'Mac only: skip the Linux-test and clean-machine job gates (Package macos-arm64 is still required)'
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -62,6 +68,7 @@ jobs:
       RUN_ID: ${{ inputs.run_id }}
       TAG: ${{ inputs.tag }}
       INCLUDE_WINDOWS: ${{ inputs.include_windows }}
+      SKIP_TEST_GATES: ${{ inputs.skip_test_gates }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -88,7 +95,11 @@ jobs:
           jq -r '.jobs[] | "\(.name) | \(.status)/\(.conclusion)"' jobs.json
           green() { [ "$(jq -r --arg p "$1" '[.jobs[] | select(.name | startswith($p)) | .conclusion] | if length == 1 then .[0] else "missing-or-ambiguous" end' jobs.json)" = success ]; }
           if [ "$INCLUDE_WINDOWS" = "true" ]; then
+            [ "$SKIP_TEST_GATES" != "true" ] || { echo "skip_test_gates is Mac-only"; exit 1; }
             [ "$(jq -r .conclusion run.json)" = "success" ] || { echo "a Windows release needs the whole run green"; exit 1; }
+          elif [ "$SKIP_TEST_GATES" = "true" ]; then
+            green "Package macos-arm64" || { echo "required job 'Package macos-arm64' is not green"; exit 1; }
+            echo "WARNING: Linux tests and the clean-machine job are NOT required for this release (skip_test_gates)"
           else
             for job in "Linux — all tests" "Package macos-arm64" "Clean machine macos-arm64"; do
               green "$job" || { echo "required job '$job' is not green"; exit 1; }
@@ -158,6 +169,7 @@ jobs:
           WIN_SIGNING: ${{ steps.assets.outputs.win_signing }}
           PRERELEASE: ${{ inputs.prerelease }}
           DRAFT: ${{ inputs.draft }}
+          SKIP_TEST_GATES: ${{ inputs.skip_test_gates }}
         run: |
           set -euo pipefail
           UNSIGNED=false; case "$MAC_SIGNING" in *SKIPPED*|UNKNOWN) UNSIGNED=true ;; esac
@@ -166,6 +178,7 @@ jobs:
             echo "- Platform: **$PLATFORM**"
             if [ "$UNSIGNED" = true ]; then echo "- **Unsigned and not notarized** -- for personal / test use"; else echo "- macOS signing: $MAC_SIGNING"; fi
             echo "- **Paper trading only.** LIVE is disabled. Mainnet is disabled."
+            if [ "$SKIP_TEST_GATES" = "true" ]; then echo "- **CI test gates skipped at the owner's request:** this release did not wait for the Linux tests or the clean-machine install test of this build. The code was tested locally before release (pytest 218, node 66, vitest 67, tsc clean, on the merged main)."; fi
             echo "- App source commit: \`$SHA\`"
             echo "- Release workflow commit: \`$GITHUB_SHA\`"
             echo "- Built and clean-machine tested by Desktop app run [$RUN_ID]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$RUN_ID); published by release run [$GITHUB_RUN_ID]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)"
