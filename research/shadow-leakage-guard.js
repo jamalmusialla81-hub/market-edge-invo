@@ -5,7 +5,7 @@
 // must pass its feature column names through assertDecisionFeatures(): a
 // post-outcome field (MFE/MAE, optimal/hindsight labels, policy outcome,
 // classification, anything "future") used as a feature fails loudly.
-const HINDSIGHT_PATTERN = /(optimal|hindsight|best_achievable|best_direction|best_holding|mfe|mae|future|outcome|reali[sz]ed_(?!vol)|classification|efficiency|excursion|time_to_|policy_|_hit$|hit_at|first_touch|label|resolved|missed|opportunity|window_end)/i;
+const HINDSIGHT_PATTERN = /(optimal|hindsight|best_achievable|best_direction|best_holding|mfe|mae|future|outcome|reali[sz]ed_(?!vol)|classification|efficiency|excursion|time_to_|policy_|_hit$|hit_at|first_touch|label|resolved|missed|opportunity|window_end|execution_quality|latency_to_fill|stop_overshoot|entry_slippage_cost|exit_fills?|^fees$|giveback|counterfactual_exit|counterfactual_r$|counterfactual_net|counterfactual_fees|counterfactual_slippage)/i;
 const FUTURE_SECTIONS = ['FUTURE_LABEL_DATA', 'POST_OUTCOME_RESEARCH_ONLY'];
 
 function isHindsightName(name) {

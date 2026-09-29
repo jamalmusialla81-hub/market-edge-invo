@@ -78,7 +78,9 @@ HINDSIGHT_PATTERN = re.compile(
     r"classification|efficiency|excursion|time_to_|policy_|_hit$|hit_at|first_touch|label|resolved|"
     r"missed|opportunity|window_end|"
     # DATA 1: execution quality is only knowable after the fill (outcome/event data)
-    r"execution_quality|latency_to_fill|stop_overshoot|entry_slippage_cost|exit_fills?|^fees$)", re.IGNORECASE)
+    r"execution_quality|latency_to_fill|stop_overshoot|entry_slippage_cost|exit_fills?|^fees$|"
+    # exit-policy counterfactuals and giveback describe what happened after entry
+    r"giveback|counterfactual_exit|counterfactual_r$|counterfactual_net|counterfactual_fees|counterfactual_slippage)", re.IGNORECASE)
 
 
 class LeakageError(ValueError):

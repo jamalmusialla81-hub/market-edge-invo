@@ -70,7 +70,7 @@ export function marketFeatures(timeframes) {
   return out;
 }
 
-function derivatives(ctx) {
+export function derivatives(ctx) {
   if (!ctx) return null;
   const pick = (k) => round(num(ctx[k]));
   return { funding: pick('funding'), open_interest: pick('openInterest'), premium: pick('premium'), day_notional_volume: pick('dayNtlVlm'),

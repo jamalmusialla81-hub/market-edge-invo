@@ -184,3 +184,9 @@ A v1 shadow database upgrades in place (`ALTER TABLE ... ADD COLUMN`, nullable).
 - **VALID**: nothing found.
 
 Verdicts go to `data_quality_verdicts` (shadow DB, append-only, immutable triggers). A re-run writes only changes, so a row changes bucket only through a new dated check. `POST /research/data-quality/run` runs it, `GET /research/data-quality` reports counts. Existing checks are reused (snapshot validity, resolution and label statuses); the paper database is opened read-only. DATA 3 should freeze only rows whose latest verdict is VALID. Node-side dataset statuses (`research/dataset-registry.js`) are unchanged.
+
+## DATA 4: the feature registry
+
+`research/feature-registry.js` (`FEATURE-SET-V1`) is a data file documenting every decision-time feature that exists today: the 17-value legacy ML vector from `backend/scan-core.mjs features()`, the shadow point-in-time frame features (13 per timeframe x 5), derivatives (7) and cross-market context (11), each with its calculation reference, source fields, timeframe, lookback, missing-data behaviour, expected range, provenance and allowed use. It computes nothing and is not imported by the scan, Quant engine or paper engine. `research/feature-registry.test.mjs` (in `npm test`) fails if the registry drifts from what the code really produces, if a registered feature is flagged by the hindsight guard, if a listed hindsight or outcome field is not, or if the registry is edited without a `FEATURE_SET_VERSION` bump (pinned content hash). It also checks that the JS and Python guards use the same vocabulary.
+
+Findings while building it: the legacy vector **zero-fills** missing inputs (`?? 0`), so a 0 can mean "unknown"; trainers must treat it that way (recorded as `ZERO_FILLED`). The guard did not flag `giveback_*` or exit-policy counterfactual outcome fields; it now does (`counterfactual_sizing`, which is computed from decision-time inputs, stays allowed).

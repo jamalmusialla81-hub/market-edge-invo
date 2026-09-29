@@ -163,3 +163,11 @@ def test_a_newer_shadow_database_is_still_refused_by_inspection(tmp_path):
         conn.execute("UPDATE shadow_meta SET value='99' WHERE key='schema_version'")
         conn.commit()
     assert any("SHADOW_SCHEMA_NEWER" in p for p in inspect_database(path)["problems"])
+
+
+def test_guard_flags_exit_counterfactual_and_giveback_fields_but_not_decision_time_sizing():
+    for name in ("giveback_r", "counterfactual_R", "counterfactual_exit_price", "counterfactual_net_pnl"):
+        with pytest.raises(C.LeakageError):
+            C.assert_decision_features([name])
+    # the risk-sizing counterfactual is computed from decision-time inputs and is stored in the decision snapshot
+    C.assert_decision_payload({"counterfactual_sizing": {"role": "COUNTERFACTUAL", "approved": True}})
