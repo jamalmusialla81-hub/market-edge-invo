@@ -137,10 +137,11 @@ def profit_giveback(trade: dict, price: Optional[float], now_ms: int, mfe_r: Opt
         "profit_giveback_r": giveback_r,
         "profit_giveback_pct": giveback_pct,
         "distance_from_peak": from_peak,
-        # The ledger records the peak PRICE but not WHEN it was reached, so
-        # time since MFE is unknown (never estimated) until that is tracked.
+        # Only known once a widening observation has been stamped (trades
+        # opened before that stay unknown; never estimated).
         "time_since_mfe_s": ((end - mfe_at) / 1000.0) if mfe_at else None,
         "time_since_mfe_reason": None if mfe_at else "MFE_TIMESTAMP_NOT_TRACKED",
+        "time_since_mfe_precision": trade.get("best_price_precision") if mfe_at else None,
     }
 
 

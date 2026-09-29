@@ -403,3 +403,58 @@ def test_giveback_closed_trade_uses_realised_r_and_includes_tp1_leg():
     # open after TP1: realised + unrealised
     g = live_metrics(_trade("long", 100.0, 90.0, 112.0, price=105.0, realized=50.0, tp1_hit=True, qty=10.0) | {"remaining_qty": 5.0}, 2_000, 30)["giveback"]
     assert g["current_r"] == pytest.approx((50.0 + 25.0) / 100.0)
+
+
+# ---- MAJOR 3-pre (#41): when MFE / MAE were reached ---------------------------
+from market_edge_exec.paper.engine import update_excursions  # noqa: E402
+
+
+def test_mfe_mae_timestamps_long_tick_and_stream_extreme(db):
+    app, _ = opened(db)
+    t0 = now_ms()
+    tick(app, 106.0, at=t0)
+    t = app.state.ledger.trade("sig-1")
+    assert t["best_price_at_ms"] == t0 and t["best_price_precision"] == "TICK"
+    tick(app, 95.0, at=t0 + 1000)
+    t = app.state.ledger.trade("sig-1")
+    assert t["worst_price_at_ms"] == t0 + 1000 and t["worst_price_precision"] == "TICK"
+    tick(app, 101.0, at=t0 + 2000, observed_high=107.5, observed_low=94.0)
+    t = app.state.ledger.trade("sig-1")
+    assert t["best_price"] == 107.5 and t["best_price_at_ms"] == t0 + 2000
+    assert t["best_price_precision"] == "STREAM_EXTREME_BY_HEARTBEAT"
+    assert t["worst_price"] == 94.0 and t["worst_price_precision"] == "STREAM_EXTREME_BY_HEARTBEAT"
+
+
+def test_mfe_mae_timestamps_short_side_and_widen_only():
+    trade = {"direction": "short", "entry_fill": 100.0}
+    update_excursions(trade, [96.0], 1000, "TICK")
+    update_excursions(trade, [96.0, 97.0], 2000, "TICK")          # equal / worse: keeps the old time
+    assert trade["best_price"] == 96.0 and trade["best_price_at_ms"] == 1000
+    update_excursions(trade, [104.0], 3000, "TICK")
+    assert trade["worst_price"] == 104.0 and trade["worst_price_at_ms"] == 3000
+    update_excursions(trade, [90.0], 500, "CANDLE_CLOSE_BOUND")   # an older observation that widens does move it
+    assert trade["best_price"] == 90.0 and trade["best_price_at_ms"] == 500
+    update_excursions(trade, [95.0], 9999, "TICK")                # older-than-best price never moves it back
+    assert trade["best_price"] == 90.0 and trade["best_price_at_ms"] == 500
+
+
+def test_no_timestamp_without_observation_time():
+    trade = {"direction": "long", "entry_fill": 100.0}
+    update_excursions(trade, [105.0])
+    assert trade["best_price"] == 105.0 and "best_price_at_ms" not in trade
+
+
+def test_candle_bound_is_candle_close_and_survives_restart(db):
+    app, trade = opened(db)
+    o = trade["opened_at_ms"]
+    c1 = {"time": o + 300_000, "open": 100.0, "high": 104.0, "low": 99.0, "close": 101.0}
+    c2 = {"time": o + 600_000, "open": 101.0, "high": 103.0, "low": 97.0, "close": 100.0}
+    app.state.paper.mark("ETH-PERP", [c1, c2], now_ms=o + 900_000)
+    t = app.state.ledger.trade("sig-1")
+    assert t["best_price"] == 104.0 and t["best_price_at_ms"] == o + 600_000 and t["best_price_precision"] == "CANDLE_CLOSE_BOUND"
+    assert t["worst_price"] == 97.0 and t["worst_price_at_ms"] == o + 900_000
+    restarted = create_app(db_path=db, risk_limits=WIDE_LIMITS)
+    r = restarted.state.ledger.trade("sig-1")
+    assert r["best_price_at_ms"] == t["best_price_at_ms"] and r["worst_price_at_ms"] == t["worst_price_at_ms"]
+    live = TestClient(restarted).get("/paper/trade", params={"trade_id": "sig-1"}, headers=HEADERS).json()["live"]
+    assert live["giveback"]["time_since_mfe_precision"] == "CANDLE_CLOSE_BOUND"

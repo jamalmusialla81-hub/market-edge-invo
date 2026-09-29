@@ -68,19 +68,35 @@ def _finite_positive(value) -> bool:
     return isinstance(value, (int, float)) and not isinstance(value, bool) and value == value and 0 < value < float("inf")
 
 
-def update_excursions(trade: dict, prices) -> None:
+def update_excursions(trade: dict, prices, at_ms: Optional[int] = None, precision: Optional[str] = None) -> None:
     """Highest favourable / lowest adverse price since entry, from real
     observed prices only (trade prints, polled mids, completed candle
     highs/lows). Only ever widens, so a restart or an older price can never
-    shrink a recorded MFE/MAE."""
+    shrink a recorded MFE/MAE.
+
+    When ``at_ms`` is given, a price that widens the best (worst) price also
+    records ``best_price_at_ms`` (``worst_price_at_ms``) and its precision
+    (TICK, STREAM_EXTREME_BY_HEARTBEAT, CANDLE_CLOSE_BOUND). The time is the
+    observation time of the widening price, never a finer time than the data
+    supports; an equal or worse price never moves an existing timestamp.
+    Bookkeeping only: no exit logic reads it."""
     seen = [p for p in prices if _finite_positive(p)]
     if not seen:
         return
+    stamp = isinstance(at_ms, int) and not isinstance(at_ms, bool)
     long = trade["direction"] == "long"
     best = trade.get("best_price") or trade["entry_fill"]
     worst = trade.get("worst_price") or trade["entry_fill"]
-    trade["best_price"] = max([best, *seen]) if long else min([best, *seen])
-    trade["worst_price"] = min([worst, *seen]) if long else max([worst, *seen])
+    for p in seen:
+        if (p > best) if long else (p < best):
+            best = p
+            if stamp:
+                trade["best_price_at_ms"], trade["best_price_precision"] = at_ms, precision
+        if (p < worst) if long else (p > worst):
+            worst = p
+            if stamp:
+                trade["worst_price_at_ms"], trade["worst_price_precision"] = at_ms, precision
+    trade["best_price"], trade["worst_price"] = best, worst
 
 
 def freshest_price(trade: dict) -> tuple[Optional[float], Optional[int], Optional[str]]:
@@ -405,7 +421,10 @@ class PaperEngine:
                 result.skipped = "NO_NEW_CANDLES"
                 return result
             fresh.sort(key=lambda c: c["time"])
-            update_excursions(trade, [v for c in fresh for v in (c["high"], c["low"])])
+            for c in fresh:
+                # A candle's high/low happened somewhere inside it; its close
+                # time is the latest it can have happened.
+                update_excursions(trade, [c["high"], c["low"]], c["time"] + 300_000, "CANDLE_CLOSE_BOUND")
             events = lifecycle.advance(
                 trade["direction"], trade["entry_fill"], trade["stop"], trade["tp1"], trade["tp2"], trade["remaining_qty"],
                 trade["quantity"], trade["tp1_hit"], trade["opened_at_ms"], fresh, now_ms,
@@ -455,7 +474,8 @@ class PaperEngine:
             # Observed extremes come from real exchange trade prints between
             # two monitor posts; they only widen MFE/MAE, they never trigger.
             extremes = [p for p in (observed_high, observed_low) if _finite_positive(p)]
-            update_excursions(trade, [price, *extremes])
+            update_excursions(trade, [price], at_ms, "TICK")
+            update_excursions(trade, extremes, at_ms, "STREAM_EXTREME_BY_HEARTBEAT")
             if at_ms >= (trade.get("last_price_at_ms") or 0):
                 trade["last_price"], trade["last_price_at_ms"], trade["last_price_source"] = float(price), at_ms, source
             trade["monitor_status"], trade["monitor_detail"] = MONITOR_LIVE, None
