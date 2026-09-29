@@ -26,7 +26,18 @@ Second release of the standalone Market Edge desktop app.
   label and classification versions, with a copy button for support.
 - Dashboard "Leverage" is now "Gross exposure".
 
-Not included: Risk Sizing V2 and adaptive exits are not part of this release.
+- **Risk Sizing V2 (shadow mode).** Position size can follow a planned-loss
+  budget per trade (stop distance plus execution costs, hard caps that can only
+  cut size). In this release it runs in **SHADOW mode**: the existing 5% sizing
+  still decides every paper trade, and V2 is recorded next to it as an immutable
+  counterfactual. The Risk screen shows the V2 panel and Trade Detail shows a
+  Risk sizing section, labelled research only. A 15% drawdown pauses new entries.
+- **Adaptive exit research (shadow only).** For every new paper trade the app
+  records the prices it watched and replays 17 candidate exit policies
+  (breakeven, giveback trails, volatility trail, post-TP1 protection, momentum
+  and time decay) beside the real trade. These are counterfactual research
+  records: they never change a real exit, use no capital and are not shown as
+  fills. No policy has evidence yet.
 
 
 ## Supported

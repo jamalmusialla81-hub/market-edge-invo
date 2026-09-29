@@ -14,15 +14,21 @@ slippage assumptions production's forward engine uses (lifecycle.py).
 """
 from __future__ import annotations
 
+import os
 import threading
 import time
 from dataclasses import dataclass, field
 from typing import Callable, Optional
 
+from market_edge_exec.exits.shadow import ExitShadow
 from market_edge_exec.domain.contracts import AlphaSignal, ContractError, ExecutionIntent, RiskDecision
 from market_edge_exec.paper import lifecycle
 from market_edge_exec.paper.ledger import PaperLedger
 from market_edge_exec.persistence.store import Store
+from dataclasses import replace as _replace
+
+from market_edge_exec.risk import sizing_runtime
+from market_edge_exec.risk import sizing_v2
 from market_edge_exec.risk.engine import LEVERAGE_BANDS, RiskLimits, approve
 from market_edge_exec.routing.router import ExecutionRouter, RouterError
 from market_edge_exec.signal_bridge.bridge import DIRECTION_TO_SIDE, MAX_SIGNAL_AGE_SECONDS, is_fresh
@@ -103,7 +109,8 @@ class PaperEngine:
     def __init__(self, ledger: PaperLedger, router: ExecutionRouter, store: Store, limits: RiskLimits = RiskLimits(), portfolio=None,
                  limits_provider: Optional[Callable[[], RiskLimits]] = None,
                  entries_gate: Optional[Callable[[], Optional[str]]] = None,
-                 max_mark_age_provider: Optional[Callable[[], float]] = None):
+                 max_mark_age_provider: Optional[Callable[[], float]] = None,
+                 sizing_mode: Optional[str] = None):
         """limits_provider / max_mark_age_provider let persisted operator
         settings (control/settings.py) apply on every entry; without them the
         fixed `limits` and MAX_MARK_AGE_SECONDS apply exactly as before.
@@ -116,11 +123,24 @@ class PaperEngine:
         # together exceeding the 20% cap. Held across read-check-write so
         # exposure reservation is atomic within this process.
         self._entry_lock = threading.Lock()
+        # Risk Sizing V2 rollout: SHADOW (default) computes and records V2 as a
+        # counterfactual while the existing sizing stays authoritative; PAPER
+        # makes V2 authoritative (all existing gates still apply on top).
+        self.sizing_mode = sizing_mode if sizing_mode in (sizing_v2.MODE_SHADOW, sizing_v2.MODE_PAPER) else sizing_runtime.mode_from_env()
         # The 5m candle sweep (discovery loop) and the fast position monitor
         # can both reach the same trade at once; each read-evaluate-write of a
         # trade's lifecycle happens under this lock so neither overwrites the
         # other's exit or excursion update.
         self._lifecycle_lock = threading.RLock()
+        # Adaptive Exit Manager V1 (MAJOR 3): RESEARCH ONLY. Records what this
+        # engine observes and replays counterfactual exit policies beside it.
+        # It only reads the trade dict, never writes a trade, and every call is
+        # isolated so it cannot affect a real exit. MARKET_EDGE_EXIT_SHADOW=0 turns it off.
+        self.exit_shadow = ExitShadow(ledger) if os.environ.get("MARKET_EDGE_EXIT_SHADOW", "1") != "0" else None
+
+    def _shadow(self, label: str, method: str, *args) -> None:
+        if self.exit_shadow is not None:
+            self.exit_shadow.safe(label, getattr(self.exit_shadow, method), *args)
 
     def monitor_max_price_age_s(self) -> float:
         entry_guard = self._max_mark_age_provider() if self._max_mark_age_provider else MAX_MARK_AGE_SECONDS
@@ -150,7 +170,7 @@ class PaperEngine:
     def open_from_signal(self, signal_payload: dict, instrument: str, mark_price: Optional[float], mark_at_ms: Optional[int],
                          requested_leverage: float = 1.0, venue_preference: Optional[str] = None,
                          now_ms: Optional[int] = None, coin: Optional[str] = None, meta: Optional[dict] = None,
-                         market_price_source: str = "UNKNOWN") -> EntryResult:
+                         market_price_source: str = "UNKNOWN", risk_inputs: Optional[dict] = None) -> EntryResult:
         now_ms = now_ms or int(time.time() * 1000)
         payload = {"signal": signal_payload, "instrument": instrument, "mark_price": mark_price,
                    "mark_at_ms": mark_at_ms, "requested_leverage": requested_leverage}
@@ -202,21 +222,62 @@ class PaperEngine:
                 return self._reject(sid, "TARGET_ALREADY_REACHED", payload, now_ms)
 
             entry_fill = lifecycle.slipped(mark_price, side)
+            account = self.ledger.account_state(killed=self.router.killed, now_ms=now_ms)
+            limits = self.limits
+
+            # ---- Risk Sizing V2 (read-only here; the entry lock is the reservation)
+            mode = self.sizing_mode
+            policy = sizing_runtime.effective_policy(limits)
+            if mode == sizing_v2.MODE_PAPER:
+                requested_leverage = min(float(requested_leverage or 1.0), policy.max_leverage)
+            vol_in, depth_in, venue_rules = sizing_runtime.parse_inputs(risk_inputs)
+            v2 = sizing_v2.size(sizing_v2.SizingRequest(
+                asset=signal.asset, direction=signal.direction, entry_price=entry_fill, stop_price=signal.stop,
+                equity=account.equity, peak_equity=account.peak_equity, open_positions=sizing_runtime.open_risks(self.ledger),
+                now_ms=now_ms, vol=vol_in, depth=depth_in, venue=venue_rules, requested_leverage=requested_leverage,
+                require_depth=True, provenance={"mark_price": mark_price, "mark_at_ms": mark_at_ms, "price_source": market_price_source,
+                                                "vol_source": f"{vol_in.venue} {vol_in.interval}" if vol_in else None,
+                                                "depth_source": depth_in.venue if depth_in else None,
+                                                "depth_at_ms": depth_in.at_ms if depth_in else None}), policy)
+            authoritative_v2 = mode == sizing_v2.MODE_PAPER
+            v2_record = {**v2.record, "mode": mode, "role": "AUTHORITATIVE" if authoritative_v2 else "COUNTERFACTUAL",
+                         "used_for_execution": authoritative_v2, "research_only": not authoritative_v2, "signal_id": sid}
+
+            def record_v2(record: dict) -> str:
+                return self.ledger.record_sizing(sid, signal.asset, mode, record["role"], record, at_ms=now_ms)
+
+            # The drawdown pause applies in both modes: new entries stop at 15%.
+            if v2.reason == sizing_v2.DRAWDOWN_RISK_PAUSE or (authoritative_v2 and not v2.approved):
+                record_v2(v2_record)
+                return self._reject(sid, v2.reason, payload, now_ms, outcome="RISK_REJECTED")
+
             provisional = ExecutionIntent.create({
                 "signal_id": sid, "instrument": instrument, "side": side, "quantity": 0.0, "order_type": "MARKET",
                 "strategy_id": signal.strategy_id or "market-edge-alpha", "limit_price": entry_fill, "stop": signal.stop,
                 "targets": list(signal.targets), "leverage": requested_leverage, "venue_preference": venue_preference,
             })
-            account = self.ledger.account_state(killed=self.router.killed, now_ms=now_ms)
-            assessment = approve(provisional, account, self.limits)
+            # The existing engine's gates always apply (kill switch, positions,
+            # daily loss, 5%/20% caps, leverage vs liquidation). With V2
+            # authoritative its "dust" floor is off: V2 deliberately
+            # under-risks and has its own venue-minimum rule.
+            gate_limits = _replace(limits, min_capped_risk_fraction=0.0) if authoritative_v2 else limits
+            assessment = approve(provisional, account, gate_limits)
             if not assessment.decision.approved:
+                record_v2(v2_record)
                 return self._reject(sid, assessment.decision.reason or "RISK_REJECTED", payload, now_ms, outcome="RISK_REJECTED")
 
             leverage = float(assessment.decision.approved_leverage)
             # 8dp matches the portfolio's Nautilus Quantity precision, so the
             # ledger and the canonical position never drift by rounding.
-            quantity = round(assessment.position_size, 8)
+            legacy_qty = round(assessment.position_size, 8)
+            if authoritative_v2:
+                quantity = min(v2.quantity, legacy_qty)
+                if quantity < v2.quantity:
+                    v2_record = sizing_runtime.rescale(v2_record, quantity, entry_fill, "LEGACY_V1_GATE")
+            else:
+                quantity = legacy_qty
             if quantity <= 0:
+                record_v2(v2_record)
                 return self._reject(sid, "SIZE_BELOW_PRECISION", payload, now_ms, outcome="RISK_REJECTED")
             sized = ExecutionIntent.create({**provisional.to_dict(), "quantity": quantity, "leverage": leverage})
             try:
@@ -226,6 +287,19 @@ class PaperEngine:
 
             qty = fill.quantity_filled
             entry_fee = lifecycle.fee(entry_fill, qty)
+            if authoritative_v2:
+                if qty != v2_record.get("final_quantity"):
+                    v2_record = sizing_runtime.rescale(v2_record, qty, entry_fill)
+                decision_id = record_v2(v2_record)
+                auth = v2_record
+                sizing_fields = {"notional": qty * entry_fill, "margin_used": qty * entry_fill / leverage,
+                                 "risk_amount": qty * abs(entry_fill - signal.stop), "max_loss": qty * abs(entry_fill - signal.stop)}
+            else:
+                auth = sizing_runtime.legacy_record(assessment, account, entry_fill, signal.stop, signal.asset, signal.direction, qty, now_ms)
+                auth.update({"mode": mode, "role": "AUTHORITATIVE", "used_for_execution": True, "signal_id": sid})
+                decision_id = self.ledger.record_sizing(sid, signal.asset, mode, "AUTHORITATIVE", auth, at_ms=now_ms)
+                record_v2(v2_record)
+                sizing_fields = {}
             trade = {
                 "trade_id": sid, "signal_id": sid, "instrument": instrument, "asset": signal.asset, "coin": coin or signal.asset,
                 "direction": signal.direction, "strategy": signal.strategy_id, "status": "OPEN", "backend": backend,
@@ -254,6 +328,12 @@ class PaperEngine:
                 "stop_status": "ACTIVE", "tp2_status": "PENDING" if tp2 is not None else "NONE",
                 "tp1_fill_at_ms": None, "tp1_fill_price": None,
                 "monitor_status": None, "monitor_detail": None,
+                # Risk sizing: the authoritative ORIGINAL decision lives,
+                # immutable, in risk_sizing_decisions; these are copies for views.
+                "sizing_mode": mode, "sizing_decision_id": decision_id, "risk_policy_version": auth["sizing_rule_version"],
+                "planned_loss_dollars": auth["planned_loss_dollars"], "planned_loss_pct_equity": auth["planned_loss_pct_equity"],
+                "cluster_id": auth.get("cluster_id"), "sizing_binding_constraint": auth.get("sizing_binding_constraint"),
+                **sizing_fields,
             }
             self.ledger.open_trade(trade)
             self.ledger.record_signal(sid, "EXECUTED", None, payload, at_ms=now_ms)
@@ -330,6 +410,7 @@ class PaperEngine:
                 trade["direction"], trade["entry_fill"], trade["stop"], trade["tp1"], trade["tp2"], trade["remaining_qty"],
                 trade["quantity"], trade["tp1_hit"], trade["opened_at_ms"], fresh, now_ms,
             )
+            self._shadow("record_candles", "record_candles", trade, fresh, now_ms)
             result.exits = self._route_exits(trade, instrument, events, "CANDLE_5M")
             last_close = fresh[-1]["close"]
             if trade["status"] != "CLOSED":
@@ -337,6 +418,7 @@ class PaperEngine:
                 trade["last_checked_ms"] = fresh[-1]["time"]
                 self._refresh_unrealized(trade)
                 self.ledger.save(trade)
+            self._shadow("update", "update", trade, trade["status"] == "CLOSED")
             result.mark_price = last_close
         self.ledger.record_equity(now_ms)
         return result
@@ -386,10 +468,13 @@ class PaperEngine:
                     trade["direction"], trade["entry_fill"], trade["stop"], trade["tp1"], trade["tp2"], trade["remaining_qty"],
                     trade["quantity"], trade["tp1_hit"], trade["opened_at_ms"], float(price), at_ms,
                 )
+                self._shadow("record_tick", "record_tick", trade, float(price), at_ms, observed_high if _finite_positive(observed_high) else None,
+                             observed_low if _finite_positive(observed_low) else None, now_ms)
             result.exits = self._route_exits(trade, instrument, events, trigger, observed_price=float(price))
             if trade["status"] != "CLOSED":
                 self._refresh_unrealized(trade)
                 self.ledger.save(trade)
+            self._shadow("update", "update", trade, trade["status"] == "CLOSED")
             result.price, result.monitor_status = float(price), trade.get("monitor_status")
         if result.exits:
             self.ledger.record_equity(now_ms)

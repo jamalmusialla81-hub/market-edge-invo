@@ -44,11 +44,16 @@ def exit_side(direction: str) -> str:
 
 def advance(direction: str, entry: float, stop: float, tp1: Optional[float], tp2: Optional[float],
             remaining_qty: float, original_qty: float, tp1_hit: bool, opened_at_ms: int,
-            candles: list[dict], now_ms: int, max_hold_ms: int = MAX_HOLD_MS) -> list[ExitEvent]:
+            candles: list[dict], now_ms: int, max_hold_ms: int = MAX_HOLD_MS,
+            active_stop_override: Optional[float] = None) -> list[ExitEvent]:
     """Walks candles (dicts with time/open/high/low/close, time in ms, only
     those after the last check) in order and returns the exit events they
     trigger. Stop is checked first within a candle: if a candle spans both
-    the stop and a target, the conservative assumption is the stop hit."""
+    the stop and a target, the conservative assumption is the stop hit.
+
+    `active_stop_override` is only ever passed by the research replay
+    (exits/replay.py) to test a tighter counterfactual stop; the real engine
+    never sets it, so real behaviour is unchanged."""
     events: list[ExitEvent] = []
     long = direction == "long"
     side = exit_side(direction)
@@ -57,7 +62,7 @@ def advance(direction: str, entry: float, stop: float, tp1: Optional[float], tp2
     for candle in sorted(candles, key=lambda c: c["time"]):
         if qty_left <= 0:
             break
-        active_stop = entry if tp1_hit else stop
+        active_stop = active_stop_override if active_stop_override is not None else (entry if tp1_hit else stop)
         stop_hit = candle["low"] <= active_stop if long else candle["high"] >= active_stop
         if stop_hit:
             kind = "BREAKEVEN_STOP" if tp1_hit else "STOP"
@@ -80,7 +85,8 @@ def advance(direction: str, entry: float, stop: float, tp1: Optional[float], tp2
 
 def evaluate_tick(direction: str, entry: float, stop: float, tp1: Optional[float], tp2: Optional[float],
                   remaining_qty: float, original_qty: float, tp1_hit: bool, opened_at_ms: int,
-                  price: float, at_ms: int, max_hold_ms: int = MAX_HOLD_MS) -> list[ExitEvent]:
+                  price: float, at_ms: int, max_hold_ms: int = MAX_HOLD_MS,
+                  active_stop_override: Optional[float] = None) -> list[ExitEvent]:
     """Position-management triggers for ONE observed live price (a trade print
     from the exchange stream, or a polled mid). Same geometry, same order of
     checks and same 50/50 split as advance(), but it only ever judges the
@@ -96,7 +102,7 @@ def evaluate_tick(direction: str, entry: float, stop: float, tp1: Optional[float
     qty_left = remaining_qty
     if qty_left <= 0:
         return events
-    active_stop = entry if tp1_hit else stop
+    active_stop = active_stop_override if active_stop_override is not None else (entry if tp1_hit else stop)
     if (price <= active_stop) if long else (price >= active_stop):
         kind = "BREAKEVEN_STOP" if tp1_hit else "STOP"
         return [ExitEvent(kind, qty_left, active_stop, slipped(price, side), at_ms)]

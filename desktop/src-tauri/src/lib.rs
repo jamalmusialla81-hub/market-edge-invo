@@ -187,6 +187,10 @@ async fn get_risk_usage(state: tauri::State<'_, AppState>) -> CmdResult<Value> {
     state.get("/risk/usage").await
 }
 #[tauri::command]
+async fn get_risk_sizing(state: tauri::State<'_, AppState>) -> CmdResult<Value> {
+    state.get("/risk/sizing").await
+}
+#[tauri::command]
 async fn update_risk_config(state: tauri::State<'_, AppState>, update: Value) -> CmdResult<Value> {
     if !update.is_object() {
         return Err("update must be an object".into());
@@ -911,6 +915,7 @@ pub fn run() {
             get_shadow_observation,
             get_risk_config,
             get_risk_usage,
+            get_risk_sizing,
             update_risk_config,
             get_logs,
             start_paper,

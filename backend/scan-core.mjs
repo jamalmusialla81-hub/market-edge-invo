@@ -105,9 +105,11 @@ function rankingStatus(best){return best?'BEST_TRADE_NOW':'DATA_UNAVAILABLE';}
 // Research-only capture (includeResearch). Venue asset contexts are keyed by
 // market name so funding/open interest can be read at decision time.
 function researchCapture(results,failures,meta){
-  const universeMeta=Array.isArray(meta)?meta[0]?.universe:null,ctxs=Array.isArray(meta)?meta[1]:null,assetCtxs={};
+  const universeMeta=Array.isArray(meta)?meta[0]?.universe:null,ctxs=Array.isArray(meta)?meta[1]:null,assetCtxs={},assetMeta={};
   if(Array.isArray(universeMeta)&&Array.isArray(ctxs))universeMeta.forEach((item,index)=>{if(item?.name&&ctxs[index])assetCtxs[item.name]=ctxs[index];});
-  return {markets:results.map(result=>({symbol:result.symbol,dataSymbol:result.dataSymbol,price:result.price,sourceCount:result.sourceCount,sources:result.sources,maxPriceDisagreement:result.maxPriceDisagreement,matchingFeeds:result.matchingFeeds,quantPick:result.quant,candidates:result.research?.candidates||[],timeframes:result.research?.timeframes||{}})),failures,assetCtxs};
+  // Venue order rules (size precision) for research-only sizing counterfactuals.
+  if(Array.isArray(universeMeta))universeMeta.forEach(item=>{if(item?.name)assetMeta[item.name]={szDecimals:Number.isInteger(item.szDecimals)?item.szDecimals:null,maxLeverage:item.maxLeverage??null};});
+  return {markets:results.map(result=>({symbol:result.symbol,dataSymbol:result.dataSymbol,price:result.price,sourceCount:result.sourceCount,sources:result.sources,maxPriceDisagreement:result.maxPriceDisagreement,matchingFeeds:result.matchingFeeds,quantPick:result.quant,candidates:result.research?.candidates||[],timeframes:result.research?.timeframes||{}})),failures,assetCtxs,assetMeta};
 }
 const CHART_TIMEFRAMES=Object.freeze({'5m':220,'15m':200,'1h':180,'4h':160,'1d':140});
 export async function fetchLiveMarketChart({asset,timeframe='15m',fetchImpl=fetch,now=Date.now()}={}){

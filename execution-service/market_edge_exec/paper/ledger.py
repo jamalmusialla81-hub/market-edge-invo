@@ -12,12 +12,14 @@ twelve times past the exposure cap.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import sqlite3
 import time
 from contextlib import closing
 from typing import Optional
 
+from market_edge_exec.exits.store import DDL as EXIT_DDL
 from market_edge_exec.risk.engine import AccountState
 
 DEFAULT_STARTING_EQUITY = 10_000.0
@@ -67,6 +69,36 @@ CREATE TABLE IF NOT EXISTS paper_hindsight (
     source TEXT NOT NULL,
     payload TEXT NOT NULL
 );
+-- Risk Sizing V2: the ORIGINAL sizing decision(s) of every candidate that
+-- reached sizing (authoritative and counterfactual), and after-trade
+-- measurements. Both immutable (triggers below; also migration 0003).
+CREATE TABLE IF NOT EXISTS risk_sizing_decisions (
+    decision_id TEXT PRIMARY KEY,
+    signal_id TEXT,
+    asset TEXT,
+    mode TEXT NOT NULL,
+    role TEXT NOT NULL,
+    policy_version TEXT NOT NULL,
+    approved INTEGER NOT NULL,
+    reason TEXT,
+    created_at_ms INTEGER NOT NULL,
+    record TEXT NOT NULL,
+    record_hash TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_risk_sizing_signal ON risk_sizing_decisions (signal_id);
+CREATE TABLE IF NOT EXISTS risk_sizing_outcomes (
+    signal_id TEXT PRIMARY KEY,
+    created_at_ms INTEGER NOT NULL,
+    record TEXT NOT NULL
+);
+CREATE TRIGGER IF NOT EXISTS risk_sizing_decisions_no_update BEFORE UPDATE ON risk_sizing_decisions
+    BEGIN SELECT RAISE(ABORT, 'SIZING_RECORD_IMMUTABLE'); END;
+CREATE TRIGGER IF NOT EXISTS risk_sizing_decisions_no_delete BEFORE DELETE ON risk_sizing_decisions
+    BEGIN SELECT RAISE(ABORT, 'SIZING_RECORD_IMMUTABLE'); END;
+CREATE TRIGGER IF NOT EXISTS risk_sizing_outcomes_no_update BEFORE UPDATE ON risk_sizing_outcomes
+    BEGIN SELECT RAISE(ABORT, 'SIZING_RECORD_IMMUTABLE'); END;
+CREATE TRIGGER IF NOT EXISTS risk_sizing_outcomes_no_delete BEFORE DELETE ON risk_sizing_outcomes
+    BEGIN SELECT RAISE(ABORT, 'SIZING_RECORD_IMMUTABLE'); END;
 CREATE TABLE IF NOT EXISTS paper_runtime (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     segment TEXT NOT NULL,
@@ -85,6 +117,7 @@ class PaperLedger:
         self.path = path
         with closing(self._connect()) as conn:
             conn.executescript(SCHEMA)
+            conn.executescript(EXIT_DDL)
             conn.execute("INSERT OR IGNORE INTO paper_account (id, starting_equity, created_at) VALUES (1, ?, ?)",
                          (starting_equity, time.time()))
             conn.commit()
@@ -214,8 +247,85 @@ class PaperLedger:
                 if trade.get("tp2_status") in ("PENDING", None) and trade.get("tp2") is not None:
                     trade["tp2_status"] = "CANCELLED"
             self._save_trade(conn, trade)
+            if trade["status"] == "CLOSED":
+                self._record_outcome(conn, trade)
             conn.commit()
             return True
+
+    # ---- risk sizing records (immutable) ---------------------------------
+    def record_sizing(self, signal_id: Optional[str], asset: Optional[str], mode: str, role: str, record: dict,
+                      at_ms: Optional[int] = None) -> str:
+        at_ms = at_ms or _now_ms()
+        body = json.dumps(record, sort_keys=True, default=str)
+        digest = hashlib.sha256(body.encode()).hexdigest()
+        decision_id = f"siz-{digest[:20]}-{role[:4].lower()}"
+        with closing(self._connect()) as conn:
+            conn.execute("INSERT OR IGNORE INTO risk_sizing_decisions VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                         (decision_id, signal_id, asset, mode, role, record.get("sizing_rule_version") or "UNKNOWN",
+                          int(bool(record.get("approved"))), record.get("rejection_reason"), at_ms, body, digest))
+            conn.commit()
+        return decision_id
+
+    def sizing_records(self, signal_id: str) -> list[dict]:
+        with closing(self._connect()) as conn:
+            rows = conn.execute("SELECT * FROM risk_sizing_decisions WHERE signal_id=? ORDER BY created_at_ms, role", (signal_id,)).fetchall()
+        out = []
+        for r in rows:
+            record = json.loads(r["record"])
+            out.append({"decision_id": r["decision_id"], "mode": r["mode"], "role": r["role"], "policy_version": r["policy_version"],
+                        "approved": bool(r["approved"]), "reason": r["reason"], "created_at_ms": r["created_at_ms"],
+                        "record_hash_ok": hashlib.sha256(r["record"].encode()).hexdigest() == r["record_hash"], "record": record})
+        return out
+
+    def authoritative_sizing(self, signal_id: str) -> Optional[dict]:
+        for r in self.sizing_records(signal_id):
+            if r["role"] == "AUTHORITATIVE":
+                return r["record"]
+        return None
+
+    def sizing_outcome(self, signal_id: str) -> Optional[dict]:
+        with closing(self._connect()) as conn:
+            row = conn.execute("SELECT record FROM risk_sizing_outcomes WHERE signal_id=?", (signal_id,)).fetchone()
+        return json.loads(row["record"]) if row else None
+
+    def sizing_counts(self) -> dict:
+        with closing(self._connect()) as conn:
+            return {"decisions": conn.execute("SELECT COUNT(*) FROM risk_sizing_decisions").fetchone()[0],
+                    "outcomes": conn.execute("SELECT COUNT(*) FROM risk_sizing_outcomes").fetchone()[0]}
+
+    def _record_outcome(self, conn: sqlite3.Connection, trade: dict) -> None:
+        """After-trade measurement, written once when the trade closes.
+        Outcome fields only -- never read back into a sizing decision."""
+        qty = float(trade.get("quantity") or 0.0)
+        entry = float(trade["entry_fill"])
+        long = trade["direction"] == "long"
+        row = conn.execute("SELECT record FROM risk_sizing_decisions WHERE signal_id=? AND role='AUTHORITATIVE' "
+                           "ORDER BY created_at_ms LIMIT 1", (trade["trade_id"],)).fetchone()
+        original = json.loads(row["record"]) if row else {}
+        planned = original.get("planned_loss_dollars") or trade.get("planned_loss_dollars") or trade.get("max_loss")
+        net = float(trade.get("realized_pnl") or 0.0) - float(trade.get("fees") or 0.0)
+        exits = trade.get("exits") or []
+        best, worst = trade.get("best_price") or entry, trade.get("worst_price") or entry
+        mfe = (best - entry) if long else (entry - best)
+        mae = (entry - worst) if long else (worst - entry)
+        record = {
+            "signal_id": trade["trade_id"], "closed_at_ms": trade.get("closed_at_ms"), "exit_reason": trade.get("exit_reason"),
+            "realised_fees": trade.get("fees"),
+            "realised_entry_slippage": abs(entry - float(trade.get("mark_at_entry") or entry)) * qty,
+            "realised_exit_slippage": sum(abs(e["fill_price"] - e["level"]) * e["quantity"] for e in exits),
+            "realised_stop_slippage": sum(abs(e["fill_price"] - e["level"]) * e["quantity"] for e in exits
+                                          if e["kind"] in ("STOP", "BREAKEVEN_STOP")),
+            "realised_max_loss": max(0.0, mae) * qty,
+            "realised_net_pnl": net,
+            "realised_R": net / planned if planned else None,
+            "planned_loss_dollars_original": planned,
+            "loss_vs_planned": (-net / planned) if planned and net < 0 else 0.0,
+            "mfe_price": mfe, "mae_price": mae,
+            "mfe_R": mfe * qty / planned if planned else None, "mae_R": mae * qty / planned if planned else None,
+            "sizing_policy_version": original.get("sizing_rule_version") or trade.get("risk_policy_version"),
+        }
+        conn.execute("INSERT OR IGNORE INTO risk_sizing_outcomes VALUES (?,?,?)",
+                     (trade["trade_id"], trade.get("closed_at_ms") or _now_ms(), json.dumps(record, default=str)))
 
     def update_mark(self, trade: dict, mark_price: float, checked_to_ms: int, unrealized: float) -> None:
         trade["mark_price"] = mark_price
