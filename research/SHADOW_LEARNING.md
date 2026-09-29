@@ -199,3 +199,13 @@ Findings while building it: the legacy vector **zero-fills** missing inputs (`??
 - `promotion-readiness.js`'s `INSUFFICIENT_EVIDENCE` / `REJECTED` / `KEEP_CHALLENGER` / `PROMOTION_READY` stays its own vocabulary and is recorded whole, unchanged, as the experiment's `promotion_status` (gate `PROMOTION_READINESS_V1`, plus the integrity input it was given). `research/experiment-registry.js` is the first writer; it writes only `RUNNING` and the outcome an evaluation supports and never `SHADOW_CANDIDATE`.
 - `SHADOW_CANDIDATE` is refused unless a recorded, known gate output shows it passed (`PROMOTION_READY` or `KEEP_CHALLENGER`, no failed hard integrity gate). Unknown gates and unknown decisions are refused; the registry re-reads the recorded output instead of trusting a flag.
 - Repeats are visible: an identical configuration (everything except the free-text question, seed included) is recorded with `repeat_of` and an attempt count, so a favourable re-run cannot hide the earlier ones.
+
+## Drift monitor (DATA 12, DRIFT-V1) — alert-only
+
+`execution-service/market_edge_exec/monitoring/drift.py`. Compares a recent window against a **named, versioned baseline** (stored immutably in `drift_baselines`, schema v5) on: every numeric decision-time feature (top 60 by coverage), volatility features, quant score, realised R, execution cost (fees, entry slippage, stop overshoot, latency), asset mix, strategy mix, rejection reasons, win/loss mix, exit reasons, and per-day activity.
+
+- Statistic: PSI over baseline-decile bins (categories for categorical). Level is judged on PSI minus the expected sampling-noise floor `(k-1)(1/n_base+1/n_cur)`, so unchanged data does not alert on small windows. FLAG above 0.10, ALERT above 0.25 (conventional cut-offs, not tuned). Activity rate: FLAG at 2x, ALERT at 4x, either direction.
+- Under 30 samples on either side: `INSUFFICIENT_DATA`, never an alert.
+- Output: `NONE / FLAG / ALERT / RECOMMEND_REVIEW` (an execution-cost dimension in ALERT, or 3+ dimensions in ALERT). It never edits a policy, threshold, model or trade. Its only write is the append-only `drift_alerts` row, written when a dimension's level changes.
+- Endpoints: `POST/GET /research/drift/baselines`, `GET /research/drift?baseline=NAME&window_days=7`, `GET /research/drift/alerts`.
+- Limit: there is no forward trade history yet, so nothing has a real baseline; the tests use synthetic data.

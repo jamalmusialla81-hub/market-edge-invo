@@ -38,6 +38,7 @@ from market_edge_exec.persistence import migrations
 from market_edge_exec.persistence.store import Store
 from market_edge_exec.reconciliation.reconcile import reconcile
 from market_edge_exec.paper import lifecycle
+from market_edge_exec.monitoring import drift as drift_monitor
 from market_edge_exec.risk import sizing_runtime, sizing_v2
 from market_edge_exec.risk.engine import RiskLimits, approve
 from market_edge_exec.routing.router import BACKEND_HUMMINGBOT, BACKEND_NAUTILUS_NATIVE, ExecutionRouter, RouterError
@@ -469,6 +470,32 @@ def create_app(db_path: str = "market_edge_exec.sqlite3", hummingbot_mode: str =
     @app.get("/research/data-quality", dependencies=[Depends(require_api_key)])
     def data_quality_summary():
         return {"label": "RESEARCH ONLY · CLASSIFICATION · ROWS ARE NEVER EDITED", **quality_runner.summarize(app.state.shadow)}
+
+    # ---- drift monitor (DATA 12): alert-only; its one write is its own append-only alert record ----
+    @app.post("/research/drift/baselines", dependencies=[Depends(require_api_key)])
+    def drift_baseline_create(payload: dict):
+        try:
+            return {"label": drift_monitor.LABEL, **drift_monitor.create_baseline(
+                app.state.shadow, db_path, str(payload.get("name") or ""), int(payload["start_ms"]), int(payload["end_ms"]))}
+        except (KeyError, TypeError, ValueError) as error:
+            raise HTTPException(status_code=422, detail=str(error))
+
+    @app.get("/research/drift/baselines", dependencies=[Depends(require_api_key)])
+    def drift_baseline_list():
+        return {"label": drift_monitor.LABEL, "baselines": app.state.shadow.drift_baselines()}
+
+    @app.get("/research/drift", dependencies=[Depends(require_api_key)])
+    def drift_check(baseline: str, version: int | None = None, window_days: float = 7.0):
+        if not 0 < window_days <= 365:
+            raise HTTPException(status_code=422, detail="WINDOW_DAYS_OUT_OF_RANGE")
+        try:
+            return drift_monitor.run(app.state.shadow, db_path, baseline, version, window_days, int(time.time() * 1000))
+        except KeyError:
+            raise HTTPException(status_code=404, detail="BASELINE_NOT_FOUND")
+
+    @app.get("/research/drift/alerts", dependencies=[Depends(require_api_key)])
+    def drift_alert_history(baseline: str | None = None):
+        return {"label": drift_monitor.LABEL, "alerts": app.state.shadow.drift_alert_history(baseline)}
 
     # ---- experiment registry (DATA 5): bookkeeping only; nothing here trains, promotes or deploys ----
     experiments = ExperimentRegistry(app.state.shadow)

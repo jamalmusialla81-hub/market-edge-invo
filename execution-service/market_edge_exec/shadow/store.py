@@ -31,9 +31,9 @@ from market_edge_exec.shadow import resolve as R
 
 DATA_EXPIRY_MS = 7 * 24 * C.HOUR   # a batch no candle set covered by then is closed as unavailable
 IMMUTABLE = ("shadow_scans", "shadow_observations", "shadow_labels", "shadow_hindsight", "forward_paper_executed",
-             "forward_execution_quality", "data_quality_verdicts", "experiment_events")
+             "forward_execution_quality", "data_quality_verdicts", "experiment_events", "drift_baselines", "drift_alerts")
 # Tables added after v1, with the schema version that introduced them (older backups lack them and stay restorable).
-TABLE_SINCE = {"forward_execution_quality": 2, "data_quality_verdicts": 3, "experiment_events": 4}
+TABLE_SINCE = {"forward_execution_quality": 2, "data_quality_verdicts": 3, "experiment_events": 4, "drift_baselines": 5, "drift_alerts": 5}
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS shadow_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -93,6 +93,16 @@ CREATE TABLE IF NOT EXISTS experiment_events (
 );
 CREATE INDEX IF NOT EXISTS experiment_events_id ON experiment_events (experiment_id, event_id);
 CREATE INDEX IF NOT EXISTS experiment_events_hash ON experiment_events (config_hash);
+-- DATA 12: drift monitor. Named, versioned baselines (immutable) and its own append-only alert record.
+CREATE TABLE IF NOT EXISTS drift_baselines (
+    name TEXT NOT NULL, version INTEGER NOT NULL, window_start_ms INTEGER NOT NULL, window_end_ms INTEGER NOT NULL,
+    profile BLOB NOT NULL, drift_version TEXT NOT NULL, created_at_ms INTEGER NOT NULL, PRIMARY KEY (name, version)
+);
+CREATE TABLE IF NOT EXISTS drift_alerts (
+    alert_id INTEGER PRIMARY KEY AUTOINCREMENT, baseline_name TEXT NOT NULL, baseline_version INTEGER NOT NULL, dimension TEXT NOT NULL,
+    level TEXT NOT NULL, statistic REAL, detail TEXT NOT NULL, drift_version TEXT NOT NULL, at_ms INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS drift_alerts_key ON drift_alerts (baseline_name, baseline_version, dimension, alert_id);
 CREATE TABLE IF NOT EXISTS shadow_resolution (
     observation_id TEXT PRIMARY KEY, coin TEXT NOT NULL, first_bar_ts INTEGER NOT NULL, batches_done TEXT NOT NULL,
     resolution_status TEXT NOT NULL, next_due_ts INTEGER, updated_at_ms INTEGER NOT NULL
@@ -119,7 +129,7 @@ def default_path(paper_db_path: str) -> str:
 
 
 SHADOW_TABLES = ("shadow_meta", "shadow_scans", "shadow_observations", "shadow_labels", "shadow_hindsight",
-                 "forward_paper_executed", "forward_execution_quality", "data_quality_verdicts", "experiment_events", "shadow_resolution")
+                 "forward_paper_executed", "forward_execution_quality", "data_quality_verdicts", "experiment_events", "drift_baselines", "drift_alerts", "shadow_resolution")
 
 
 def inspect_database(path: str) -> dict:
@@ -434,6 +444,53 @@ class ShadowStore:
             return [{"verdict": r["verdict"], "reasons": json.loads(r["reasons"]), "checked_at_ms": r["checked_at_ms"]} for r in conn.execute(
                 "SELECT verdict, reasons, checked_at_ms FROM data_quality_verdicts WHERE subject_kind=? AND subject_id=? ORDER BY verdict_id",
                 (subject_kind, subject_id))]
+
+    # ---- drift monitor (DATA 12) -----------------------------------------------
+    def record_drift_baseline(self, name: str, start_ms: int, end_ms: int, profile: dict, drift_version: str, now_ms: Optional[int] = None) -> dict:
+        now_ms = now_ms or int(time.time() * 1000)
+        with closing(self._connect()) as conn:
+            version = (conn.execute("SELECT MAX(version) FROM drift_baselines WHERE name=?", (name,)).fetchone()[0] or 0) + 1
+            conn.execute("INSERT INTO drift_baselines (name, version, window_start_ms, window_end_ms, profile, drift_version, created_at_ms) VALUES (?,?,?,?,?,?,?)",
+                         (name, version, start_ms, end_ms, _blob(profile), drift_version, now_ms))
+            conn.commit()
+        return {"name": name, "version": version, "window_start_ms": start_ms, "window_end_ms": end_ms, "created_at_ms": now_ms}
+
+    def drift_baseline(self, name: str, version: Optional[int] = None) -> Optional[dict]:
+        with closing(self._connect()) as conn:
+            row = conn.execute("SELECT * FROM drift_baselines WHERE name=? " + ("AND version=?" if version else "ORDER BY version DESC LIMIT 1"),
+                               (name, version) if version else (name,)).fetchone()
+        if row is None:
+            return None
+        return {"name": row["name"], "version": row["version"], "window_start_ms": row["window_start_ms"], "window_end_ms": row["window_end_ms"],
+                "created_at_ms": row["created_at_ms"], "profile": _unblob(row["profile"])}
+
+    def drift_baselines(self) -> list[dict]:
+        with closing(self._connect()) as conn:
+            return [dict(r) for r in conn.execute("SELECT name, version, window_start_ms, window_end_ms, created_at_ms FROM drift_baselines ORDER BY name, version")]
+
+    def record_drift_alerts(self, name: str, version: int, findings: list[dict], drift_version: str, now_ms: int) -> int:
+        """Append a row only when a dimension's level differs from its latest recorded one, so a re-run is quiet.
+        STABLE and INSUFFICIENT_DATA are recorded too, but only as a change from a previous FLAG/ALERT (a clearing)."""
+        written = 0
+        with closing(self._connect()) as conn:
+            for f in findings:
+                last = conn.execute("SELECT level FROM drift_alerts WHERE baseline_name=? AND baseline_version=? AND dimension=? ORDER BY alert_id DESC LIMIT 1",
+                                    (name, version, f["dimension"])).fetchone()
+                previous = last["level"] if last else "STABLE"
+                if f["level"] == previous or (last is None and f["level"] in ("STABLE", "INSUFFICIENT_DATA")):
+                    continue
+                conn.execute("INSERT INTO drift_alerts (baseline_name, baseline_version, dimension, level, statistic, detail, drift_version, at_ms) VALUES (?,?,?,?,?,?,?,?)",
+                             (name, version, f["dimension"], f["level"], f["statistic"], C.canonical(f), drift_version, now_ms))
+                written += 1
+            conn.commit()
+        return written
+
+    def drift_alert_history(self, name: Optional[str] = None, limit: int = 200) -> list[dict]:
+        with closing(self._connect()) as conn:
+            rows = conn.execute("SELECT * FROM drift_alerts " + ("WHERE baseline_name=? " if name else "") + "ORDER BY alert_id DESC LIMIT ?",
+                                ((name, limit) if name else (limit,)))
+            return [{"alert_id": r["alert_id"], "baseline": r["baseline_name"], "baseline_version": r["baseline_version"], "dimension": r["dimension"],
+                     "level": r["level"], "statistic": r["statistic"], "at_ms": r["at_ms"]} for r in rows]
 
     # ---- resolution ------------------------------------------------------
     def pending(self, now_ms: Optional[int] = None, limit: int = 50) -> list[dict]:
