@@ -17,9 +17,15 @@ export interface ResearchExportManifest {
   schema: string; created_at: string; format: 'csv' | 'parquet'; folder: string; read_only: boolean;
   files: ResearchExportFile[]; skipped: { file: string; reason: string }[]; not_yet_available: { category: string; reason: string }[];
 }
+// Reported by the backend's /health from the live shadow database and the
+// running code; never inferred on the client.
+export interface ResearchVersions {
+  shadow_schema_version: number | null; supported_shadow_schema_version: number;
+  label_version: string; classification_version: string; datasets_written: string[];
+}
 export interface AppInfo {
   mode: Mode; modes: ModeAvailability[]; live_trading_enabled: boolean; version: string; git_sha: string; build_timestamp: string;
-  build_info: Record<string, unknown>; backend: { version: string | null; schema_version: number | null; build: Record<string, unknown> | null };
+  build_info: Record<string, unknown>; backend: { version: string | null; schema_version: number | null; build: Record<string, unknown> | null; research?: ResearchVersions | { error: string } | null };
   node_version: string | null; data_dir: string; fatal: string | null; user_config: { auto_start_paper: boolean; first_run_at: string | null; versions_seen: string[] };
   config: AppConfigView | null;
 }
@@ -90,6 +96,15 @@ export interface LiveMetrics {
   current_price: number | null; unrealized_pnl: number | null; unrealized_r: number | null; active_stop: number;
   distance_to_stop: Distance | null; distance_to_tp1: Distance | null; distance_to_tp2: Distance | null;
   best_price: number; worst_price: number; mfe: Excursion; mae: Excursion; position_age_s: number; remaining_qty: number; milestones: Milestones;
+  /** Display-only profit-giveback view of the trade's own live figures (computed in the backend). */
+  giveback?: Giveback;
+}
+export interface Giveback {
+  /** Most favourable price since entry: the HIGHEST for a long, the LOWEST for a short. */
+  peak_price: number; peak_side: 'HIGHEST' | 'LOWEST';
+  mfe_r: number | null; current_r: number | null; current_r_basis: 'REALISED' | 'REALISED_PLUS_UNREALISED';
+  profit_giveback_r: number | null; profit_giveback_pct: number | null;
+  distance_from_peak: Distance | null; time_since_mfe_s: number | null; time_since_mfe_reason: string | null;
 }
 export interface DecisionContext {
   asset: string; instrument: string; coin: string | null; direction: 'long' | 'short'; entry_time_ms: number; signal_timestamp: number | null;

@@ -518,6 +518,7 @@ async fn app_info(state: tauri::State<'_, AppState>) -> CmdResult<Value> {
             "version": backend.get("version"),
             "schema_version": backend.get("schema_version"),
             "build": backend.get("build"),
+            "research": backend.get("research"),
         },
         "node_version": node,
         "data_dir": state.data_dir,
