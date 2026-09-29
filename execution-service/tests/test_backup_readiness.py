@@ -58,9 +58,9 @@ def test_real_backup_reports_every_gate_from_the_reused_evaluators(tmp_path, dbs
     gate26 = next(g for g in r["gates"] if g["task"] == "#26")
     assert "INSUFFICIENT" in gate26["note"]
     assert (sha(backup), sha(paper), sha(shadow)) == before
-    md = open(tmp_path / "out" / "readiness.md").read()
+    md = open(tmp_path / "out" / "readiness.md", encoding="utf-8").read()
     assert "| #27 MAJOR 6" in md and "Risk Sizing V2 forward review" in md and "Forward data diagnostic batch" in md
-    assert json.load(open(tmp_path / "out" / "readiness.json"))["readiness_version"] == BR.READINESS_VERSION
+    assert json.load(open(tmp_path / "out" / "readiness.json", encoding="utf-8"))["readiness_version"] == BR.READINESS_VERSION
 
 
 def test_enough_closed_shadow_trades_make_major6_ready(tmp_path, dbs):

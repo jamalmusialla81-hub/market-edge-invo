@@ -155,9 +155,9 @@ def run(backup_path: str, out_dir: Optional[str] = None) -> dict:
               **result}
     if out_dir:
         os.makedirs(out_dir, exist_ok=True)
-        with open(os.path.join(out_dir, "readiness.json"), "w") as f:
+        with open(os.path.join(out_dir, "readiness.json"), "w", encoding="utf-8") as f:
             json.dump(report, f, indent=2, sort_keys=True, default=str)
-        with open(os.path.join(out_dir, "readiness.md"), "w") as f:
+        with open(os.path.join(out_dir, "readiness.md"), "w", encoding="utf-8") as f:
             f.write(render_markdown(report))
     return report
 
