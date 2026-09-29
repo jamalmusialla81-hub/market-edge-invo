@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { api, AppInfo, BackupManifest, errorText } from '../api';
+import { api, AppInfo, BackupManifest, errorText, ResearchVersions } from '../api';
 import { Badge, ConfirmDialog, Panel } from '../components/ui';
 import { DASH } from '../format';
 
@@ -59,6 +59,67 @@ function Backups() {
   );
 }
 
+const isSha = (v: unknown): v is string => typeof v === 'string' && /^[0-9a-f]{7,40}$/i.test(v);
+
+function researchOf(info: AppInfo | null): ResearchVersions | null {
+  const r = info?.backend.research;
+  return r && !('error' in r) ? r : null;
+}
+
+// App and bundled-service commits can differ when a service was frozen from
+// another checkout; compare only when both are real commit hashes.
+export function commitsDiffer(appSha: unknown, serviceSha: unknown): boolean {
+  if (!isSha(appSha) || !isSha(serviceSha)) return false;
+  const n = Math.min(appSha.length, serviceSha.length);
+  return appSha.slice(0, n).toLowerCase() !== serviceSha.slice(0, n).toLowerCase();
+}
+
+export function versionReport(info: AppInfo | null): string {
+  const r = researchOf(info);
+  const b = info?.backend.build ?? {};
+  const lines = [
+    `Market Edge ${str(info?.version)} (PAPER only, LIVE disabled)`,
+    `App commit: ${str(info?.git_sha)}`,
+    `Service build commit: ${str(b.git_sha)}`,
+    `Built: ${str(info?.build_timestamp)}`,
+    `Platform: ${str(info?.build_info?.target)}`,
+    `Backend: ${str(info?.backend.version)}${b.frozen ? ` (frozen, Python ${str(b.python)})` : ''}`,
+    `Database schema: v${str(info?.backend.schema_version)}`,
+    `Shadow schema: ${r ? `v${str(r.shadow_schema_version)} (supported v${r.supported_shadow_schema_version})` : DASH}`,
+    `Shadow labels: ${r ? r.label_version : DASH}`,
+    `Shadow classification: ${r ? r.classification_version : DASH}`,
+    `Datasets written: ${r ? r.datasets_written.join(', ') : DASH}`,
+    `Node runtime: ${str(info?.node_version)}`,
+  ];
+  return lines.join('\n');
+}
+
+function Versions({ info }: { info: AppInfo | null }) {
+  const [copied, setCopied] = useState<string | null>(null);
+  const r = researchOf(info);
+  const researchError = info?.backend.research && 'error' in info.backend.research ? info.backend.research.error : null;
+  const serviceSha = info?.backend.build?.git_sha;
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(versionReport(info)); setCopied('Copied'); } catch (e) { setCopied(`Copy failed: ${errorText(e)}`); }
+  };
+  return (
+    <Panel title="Versions (for bug reports)" right={<button className="btn btn-small" onClick={() => void copy()}>COPY VERSION INFO</button>}>
+      <dl className="kv">
+        <dt>Service build commit</dt><dd className="mono small">{serviceSha === 'dev' ? 'dev (source checkout)' : str(serviceSha)}
+          {commitsDiffer(info?.git_sha, serviceSha) && <> <Badge kind="warn">DIFFERS FROM APP COMMIT</Badge></>}</dd>
+        <dt>Shadow schema</dt><dd>{r ? <>v{str(r.shadow_schema_version)} <span className="muted small">(this build supports v{r.supported_shadow_schema_version})</span></> : DASH}</dd>
+        <dt>Shadow labels</dt><dd className="mono small">{r?.label_version ?? DASH}</dd>
+        <dt>Shadow classification</dt><dd className="mono small">{r?.classification_version ?? DASH}</dd>
+        <dt>Datasets written</dt><dd className="mono small">{r ? r.datasets_written.join(', ') : DASH}</dd>
+        <dt>Risk / exit policy</dt><dd className="muted small">not versioned yet</dd>
+      </dl>
+      {researchError && <p className="neg small">Research versions unavailable: {researchError}</p>}
+      {!info?.backend.research && !researchError && <p className="muted small">Research versions appear once the execution service is running.</p>}
+      {copied && <div className="control-msg ok" role="status">{copied}</div>}
+    </Panel>
+  );
+}
+
 export function About({ info }: { info: AppInfo | null }) {
   const b = info?.build_info ?? {};
   const packaging = (b.packaging ?? {}) as Record<string, unknown>;
@@ -91,6 +152,7 @@ export function About({ info }: { info: AppInfo | null }) {
           </dl>
         </Panel>
       </div>
+      <Versions info={info} />
       <Backups />
     </div>
   );

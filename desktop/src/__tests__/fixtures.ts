@@ -22,7 +22,9 @@ export const tradeFixture: Trade = {
 export const appInfoFixture: AppInfo = {
   mode: 'PAPER', live_trading_enabled: false, version: '0.1.0', git_sha: 'abc1234def', build_timestamp: '2026-09-27T06:00:00.000Z',
   build_info: { target: 'darwin-arm64', packaging: { 'execution-service': 'PyInstaller one-folder', 'forward-loop': 'official Node.js runtime v22' } },
-  backend: { version: '0.1.0', schema_version: 2, build: { frozen: true, python: '3.12.8' } },
+  backend: { version: '0.1.0', schema_version: 2, build: { frozen: true, python: '3.12.8', git_sha: 'abc1234def' },
+    research: { shadow_schema_version: 1, supported_shadow_schema_version: 1, label_version: 'SHADOW-LABELS-V1', classification_version: 'SHADOW-CLASS-V1-DIAGNOSTIC',
+      datasets_written: ['FORWARD-SHADOW-RAW-V1', 'FORWARD-SHADOW-RESOLVED-V1', 'FORWARD-PAPER-EXECUTED-V1'] } },
   node_version: 'v22.22.2', data_dir: '/Users/x/Library/Application Support/Market Edge', fatal: null,
   user_config: { auto_start_paper: true, first_run_at: '2026-09-27T06:01:00.000Z', versions_seen: ['0.1.0'] },
   modes: [

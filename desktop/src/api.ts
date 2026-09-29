@@ -12,9 +12,15 @@ export interface AppConfigView {
   layout: 'BUNDLED' | 'DEV_REPO'; resource_dir: string | null; repo_root: string | null; execution_service: string; node: string;
   forward_loop: string; port: number; db_path: string; logs_dir: string; backups_dir: string; cycle_interval_ms: number; hummingbot_mode: string;
 }
+// Reported by the backend's /health from the live shadow database and the
+// running code; never inferred on the client.
+export interface ResearchVersions {
+  shadow_schema_version: number | null; supported_shadow_schema_version: number;
+  label_version: string; classification_version: string; datasets_written: string[];
+}
 export interface AppInfo {
   mode: Mode; modes: ModeAvailability[]; live_trading_enabled: boolean; version: string; git_sha: string; build_timestamp: string;
-  build_info: Record<string, unknown>; backend: { version: string | null; schema_version: number | null; build: Record<string, unknown> | null };
+  build_info: Record<string, unknown>; backend: { version: string | null; schema_version: number | null; build: Record<string, unknown> | null; research?: ResearchVersions | { error: string } | null };
   node_version: string | null; data_dir: string; fatal: string | null; user_config: { auto_start_paper: boolean; first_run_at: string | null; versions_seen: string[] };
   config: AppConfigView | null;
 }

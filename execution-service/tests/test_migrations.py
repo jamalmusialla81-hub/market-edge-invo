@@ -58,6 +58,21 @@ def test_fresh_database_is_created_at_target_version_without_backup(tmp_path):
     health = TestClient(app).get("/health").json()
     assert health["version"] == "0.1.0" and health["schema_version"] == report.to_version
     assert health["build"]["backend_version"] == "0.1.0"
+    # research versions come from the live shadow database and the running code
+    from market_edge_exec.shadow import contracts as C
+    assert health["research"] == {"shadow_schema_version": C.SHADOW_SCHEMA_VERSION, "supported_shadow_schema_version": C.SHADOW_SCHEMA_VERSION,
+                                  "label_version": C.LABEL_VERSION, "classification_version": C.CLASSIFICATION_VERSION,
+                                  "datasets_written": [C.DATASET_RAW, C.DATASET_RESOLVED, C.DATASET_PAPER_EXECUTED]}
+
+
+def test_health_reports_the_shadow_schema_version_stored_in_the_database(tmp_path):
+    db = tmp_path / "paper.sqlite3"
+    app = create_app(db_path=str(db))
+    import sqlite3
+    with sqlite3.connect(app.state.shadow.path) as conn:   # simulate an older research database
+        conn.execute("UPDATE shadow_meta SET value='0' WHERE key='schema_version'")
+    research = TestClient(app).get("/health").json()["research"]
+    assert research["shadow_schema_version"] == 0 and research["supported_shadow_schema_version"] >= 1
 
 
 def test_legacy_database_is_backed_up_then_migrated_with_data_preserved(tmp_path):

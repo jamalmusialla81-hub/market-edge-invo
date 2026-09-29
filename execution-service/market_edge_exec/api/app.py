@@ -126,8 +126,13 @@ def create_app(db_path: str = "market_edge_exec.sqlite3", hummingbot_mode: str =
 
     @app.get("/health")
     def health():
+        try:
+            research = app.state.shadow.versions()
+        except Exception as error:  # the research store must never fail liveness
+            research = {"error": str(error)}
         return {"status": "ok", "paper_only": PAPER_ONLY, "killed": router.killed, "hummingbot_mode": mode,
-                "version": __version__, "schema_version": migration.to_version, "build": build_info()}
+                "version": __version__, "schema_version": migration.to_version, "build": build_info(),
+                "research": research}
 
     @app.post("/execution/intent", dependencies=[Depends(require_api_key)])
     def submit_intent(payload: dict):
