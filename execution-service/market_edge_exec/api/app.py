@@ -39,6 +39,7 @@ from market_edge_exec.persistence.store import Store
 from market_edge_exec.reconciliation.reconcile import reconcile
 from market_edge_exec.paper import lifecycle
 from market_edge_exec.monitoring import drift as drift_monitor, strategy_health
+from market_edge_exec.shadow_models import deploy as shadow_models
 from market_edge_exec.risk import sizing_runtime, sizing_v2
 from market_edge_exec.risk.engine import RiskLimits, approve
 from market_edge_exec.routing.router import BACKEND_HUMMINGBOT, BACKEND_NAUTILUS_NATIVE, ExecutionRouter, RouterError
@@ -287,7 +288,10 @@ def create_app(db_path: str = "market_edge_exec.sqlite3", hummingbot_mode: str =
     def shadow_scan(payload: dict):
         try:
             attach_counterfactual_sizing(payload)
-            return app.state.shadow.record_scan(payload)
+            result = app.state.shadow.record_scan(payload)
+            if not result.get("duplicate"):
+                shadow_models.record_scan_predictions(app.state.shadow, payload)   # observation only; never raises, never alters the response
+            return result
         except shadow_contracts.LeakageError as error:
             raise HTTPException(status_code=422, detail={"reason": "LEAKAGE_GUARD", "error": str(error)})
         except ValueError as error:
@@ -509,6 +513,33 @@ def create_app(db_path: str = "market_edge_exec.sqlite3", hummingbot_mode: str =
 
     # ---- experiment registry (DATA 5): bookkeeping only; nothing here trains, promotes or deploys ----
     experiments = ExperimentRegistry(app.state.shadow)
+
+    # ---- forward-shadow challengers (DATA 9): observation only; deploying needs a passed placebo gate ----
+    @app.post("/research/shadow-models/deploy", dependencies=[Depends(require_api_key)])
+    def shadow_model_deploy(payload: dict):
+        try:
+            return shadow_models.deploy(experiments, app.state.shadow, evaluation_experiment_id=str(payload.get("evaluation_experiment_id") or ""),
+                                        training_experiment_id=str(payload.get("training_experiment_id") or ""), model_name=str(payload.get("model_name") or ""),
+                                        actor=str(payload.get("actor") or "API"))
+        except shadow_models.DeploymentError as error:
+            raise HTTPException(status_code=409, detail=str(error))
+
+    @app.post("/research/shadow-models/{model_key}/retire", dependencies=[Depends(require_api_key)])
+    def shadow_model_retire(model_key: str, payload: dict):
+        try:
+            return shadow_models.retire(app.state.shadow, model_key, actor=str(payload.get("actor") or "API"), note=str(payload.get("note") or ""))
+        except shadow_models.DeploymentError as error:
+            raise HTTPException(status_code=404, detail=str(error))
+
+    @app.get("/research/shadow-models", dependencies=[Depends(require_api_key)])
+    def shadow_model_list():
+        return {"label": "RESEARCH ONLY · SHADOW OBSERVATION · ZERO CAPITAL · NO ORDERS · NEVER CHANGES PRODUCTION",
+                "deployed": [{k: v for k, v in a.items() if k != "artifact"} for a in shadow_models.active(app.state.shadow)]}
+
+    @app.get("/research/shadow-models/{model_key}/predictions", dependencies=[Depends(require_api_key)])
+    def shadow_model_predictions(model_key: str, limit: int = 200):
+        return {"label": "RESEARCH ONLY · SHADOW OBSERVATION · ZERO CAPITAL · NO ORDERS · NEVER CHANGES PRODUCTION",
+                "predictions": shadow_models.predictions(app.state.shadow, model_key, min(max(limit, 1), 1000))}
 
     def _experiment_call(fn, *args, **kwargs):
         try:
