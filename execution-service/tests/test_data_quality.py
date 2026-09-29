@@ -235,4 +235,4 @@ def test_a_v2_database_gains_the_verdict_table_and_v2_backups_stay_valid(tmp_pat
         c.execute("UPDATE shadow_meta SET value='2' WHERE key='schema_version'")
         c.commit()
     assert inspect_database(path)["ok"]
-    assert ShadowStore(path).versions()["shadow_schema_version"] == 3
+    assert ShadowStore(path).versions()["shadow_schema_version"] == C.SHADOW_SCHEMA_VERSION
