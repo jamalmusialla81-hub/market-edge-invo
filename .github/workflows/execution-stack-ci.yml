@@ -330,6 +330,7 @@ jobs:
   signal-bridge-e2e:
     name: Part E — real Market Edge signal into paper execution-service (end to end)
     runs-on: ubuntu-latest
+    if: github.event_name != 'schedule'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
