@@ -228,3 +228,12 @@ Deliberately not built:
 - **Liquidation context.** Nothing in the data the scan already fetches is a verified public liquidation feed, so it is recorded as `UNAVAILABLE` in the provenance block. It was not checked against the live Hyperliquid API from this environment (no access); if a trustworthy source is confirmed later it needs its own provenanced field.
 
 No claim that any of this adds edge. It is data for later experiments. Not yet checked on a real live observation from this environment.
+
+## Strategy health monitor (DATA 19, STRATEGY-HEALTH-V1) — alert/flag only
+
+`execution-service/market_edge_exec/monitoring/strategy_health.py`, `GET /research/strategy-health?window_days=14&baseline_days=42`. For each strategy it compares the recent window with the window before it, from data already recorded: closed paper trades (expectancy in R, drawdown in R, stop / TP1 / TP2 rate, slippage, profit giveback via the trade-detail figure) and shadow observations (candidates per day, rejection rate, production-pick share, quant-score decay, regime split of recent trades).
+
+- Tests: Welch z on means, two-proportion z on rates, and a fixed-seed bootstrap of the baseline for drawdown (a raw drawdown ratio fired on ~25% of unchanged data, so it was replaced). Frequency can only FLAG. Under 20 trades or 30 observations a side: `INSUFFICIENT_DATA`, never an alert.
+- Strategy action is `NONE / FLAG / ALERT`. ALERT needs expectancy itself to alert or two unrelated metric groups alerting together. On simulated unchanged strategies that gave a FLAG about 17% of the time and an ALERT about 1%, so read one FLAG as "look", and a repeated or multi-metric ALERT as the signal.
+- `NORMAL / REDUCED-RISK / SHADOW-ONLY / PAUSED` are named in the output only. Nothing here changes a strategy's state, risk or eligibility; any such transition belongs to the evidence-gated promotion path (DATA 11) with explicit authorisation. Its only write is the append-only alert record (`drift_alerts`, name `strategy-health`), on level changes.
+- Limit: there is no real forward trade history yet, so it has only been tested on synthetic data; it has not been sanity-checked against the Shadow screen filters.

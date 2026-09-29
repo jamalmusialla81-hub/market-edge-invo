@@ -38,7 +38,7 @@ from market_edge_exec.persistence import migrations
 from market_edge_exec.persistence.store import Store
 from market_edge_exec.reconciliation.reconcile import reconcile
 from market_edge_exec.paper import lifecycle
-from market_edge_exec.monitoring import drift as drift_monitor
+from market_edge_exec.monitoring import drift as drift_monitor, strategy_health
 from market_edge_exec.risk import sizing_runtime, sizing_v2
 from market_edge_exec.risk.engine import RiskLimits, approve
 from market_edge_exec.routing.router import BACKEND_HUMMINGBOT, BACKEND_NAUTILUS_NATIVE, ExecutionRouter, RouterError
@@ -496,6 +496,16 @@ def create_app(db_path: str = "market_edge_exec.sqlite3", hummingbot_mode: str =
     @app.get("/research/drift/alerts", dependencies=[Depends(require_api_key)])
     def drift_alert_history(baseline: str | None = None):
         return {"label": drift_monitor.LABEL, "alerts": app.state.shadow.drift_alert_history(baseline)}
+
+    @app.get("/research/strategy-health", dependencies=[Depends(require_api_key)])
+    def strategy_health_check(window_days: float = 14.0, baseline_days: float = 42.0):
+        if not (0 < window_days <= 365 and 0 < baseline_days <= 730):
+            raise HTTPException(status_code=422, detail="WINDOW_OUT_OF_RANGE")
+        return strategy_health.run(app.state.shadow, db_path, int(time.time() * 1000), window_days, baseline_days)
+
+    @app.get("/research/strategy-health/alerts", dependencies=[Depends(require_api_key)])
+    def strategy_health_alerts():
+        return {"label": strategy_health.LABEL, "alerts": app.state.shadow.drift_alert_history(strategy_health.ALERT_NAME)}
 
     # ---- experiment registry (DATA 5): bookkeeping only; nothing here trains, promotes or deploys ----
     experiments = ExperimentRegistry(app.state.shadow)
