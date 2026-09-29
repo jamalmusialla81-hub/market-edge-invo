@@ -373,3 +373,13 @@ placebo gate (DATA 8) -> report -> optional SHADOW deployment (DATA 9) -> record
   no per-trade retraining, no retry with adjusted parameters, and the sealed OOS split is never read (poisoning it does not change results).
 - A run must be at most once per snapshot date: a second run on the same date with different data is refused (`SNAPSHOT_EXISTS`), not worked around.
 - No scheduled CI job was added: the shadow database lives on the desktop, not in CI. The tests are the end-to-end dry run on a synthetic fixture.
+
+## Research dashboard (DATA 20)
+
+Desktop `Research` screen (last in the nav, so Ctrl+1..8 keep their screens), read-only, over `GET /research/status` via the `get_research_status`
+Tauri command. Three separate labelled sections that are never merged: PRODUCTION (paper only, LIVE disabled, "not controlled by research"),
+SHADOW (forward counts incl. independent episodes and choice scans, experiment history, deployed challengers with their forward-validation
+evidence counts and what is missing, placebo-gate p-values, per-policy promotion state, drift and health alerts) and POST-OUTCOME RESEARCH
+(walk-forward and forward-validation figures with intervals). Empty pipelines show plain "not run yet" text, never placeholder rows. The
+screen has no buttons, inputs or links, and the backend route only reads. The Shadow screen still owns the observation table and filters.
+Not yet looked at in the running app on real data (no real experiments exist yet).

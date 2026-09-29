@@ -47,6 +47,7 @@ from market_edge_exec.signal_bridge.bridge import process_signal
 from market_edge_exec.evaluation import forward as forward_validation
 from market_edge_exec.lifecycle import policy as policy_lifecycle
 from market_edge_exec.replay import report as replay_reports
+from market_edge_exec.dashboard import status as research_dashboard
 from market_edge_exec.analysis import portfolio as portfolio_analysis
 from market_edge_exec.experiments.registry import ExperimentRegistry, RegistryError as ExperimentError, STATUSES as EXPERIMENT_STATUSES
 from market_edge_exec.quality import runner as quality_runner
@@ -454,6 +455,11 @@ def create_app(db_path: str = "market_edge_exec.sqlite3", hummingbot_mode: str =
     def counterfactual_portfolio():
         """Rank #1 vs alternatives, chosen vs rejected, concentration and cap effects (DATA 18). Hypothetical, findings only."""
         return portfolio_analysis.analyse(app.state.shadow.path)
+
+    @app.get("/research/status", dependencies=[Depends(require_api_key)])
+    def research_status():
+        """Read-only research pipeline status for the desktop dashboard (DATA 20)."""
+        return research_dashboard.build_status(app.state.shadow, experiments, sizing_mode=getattr(app.state.paper, "sizing_mode", None))
 
     @app.get("/paper/trade/candles", dependencies=[Depends(require_api_key)])
     def trade_chart_candles(trade_id: str, interval: str = "5m"):

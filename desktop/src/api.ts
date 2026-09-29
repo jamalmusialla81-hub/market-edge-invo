@@ -254,6 +254,32 @@ export interface ShadowDetail extends Omit<ShadowRow, 'resolution_status' | 'cla
   POST_OUTCOME_RESEARCH_ONLY: (Record<string, unknown> & { notice: string; classification: string }) | null;
 }
 
+// Research pipeline status (DATA 20): read-only. PRODUCTION, SHADOW and POST-OUTCOME RESEARCH are separate sections and never merged.
+export interface ResearchStatus {
+  status_version: string; generated_at_ms: number; read_only: true;
+  labels: { PRODUCTION: string; SHADOW: string; POST_OUTCOME_RESEARCH: string };
+  production: { label: string; risk_sizing_mode: string | null; live: 'DISABLED'; controlled_by_research: false; statement: string };
+  shadow: {
+    label: string;
+    counts: { scans: number; observations: number; candidate_observations: number; resolved: number; unresolved: number; paper_executed: number;
+      independent_episodes: number; choice_scans: number; dataset_versions: string[] };
+    experiments: { total: number; by_status: Record<string, number>; recent: { experiment_id: string; model_type: string; status: string; dataset_version: string; attempt: number }[] };
+    challengers_deployed: { model_key: string; model_name: string; deployed_at_ms: number; mode: string;
+      forward_validation: { experiment_id: string; status: string; verdict: string | null; evidence: Record<string, number> | null; evidence_missing: string[] | null;
+        vs_production: { mean_delta_R: number | null; ci95: [number, number] | null; stability: string | null } | null; promotable: false } | null }[];
+    placebo_gates: { experiment_id: string; model: string | null; status: string; passed: boolean | null; alpha: number | null; runs: number | null;
+      variants: Record<string, { p_value: number | null; passed: boolean | null }>; reasons: string[] | null }[];
+    lifecycle: { policy_id: string; policy_type: string; state: 'RESEARCH' | 'SHADOW' | 'PAPER' | 'DEMOTED'; subject_ref: string | null }[];
+    drift_alerts: { alert_id: number; baseline: string; dimension: string; level: string; statistic: number | null; at_ms: number }[];
+  };
+  post_outcome_research: {
+    label: string;
+    walk_forward_evaluations: { experiment_id: string; status: string; dataset_version: string; n_folds: number | null;
+      challengers: Record<string, { evidence: string | null; mean_delta_vs_random_R: number | null; ci95_vs_random: [number, number] | null; stability_vs_random: string | null }> }[];
+    forward_validations: NonNullable<ResearchStatus['shadow']['challengers_deployed'][number]['forward_validation']>[];
+  };
+}
+
 export const api = {
   appInfo: () => invoke<AppInfo>('app_info'),
   health: () => invoke<Health>('system_health'),
@@ -283,6 +309,7 @@ export const api = {
   setMode: (mode: Mode) => invoke<Mode>('set_mode', { mode }),
   exitCounterfactuals: (tradeId: string) => invoke<ExitCounterfactuals>('get_exit_counterfactuals', { tradeId }),
   rateLimit: () => invoke<RateLimitDiagnostics>('get_rate_limit'),
+  researchStatus: () => invoke<ResearchStatus>('get_research_status'),
   shadowSummary: () => invoke<ShadowSummary>('get_shadow_summary'),
   shadowObservations: (filter: { limit?: number; kind?: string; execution_status?: string; classification?: string } = {}) =>
     invoke<{ observations: ShadowRow[] }>('get_shadow_observations', { filter }),
