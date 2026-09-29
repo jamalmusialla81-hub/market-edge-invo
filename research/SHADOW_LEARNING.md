@@ -270,3 +270,16 @@ No claim that any of this adds edge. It is data for later experiments. Not yet c
 - `row_transform` lets DATA 8 alter only the TRAIN rows a challenger fits on (shuffled features or outcomes), leaving test rows and comparators alone.
 - Deviation from the ticket: it asks to reuse `promotion-readiness.js`'s `comparable()/metrics()/comparison()`. That gate is shaped around live scan outcomes (`finalR`, `netUtility`, `tp1BeforeSl` for a challenger/quant/incumbent triple) and lives in JS, while snapshots and challengers are Python, so this re-implements the same quantities (mean R, cumulative R, drawdown, vs Quant) in Python rather than bridging the two runtimes. The promotion-readiness gate itself is unchanged and still decides promotion.
 - Limit: synthetic data only so far; no real snapshot exists yet.
+
+## Placebo / noise gate (DATA 8, PLACEBO-GATE-V1) — mandatory
+
+`execution-service/market_edge_exec/evaluation/placebo.py`. A challenger that survived walk-forward evaluation must also be unlikely to have done as well by chance. The gate re-runs the same walk-forward evaluation (same folds, same model type, seeded) on four placebo variants and reads where the challenger's mean per-scan R advantage over random falls in that null distribution (empirical one-sided p-value, alpha 0.05, 40 runs by default; fewer than 19 runs is refused because p <= 0.05 would be unreachable):
+
+- `shuffled_outcomes`: TRAIN labels permuted before fitting (a row-level permutation, which also breaks within-scan correlation, so it is a slightly generous null)
+- `shuffled_features`: every TRAIN feature column permuted independently
+- `noise_features`: real features replaced by random columns, train and test
+- `null_simulation`: a model that ranks candidates at random
+
+It passes only if the evaluation already showed stable, cluster-CI-backed improvement over both Quant and random AND every variant gives p <= alpha. A result with no walk-forward evidence fails without running the placebos. Each gate run is logged in the experiment registry (`PLACEBO_GATE`), and `assert_placebo_passed(registry, evaluation_experiment_id, model)` is the hard check: it refuses when no gate was run, when it failed, when it was for another model or another evaluation (the gate's recorded evaluation hash must equal the evaluation's own), and it has no override parameter. DATA 9's deployment path must call it.
+
+Calibration (regression test `test_the_calibration_false_positive_rate_on_null_data_is_low`, 40 seeded pure-noise datasets, ridge, 20 placebo runs each, placebo layer alone): **0 of 40 passed** (false-positive rate 0%, 95% upper bound about 7%; design level 5%; regression bound 15%). A ridge model with a real planted signal passes all four variants, and the current Quant ranking on data where it is unrelated to the label still fails, as in the historical pipeline. The calibration is on synthetic noise with 110 scans; it says nothing about real-data power, which is expected to be low until real forward data accumulates.

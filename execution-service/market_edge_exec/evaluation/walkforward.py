@@ -210,7 +210,7 @@ def evaluate_walk_forward(snapshot: dict, *, n_folds: int = 4, seed: int = 20260
             deltas = [f["policies"][m]["mean_R"] - f["policies"][comp]["mean_R"] for f in ran]
             paired = [{"cluster": a["cluster"], "d": a["r"] - b["r"]} for a, b in zip(all_picks[m], all_picks[comp])]
             agg = sum(p["d"] for p in paired) / len(paired) if paired else None
-            ci = S.grouped_bootstrap(paired, lambda r: r["d"], group_key="cluster", n=bootstrap_n, seed=seed) if paired else None
+            ci = S.grouped_bootstrap(paired, lambda r: r["d"], group_key="cluster", n=bootstrap_n, seed=seed) if (paired and bootstrap_n > 0) else None
             entry["vs"][comp] = {"mean_delta_R": agg, "ci95": ci and ci.get("ci"), "cluster_groups": ci and ci.get("groups"), "per_fold_delta_R": deltas,
                                  "stability": stability(deltas, agg)}
         d = entry["vs"]
