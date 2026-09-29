@@ -85,6 +85,15 @@ export interface LiveMetrics {
   current_price: number | null; unrealized_pnl: number | null; unrealized_r: number | null; active_stop: number;
   distance_to_stop: Distance | null; distance_to_tp1: Distance | null; distance_to_tp2: Distance | null;
   best_price: number; worst_price: number; mfe: Excursion; mae: Excursion; position_age_s: number; remaining_qty: number; milestones: Milestones;
+  /** Display-only profit-giveback view of the trade's own live figures (computed in the backend). */
+  giveback?: Giveback;
+}
+export interface Giveback {
+  /** Most favourable price since entry: the HIGHEST for a long, the LOWEST for a short. */
+  peak_price: number; peak_side: 'HIGHEST' | 'LOWEST';
+  mfe_r: number | null; current_r: number | null; current_r_basis: 'REALISED' | 'REALISED_PLUS_UNREALISED';
+  profit_giveback_r: number | null; profit_giveback_pct: number | null;
+  distance_from_peak: Distance | null; time_since_mfe_s: number | null; time_since_mfe_reason: string | null;
 }
 export interface DecisionContext {
   asset: string; instrument: string; coin: string | null; direction: 'long' | 'short'; entry_time_ms: number; signal_timestamp: number | null;

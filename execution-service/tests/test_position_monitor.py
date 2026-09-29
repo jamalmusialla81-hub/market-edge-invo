@@ -353,3 +353,53 @@ def test_just_opened_position_awaiting_price_is_not_reported_stale_yet(db):
     assert app.state.paper.open_from_signal(make_signal(ts=t), "ETH-PERP", 100.0, t, now_ms=t).accepted
     status = TestClient(app).get("/paper/monitor", headers=HEADERS).json()
     assert status["position_statuses"] == ["AWAITING_PRICE"] and status["stale_positions"] == 0
+
+
+# ---- SIDE 2 (#31): profit giveback, display only -----------------------------
+from market_edge_exec.paper.trade_detail import live_metrics  # noqa: E402
+
+
+def _trade(direction, entry, stop, best, *, price, realized=0.0, closed=False, tp1_hit=False, qty=10.0):
+    return {"direction": direction, "entry_fill": entry, "stop": stop, "tp1": None, "tp2": None, "tp1_hit": tp1_hit,
+            "status": "CLOSED" if closed else "OPEN", "quantity": qty, "remaining_qty": 0.0 if closed else qty,
+            "risk_amount": abs(entry - stop) * qty, "best_price": best, "worst_price": entry, "realized_pnl": realized,
+            "opened_at_ms": 0, "closed_at_ms": 60_000 if closed else None, "last_price": price, "last_price_at_ms": 1_000,
+            "last_price_source": "TEST", "last_checked_ms": 0, "mark_price": None, "exits": []}
+
+
+def test_giveback_long_worked_example():
+    # entry 100, stop 90 (1R = 10), peak 120 (MFE 2R), now 110 (1R): gave back 1R = 50% of the peak
+    g = live_metrics(_trade("long", 100.0, 90.0, 120.0, price=110.0), 2_000, 30)["giveback"]
+    assert g["peak_side"] == "HIGHEST" and g["peak_price"] == 120.0
+    assert g["mfe_r"] == pytest.approx(2.0) and g["current_r"] == pytest.approx(1.0)
+    assert g["profit_giveback_r"] == pytest.approx(1.0) and g["profit_giveback_pct"] == pytest.approx(50.0)
+    assert g["distance_from_peak"]["price"] == pytest.approx(10.0)
+    assert g["time_since_mfe_s"] is None and g["time_since_mfe_reason"] == "MFE_TIMESTAMP_NOT_TRACKED"
+
+
+def test_giveback_short_worked_example_peak_is_the_lowest_price():
+    # short entry 100, stop 110 (1R = 10), lowest 85 (MFE 1.5R), now 95 (0.5R): gave back 1R
+    g = live_metrics(_trade("short", 100.0, 110.0, 85.0, price=95.0), 2_000, 30)["giveback"]
+    assert g["peak_side"] == "LOWEST" and g["peak_price"] == 85.0
+    assert g["mfe_r"] == pytest.approx(1.5) and g["current_r"] == pytest.approx(0.5)
+    assert g["profit_giveback_r"] == pytest.approx(1.0) and g["profit_giveback_pct"] == pytest.approx(100 / 1.5)
+    assert g["distance_from_peak"]["price"] == pytest.approx(10.0), "short: price came back UP from the low"
+
+
+def test_giveback_zero_when_price_is_at_the_peak_and_full_when_back_at_entry():
+    at_peak = live_metrics(_trade("long", 100.0, 90.0, 120.0, price=120.0), 2_000, 30)["giveback"]
+    assert at_peak["profit_giveback_r"] == pytest.approx(0.0) and at_peak["distance_from_peak"]["price"] == 0.0
+    back = live_metrics(_trade("short", 100.0, 110.0, 80.0, price=100.0), 2_000, 30)["giveback"]
+    assert back["profit_giveback_r"] == pytest.approx(2.0) and back["profit_giveback_pct"] == pytest.approx(100.0)
+    through = live_metrics(_trade("long", 100.0, 90.0, 115.0, price=95.0), 2_000, 30)["giveback"]
+    assert through["current_r"] == pytest.approx(-0.5) and through["profit_giveback_r"] == pytest.approx(2.0)
+
+
+def test_giveback_closed_trade_uses_realised_r_and_includes_tp1_leg():
+    # TP1 took 5 units at +1R (+50), remainder stopped at breakeven: realised 0.5R vs MFE 1.2R
+    g = live_metrics(_trade("long", 100.0, 90.0, 112.0, price=100.0, realized=50.0, closed=True, tp1_hit=True), 90_000, 30)["giveback"]
+    assert g["current_r_basis"] == "REALISED" and g["current_r"] == pytest.approx(0.5)
+    assert g["profit_giveback_r"] == pytest.approx(0.7) and g["distance_from_peak"] is None
+    # open after TP1: realised + unrealised
+    g = live_metrics(_trade("long", 100.0, 90.0, 112.0, price=105.0, realized=50.0, tp1_hit=True, qty=10.0) | {"remaining_qty": 5.0}, 2_000, 30)["giveback"]
+    assert g["current_r"] == pytest.approx((50.0 + 25.0) / 100.0)
