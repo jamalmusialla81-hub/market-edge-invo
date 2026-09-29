@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { api, ShadowDetail, ShadowRow, ShadowSummary } from '../api';
 import { Badge, ErrorBanner, Panel, Stat, Table, usePoll } from '../components/ui';
 import { DASH, num, pct, price, ts } from '../format';
@@ -130,12 +130,128 @@ const FILTERS: { label: string; filter: Record<string, string> }[] = [
   { label: 'Avoided', filter: { classification: 'BAD_TRADE_AVOIDED' } },
 ];
 
+// Rows fetched per poll. The command caps this at 1000; filters below narrow
+// this window client-side and the screen says so.
+export const SHADOW_FETCH_LIMIT = 1000;
+
+// Display-only filters over already-fetched rows. They combine with AND and
+// never change what is captured or how it is used downstream.
+export interface ShadowFilter {
+  asset: string;
+  direction: '' | 'long' | 'short' | 'none';
+  strategy: string;
+  maxRank: string;                 // best rank (production, else scan) at or below this number
+  execution: string;               // '' or one of the execution statuses
+  noTrade: '' | 'only' | 'exclude';
+  resolution: '' | 'resolved' | 'partial' | 'unresolved' | 'not_resolvable';
+  from: string;                    // yyyy-mm-dd, local day, inclusive
+  to: string;                      // yyyy-mm-dd, local day, inclusive
+  episode: string;                 // substring of market_episode_id
+  cluster: string;                 // substring of observation_cluster_id
+}
+
+export const EMPTY_SHADOW_FILTER: ShadowFilter = {
+  asset: '', direction: '', strategy: '', maxRank: '', execution: '', noTrade: '', resolution: '', from: '', to: '', episode: '', cluster: '',
+};
+
+const EXECUTION_OPTIONS = ['EXECUTED', 'REJECTED', 'NOT_SUBMITTED', 'NO_SIGNAL', 'NOT_APPLICABLE'];
+
+export function isNoTradeRow(r: ShadowRow): boolean {
+  return r.kind === 'MARKET_STATE' && r.production_state === 'NO_TRADE';
+}
+
+export function resolutionBucket(status: string | null): ShadowFilter['resolution'] {
+  if (status === 'RESOLVED' || status === 'RESOLVED_WITH_GAPS') return 'resolved';
+  if (status === 'PARTIAL') return 'partial';
+  if (status && status.startsWith('NOT_RESOLVABLE')) return 'not_resolvable';
+  return 'unresolved';   // PENDING, or no resolution row yet
+}
+
+function localDayStart(day: string): number | null {
+  const t = new Date(`${day}T00:00:00`).getTime();
+  return Number.isFinite(t) ? t : null;
+}
+
+export function applyShadowFilter(rows: ShadowRow[], f: ShadowFilter): ShadowRow[] {
+  const maxRank = f.maxRank.trim() === '' ? null : Number(f.maxRank);
+  const from = f.from ? localDayStart(f.from) : null;
+  const toStart = f.to ? localDayStart(f.to) : null;
+  const to = toStart === null ? null : toStart + 86_400_000;   // exclusive end of that local day
+  const episode = f.episode.trim().toLowerCase();
+  const cluster = f.cluster.trim().toLowerCase();
+  return rows.filter((r) => {
+    if (f.asset && r.asset !== f.asset) return false;
+    if (f.direction === 'none' ? r.direction !== null : f.direction && r.direction !== f.direction) return false;
+    if (f.strategy && r.strategy !== f.strategy) return false;
+    if (maxRank !== null && Number.isFinite(maxRank)) {
+      const rank = r.production_rank ?? r.scan_candidate_rank;
+      if (rank === null || rank === undefined || rank > maxRank) return false;
+    }
+    if (f.execution && r.execution_status !== f.execution) return false;
+    if (f.noTrade === 'only' && !isNoTradeRow(r)) return false;
+    if (f.noTrade === 'exclude' && isNoTradeRow(r)) return false;
+    if (f.resolution && resolutionBucket(r.resolution_status) !== f.resolution) return false;
+    if (from !== null && r.decision_ts < from) return false;
+    if (to !== null && r.decision_ts >= to) return false;
+    if (episode && !(r.market_episode_id ?? '').toLowerCase().includes(episode)) return false;
+    if (cluster && !(r.observation_cluster_id ?? '').toLowerCase().includes(cluster)) return false;
+    return true;
+  });
+}
+
+function distinct(values: (string | null)[]): string[] {
+  return [...new Set(values.filter((v): v is string => !!v))].sort();
+}
+
+export function ShadowFilterBar({ rows, value, onChange }: { rows: ShadowRow[]; value: ShadowFilter; onChange: (f: ShadowFilter) => void }) {
+  const set = <K extends keyof ShadowFilter>(k: K, v: ShadowFilter[K]) => onChange({ ...value, [k]: v });
+  const assets = distinct(rows.map((r) => r.asset));
+  const strategies = distinct(rows.map((r) => r.strategy));
+  const active = Object.values(value).some((v) => v !== '');
+  return (
+    <div className="seg shadow-filters" role="group" aria-label="Shadow filters">
+      <select aria-label="Asset" value={value.asset} onChange={(e) => set('asset', e.target.value)}>
+        <option value="">All assets</option>
+        {assets.map((a) => <option key={a} value={a}>{a}</option>)}
+      </select>
+      <select aria-label="Direction" value={value.direction} onChange={(e) => set('direction', e.target.value as ShadowFilter['direction'])}>
+        <option value="">Any direction</option><option value="long">LONG</option><option value="short">SHORT</option><option value="none">No direction</option>
+      </select>
+      <select aria-label="Strategy" value={value.strategy} onChange={(e) => set('strategy', e.target.value)}>
+        <option value="">All strategies</option>
+        {strategies.map((s) => <option key={s} value={s}>{s}</option>)}
+      </select>
+      <input aria-label="Max rank" type="number" min={1} step={1} placeholder="max rank" value={value.maxRank} onChange={(e) => set('maxRank', e.target.value)} />
+      <select aria-label="Execution" value={value.execution} onChange={(e) => set('execution', e.target.value)}>
+        <option value="">Any execution</option>
+        {EXECUTION_OPTIONS.map((x) => <option key={x} value={x}>{x === 'EXECUTED' ? 'EXECUTED (accepted)' : x}</option>)}
+      </select>
+      <select aria-label="No-trade" value={value.noTrade} onChange={(e) => set('noTrade', e.target.value as ShadowFilter['noTrade'])}>
+        <option value="">No-trade: include</option><option value="only">No-trade states only</option><option value="exclude">Exclude no-trade states</option>
+      </select>
+      <select aria-label="Resolution" value={value.resolution} onChange={(e) => set('resolution', e.target.value as ShadowFilter['resolution'])}>
+        <option value="">Any resolution</option><option value="resolved">Resolved</option><option value="partial">Partially resolved</option>
+        <option value="unresolved">Unresolved</option><option value="not_resolvable">Not resolvable</option>
+      </select>
+      <input aria-label="From date" type="date" value={value.from} onChange={(e) => set('from', e.target.value)} />
+      <input aria-label="To date" type="date" value={value.to} onChange={(e) => set('to', e.target.value)} />
+      <input aria-label="Episode" type="search" placeholder="episode" value={value.episode} onChange={(e) => set('episode', e.target.value)} />
+      <input aria-label="Cluster" type="search" placeholder="cluster" value={value.cluster} onChange={(e) => set('cluster', e.target.value)} />
+      <button className="btn btn-small" disabled={!active} onClick={() => onChange(EMPTY_SHADOW_FILTER)}>Clear filters</button>
+    </div>
+  );
+}
+
 export function Shadow() {
   const [filterIdx, setFilterIdx] = useState(0);
+  const [filter, setFilter] = useState<ShadowFilter>(EMPTY_SHADOW_FILTER);
   const [open, setOpen] = useState<string | null>(null);
   const summary = usePoll(api.shadowSummary, 15000);
-  const rows = usePoll(() => api.shadowObservations({ limit: 300, ...FILTERS[filterIdx].filter }), 15000, [filterIdx]);
+  const rows = usePoll(() => api.shadowObservations({ limit: SHADOW_FETCH_LIMIT, ...FILTERS[filterIdx].filter }), 15000, [filterIdx]);
   const detail = usePoll(() => (open ? api.shadowObservation(open) : Promise.resolve(null)), 30000, [open]);
+  const observations = rows.data?.observations;
+  const fetched = useMemo(() => observations ?? [], [observations]);
+  const shown = useMemo(() => applyShadowFilter(fetched, filter), [fetched, filter]);
   return (
     <div className="screen">
       <div className="banner banner-info" role="note">
@@ -147,7 +263,12 @@ export function Shadow() {
         <span role="group" aria-label="Filter">{FILTERS.map((f, i) => (
           <button key={f.label} className={`btn btn-small ${i === filterIdx ? 'active' : ''}`} aria-pressed={i === filterIdx} onClick={() => setFilterIdx(i)}>{f.label}</button>
         ))}</span>}>
-        <ShadowTable rows={rows.data?.observations ?? []} onOpen={setOpen} />
+        <ShadowFilterBar rows={fetched} value={filter} onChange={setFilter} />
+        <p className="muted small" aria-live="polite">
+          Showing {shown.length} of {fetched.length} observations
+          {fetched.length >= SHADOW_FETCH_LIMIT ? ` (latest ${SHADOW_FETCH_LIMIT} fetched; older rows are not filtered)` : ''}.
+        </p>
+        <ShadowTable rows={shown} onOpen={setOpen} />
       </Panel>
       {open && detail.data && <ShadowDetailView d={detail.data} />}
     </div>

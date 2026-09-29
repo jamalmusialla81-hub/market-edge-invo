@@ -1,11 +1,11 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const invoke = vi.fn();
 vi.mock('@tauri-apps/api/core', () => ({ invoke: (...args: unknown[]) => invoke(...args) }));
 
 import { Controls, ModeBar, StartupScreen, Warnings } from '../App';
-import { About } from '../screens/About';
+import { About, commitsDiffer, versionReport } from '../screens/About';
 import { LogView } from '../screens/System';
 import { SignalTable } from '../screens/Signals';
 import { PositionTable } from '../screens/Positions';
@@ -140,10 +140,48 @@ describe('about and backup', () => {
   it('shows version, commit, build time, backend and schema versions', () => {
     render(<About info={appInfoFixture} />);
     expect(screen.getByText('0.1.0', { selector: 'b' })).toBeInTheDocument();
-    expect(screen.getByText('abc1234def')).toBeInTheDocument();
+    const about = screen.getByText('About Market Edge').closest('section')!;
+    expect(within(about).getByText('abc1234def')).toBeInTheDocument();
     expect(screen.getByText('2026-09-27T06:00:00.000Z')).toBeInTheDocument();
     expect(screen.getByText('v2')).toBeInTheDocument();
     expect(screen.getByText(/Installed app/)).toBeInTheDocument();
+  });
+  it('shows the research versions the backend reports, and no invented policy version', () => {
+    render(<About info={appInfoFixture} />);
+    const panel = screen.getByText('Versions (for bug reports)').closest('section')!;
+    expect(within(panel).getByText('abc1234def')).toBeInTheDocument();   // service build commit (app commit is in About)
+    expect(within(panel).queryByText('DIFFERS FROM APP COMMIT')).toBeNull();
+    expect(within(panel).getByText('v1')).toBeInTheDocument();
+    expect(within(panel).getByText('(this build supports v1)')).toBeInTheDocument();
+    expect(within(panel).getByText('SHADOW-LABELS-V1')).toBeInTheDocument();
+    expect(within(panel).getByText('SHADOW-CLASS-V1-DIAGNOSTIC')).toBeInTheDocument();
+    expect(within(panel).getByText(/FORWARD-SHADOW-RAW-V1, FORWARD-SHADOW-RESOLVED-V1, FORWARD-PAPER-EXECUTED-V1/)).toBeInTheDocument();
+    expect(within(panel).getByText('not versioned yet')).toBeInTheDocument();
+  });
+  it('flags a service built from a different commit, and handles a dev backend or missing research versions', () => {
+    expect(commitsDiffer('abc1234def', 'abc1234')).toBe(false);
+    expect(commitsDiffer('abc1234def', 'fff9999')).toBe(true);
+    expect(commitsDiffer('abc1234def', 'dev')).toBe(false);
+    const other = { ...appInfoFixture, backend: { ...appInfoFixture.backend, build: { git_sha: 'fff9999' }, research: { error: 'database is locked' } } };
+    render(<About info={other} />);
+    expect(screen.getByText('DIFFERS FROM APP COMMIT')).toBeInTheDocument();
+    expect(screen.getByText(/Research versions unavailable: database is locked/)).toBeInTheDocument();
+    cleanup();
+    render(<About info={{ ...appInfoFixture, backend: { version: null, schema_version: null, build: { git_sha: 'dev' }, research: null } }} />);
+    expect(screen.getByText('dev (source checkout)')).toBeInTheDocument();
+    expect(screen.getByText(/appear once the execution service is running/)).toBeInTheDocument();
+  });
+  it('copies a plain-text version report for bug reports', async () => {
+    const writeText = vi.fn(async (_text: string) => undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    render(<About info={appInfoFixture} />);
+    fireEvent.click(screen.getByRole('button', { name: 'COPY VERSION INFO' }));
+    expect(await screen.findByText('Copied')).toBeInTheDocument();
+    const text = writeText.mock.calls[0][0] as string;
+    expect(text).toBe(versionReport(appInfoFixture));
+    expect(text).toContain('App commit: abc1234def');
+    expect(text).toContain('Shadow schema: v1 (supported v1)');
+    expect(text).toContain('LIVE disabled');
   });
   it('import validates first and restores only after typing RESTORE', async () => {
     invoke.mockImplementation(async (cmd: string) => {

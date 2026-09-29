@@ -7,7 +7,7 @@ vi.mock('@tauri-apps/api/core', () => ({ invoke: (...args: unknown[]) => invoke(
 import App, { Warnings } from '../App';
 import { PositionTable } from '../screens/Positions';
 import { TradeTable } from '../screens/Trades';
-import { TradeDetailView } from '../screens/TradeDetail';
+import { GivebackStats, TradeDetailView } from '../screens/TradeDetail';
 import { appInfoFixture, candleSetFixture, healthFixture, positionFixture, tradeDetailFixture, tradeFixture } from './fixtures';
 
 afterEach(() => { cleanup(); invoke.mockReset(); });
@@ -79,7 +79,8 @@ describe('trade detail chart', () => {
       expect(await screen.findByText(label)).toBeInTheDocument();
     }
     expect(screen.getByText('+$39.70')).toBeInTheDocument();
-    expect(screen.getByText('0.40R')).toBeInTheDocument();
+    // the same figure also appears as "Current R" in the giveback tiles, so check the tile itself
+    expect(screen.getByText('Unrealized R').closest('.stat')).toHaveTextContent('0.40R');
   });
 
   it('a closed trade shows its actual exit markers', async () => {
@@ -159,5 +160,47 @@ describe('monitor warnings', () => {
     h.status = { ...h.status!, position_monitor: { state: 'ACTIVE', open_positions: 2, stale_positions: 1, max_price_age_s: 30, error: 'allMids: HTTP 503' } };
     render(<Warnings health={h} healthError={null} />);
     expect(screen.getByText(/OPEN-POSITION MONITOR: 1 of 2 open position/)).toBeInTheDocument();
+  });
+});
+
+describe('profit giveback (SIDE 2)', () => {
+  const tile = (root: HTMLElement, label: string) => within(root).getByText(label).closest('.stat') as HTMLElement;
+
+  it('long: peak is the highest price, giveback = MFE R - current R, distance from peak shown', () => {
+    const g = tradeDetailFixture({ price: 104 }).live.giveback!;
+    render(<GivebackStats g={g} open />);
+    const root = screen.getByLabelText('Profit giveback');
+    expect(tile(root, 'MFE (R)')).toHaveTextContent('1.10R');
+    expect(tile(root, 'Current R')).toHaveTextContent('0.40R');
+    expect(tile(root, 'Profit giveback (R)')).toHaveTextContent('0.70R');
+    expect(tile(root, 'Profit giveback (%)')).toHaveTextContent('63.9');
+    expect(tile(root, 'Highest favourable price')).toHaveTextContent(/highest price since entry \(LONG\)/);
+    expect(tile(root, 'Distance from peak')).toHaveTextContent('7');
+    expect(tile(root, 'Time since MFE')).toHaveTextContent(/not tracked yet/);
+  });
+
+  it('short: peak is the LOWEST price and is labelled as such', () => {
+    const g = { peak_price: 90, peak_side: 'LOWEST' as const, mfe_r: 2, current_r: 1.5, current_r_basis: 'REALISED_PLUS_UNREALISED' as const,
+      profit_giveback_r: 0.5, profit_giveback_pct: 25, distance_from_peak: { price: 2.5, pct: 2.78 }, time_since_mfe_s: 600, time_since_mfe_reason: null };
+    render(<GivebackStats g={g} open />);
+    const root = screen.getByLabelText('Profit giveback');
+    expect(tile(root, 'Highest favourable price')).toHaveTextContent(/lowest price since entry \(SHORT\)/);
+    expect(tile(root, 'Profit giveback (R)')).toHaveTextContent('0.50R');
+    expect(tile(root, 'Profit giveback (%)')).toHaveTextContent('25');
+    expect(tile(root, 'Time since MFE')).toHaveTextContent('10m');
+  });
+
+  it('closed trade shows realised R and no live distance from peak', () => {
+    const g = tradeDetailFixture({ open: false }).live.giveback!;
+    render(<GivebackStats g={g} open={false} />);
+    const root = screen.getByLabelText('Profit giveback');
+    expect(tile(root, 'Realised R')).toHaveTextContent('0.50R');
+    expect(tile(root, 'Distance from peak')).toHaveTextContent('closed');
+  });
+
+  it('is rendered inside Trade Detail', async () => {
+    backend();
+    render(<TradeDetailView tradeId="scan-abc-ETH" onBack={() => {}} />);
+    expect(await screen.findByLabelText('Profit giveback')).toBeInTheDocument();
   });
 });

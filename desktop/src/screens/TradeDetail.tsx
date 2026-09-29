@@ -19,6 +19,25 @@ function exc(e: Excursion | undefined) {
   return <>{price(e.price)} <span className="muted small">{e.r === null ? '' : `${num(e.r, 2)}R · `}{usd(e.usd, { sign: true })}</span></>;
 }
 
+const rMult = (r: number | null) => (r === null ? DASH : `${num(r, 2)}R`);
+
+/** Profit giveback (MFE R - current/realised R) for the trade's own live
+ *  figures. All numbers come from the backend; nothing is computed here. */
+export function GivebackStats({ g, open }: { g: NonNullable<TradeDetail['live']['giveback']>; open: boolean }) {
+  const peakWord = g.peak_side === 'HIGHEST' ? 'highest' : 'lowest';
+  return (
+    <div className="stat-grid" aria-label="Profit giveback">
+      <Stat label="MFE (R)" value={rMult(g.mfe_r)} tone="pos" />
+      <Stat label={open ? 'Current R' : 'Realised R'} value={rMult(g.current_r)} tone={tone(g.current_r)} sub={open ? 'realised + unrealised, before fees' : 'before fees'} />
+      <Stat label="Profit giveback (R)" value={rMult(g.profit_giveback_r)} tone={g.profit_giveback_r ? 'neg' : undefined} sub="MFE R minus current R" />
+      <Stat label="Profit giveback (%)" value={g.profit_giveback_pct === null ? DASH : pct(g.profit_giveback_pct)} sub="share of peak profit given back" />
+      <Stat label="Highest favourable price" value={price(g.peak_price)} sub={`${peakWord} price since entry (${g.peak_side === 'HIGHEST' ? 'LONG' : 'SHORT'})`} />
+      <Stat label="Distance from peak" value={open ? dist(g.distance_from_peak) : DASH} sub={open ? 'back from the peak, against the trade' : 'closed'} />
+      <Stat label="Time since MFE" value={g.time_since_mfe_s === null ? DASH : duration(g.time_since_mfe_s)} sub={g.time_since_mfe_s === null ? 'not tracked yet' : undefined} />
+    </div>
+  );
+}
+
 export function MonitorBanner({ d }: { d: TradeDetail }) {
   if (!d.is_open) return null;
   const m = d.live.monitor;
@@ -101,6 +120,7 @@ export function TradeDetailView({ tradeId, onBack, pollMs = 2000, candlePollMs =
         <Stat label={`MFE (best ${d.is_open ? 'so far' : ''})`} value={exc(live.mfe)} tone="pos" sub={`best price ${price(live.best_price)}`} />
         <Stat label="MAE (worst)" value={exc(live.mae)} tone="neg" sub={`worst price ${price(live.worst_price)}`} />
       </div>
+      {live.giveback && <GivebackStats g={live.giveback} open={d.is_open} />}
 
       <Panel title={`${dec.asset} ${dir} · ${interval} candles`} right={
         <div className="seg">

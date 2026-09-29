@@ -18,6 +18,7 @@ from contextlib import closing
 from fastapi import Depends, FastAPI, Header, HTTPException
 
 from market_edge_exec import __version__
+from market_edge_exec.export import research as research_export
 from market_edge_exec.buildinfo import build_info
 from market_edge_exec.control.settings import BOUNDS as SETTINGS_BOUNDS, ControlStore, SettingsError
 from market_edge_exec.domain.contracts import ContractError, ExecutionIntent
@@ -128,8 +129,13 @@ def create_app(db_path: str = "market_edge_exec.sqlite3", hummingbot_mode: str =
 
     @app.get("/health")
     def health():
+        try:
+            research = app.state.shadow.versions()
+        except Exception as error:  # the research store must never fail liveness
+            research = {"error": str(error)}
         return {"status": "ok", "paper_only": PAPER_ONLY, "killed": router.killed, "hummingbot_mode": mode,
-                "version": __version__, "schema_version": migration.to_version, "build": build_info()}
+                "version": __version__, "schema_version": migration.to_version, "build": build_info(),
+                "research": research}
 
     @app.post("/execution/intent", dependencies=[Depends(require_api_key)])
     def submit_intent(payload: dict):
@@ -307,6 +313,21 @@ def create_app(db_path: str = "market_edge_exec.sqlite3", hummingbot_mode: str =
             raise HTTPException(status_code=404, detail="NOT_FOUND")
         return found
 
+    @app.get("/research/export", dependencies=[Depends(require_api_key)])
+    def research_export_info():
+        return {"formats": ["csv"] + (["parquet"] if research_export.parquet_available() else []),
+                "not_yet_available": [{"category": k, "reason": v} for k, v in research_export.NOT_YET_AVAILABLE.items()]}
+
+    @app.post("/research/export", dependencies=[Depends(require_api_key)])
+    def research_export_run(payload: dict):
+        """Read-only export for offline analysis; opens both databases in
+        SQLite read-only mode and writes into a new folder under out_dir."""
+        try:
+            return research_export.export_research(db_path, app.state.shadow.path, str(payload.get("out_dir") or ""),
+                                                   fmt=str(payload.get("format") or "csv"))
+        except (ValueError, FileExistsError) as error:
+            raise HTTPException(status_code=422, detail=str(error))
+
     @app.post("/paper/no-trade", dependencies=[Depends(require_api_key)])
     def paper_no_trade(payload: dict):
         paper.record_no_trade(payload.get("reason") or "NO_VALID_CANDIDATE", payload.get("detail"))
@@ -342,8 +363,39 @@ def create_app(db_path: str = "market_edge_exec.sqlite3", hummingbot_mode: str =
         offline = [i for i in payload.get("offline_instruments") or [] if isinstance(i, str)]
         if offline:
             paper.set_monitor_offline(offline, str(payload.get("error") or "no live price from the monitor's market data source"))
+        if isinstance(payload.get("rate_limit"), dict):
+            _store_rate_limit({"source": "position-monitor", **payload.pop("rate_limit")})
         app.state.monitor = {**payload, "received_at_ms": int(time.time() * 1000)}
         return {"recorded": True, "flagged_offline": len(offline)}
+
+    # ---- rate-limit diagnostics (#14; the data contract for SIDE 1) -------
+    # Read-only counters. The Node forward loop / monitor report the shared
+    # Hyperliquid request budget; the chart fetcher here reports its own.
+    # Nothing here changes trading behaviour.
+    app.state.rate_limit_node = None
+
+    def _store_rate_limit(snapshot: dict) -> None:
+        app.state.rate_limit_node = {**snapshot, "received_at_ms": int(time.time() * 1000)}
+
+    def _rate_limit_view() -> dict:
+        fetcher = app.state.candle_fetcher
+        chart = fetcher.health() if hasattr(fetcher, "health") else None
+        node = app.state.rate_limit_node
+        age_s = (time.time() * 1000 - node["received_at_ms"]) / 1000 if node else None
+        return {"schema": "rate-limit-diagnostics/v1", "node_budget": node, "node_budget_age_s": age_s, "chart_candles": chart,
+                "priorities": ["P0_POSITION_MONITOR", "P1_RECONCILIATION", "P2_DISCOVERY", "P3_SHADOW_CAPTURE",
+                               "P4_SHADOW_RESOLUTION", "P5_CHART_HISTORY"]}
+
+    @app.post("/system/rate-limit", dependencies=[Depends(require_api_key)])
+    def report_rate_limit(payload: dict):
+        if not isinstance(payload, dict) or payload.get("schema") != "rate-limit-health/v1":
+            raise HTTPException(status_code=422, detail="expected a rate-limit-health/v1 snapshot")
+        _store_rate_limit(payload)
+        return {"recorded": True}
+
+    @app.get("/system/rate-limit", dependencies=[Depends(require_api_key)])
+    def rate_limit_view():
+        return _rate_limit_view()
 
     def _monitor_summary(now_ms: int) -> dict:
         max_age = paper.monitor_max_price_age_s()
@@ -602,6 +654,7 @@ def create_app(db_path: str = "market_edge_exec.sqlite3", hummingbot_mode: str =
             "last_reconcile": control.last_reconcile(), "latest_signal": signals[0] if signals else None,
             "open_positions": len(ledger.trades("OPEN")), "segments": ledger.runtime_segments()[-5:],
             "position_monitor": _monitor_summary(int(time.time() * 1000)),
+            "rate_limit": _rate_limit_view(),
             "control_audit": control.audit_log(20),
             "version": __version__, "build": build_info(), "migration": migration.to_dict(),
         }

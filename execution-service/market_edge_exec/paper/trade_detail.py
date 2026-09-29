@@ -74,6 +74,7 @@ def live_metrics(trade: dict, now_ms: int, max_age_s: float) -> dict:
     fav = (best - entry) if long else (entry - best)
     adv = (worst - entry) if long else (entry - worst)
     qty = trade["quantity"]
+    mfe_r = (fav / per_unit_risk) if per_unit_risk else None
     return {
         "monitor": mon,
         "current_price": price,
@@ -84,11 +85,62 @@ def live_metrics(trade: dict, now_ms: int, max_age_s: float) -> dict:
         "distance_to_tp1": None if trade["tp1_hit"] or trade["status"] == "CLOSED" else room_to_target(trade["tp1"]),
         "distance_to_tp2": None if trade["status"] == "CLOSED" else room_to_target(trade["tp2"]),
         "best_price": best, "worst_price": worst,
-        "mfe": {"price": fav, "pct": _pct(fav, entry), "usd": fav * qty, "r": (fav / per_unit_risk) if per_unit_risk else None},
+        "mfe": {"price": fav, "pct": _pct(fav, entry), "usd": fav * qty, "r": mfe_r},
         "mae": {"price": adv, "pct": _pct(adv, entry), "usd": adv * qty, "r": (adv / per_unit_risk) if per_unit_risk else None},
         "position_age_s": ((trade.get("closed_at_ms") or now_ms) - trade["opened_at_ms"]) / 1000.0,
         "remaining_qty": trade["remaining_qty"],
         "milestones": milestones(trade),
+        "giveback": profit_giveback(trade, price, now_ms, mfe_r, unrealized, risk),
+    }
+
+
+def profit_giveback(trade: dict, price: Optional[float], now_ms: int, mfe_r: Optional[float],
+                    unrealized: Optional[float], risk: float) -> dict:
+    """Display-only profit-giveback view of the trade's OWN live figures
+    (MAJOR 3's core metric, shown ahead of any adaptive-exit policy):
+
+        profit_giveback_R = MFE_R - current R   (open trade)
+                          = MFE_R - realised R  (closed trade)
+
+    current R / realised R = (realised PnL + unrealised PnL) / planned risk,
+    gross of fees like MFE, so the two are comparable. "Peak" is the most
+    favourable price since entry -- the HIGHEST for a long, the LOWEST for a
+    short -- and distance from peak is how far price has come back from it
+    against the trade (>= 0). No hindsight or research value is used here."""
+    long = trade["direction"] == "long"
+    closed = trade["status"] == "CLOSED"
+    peak = trade.get("best_price") or trade["entry_fill"]
+    realized = trade.get("realized_pnl") or 0.0
+    if risk <= 0:
+        current_r = None
+    elif closed:
+        current_r = realized / risk
+    elif unrealized is not None:
+        current_r = (realized + unrealized) / risk
+    else:
+        current_r = None
+    giveback_r = max(0.0, mfe_r - current_r) if (mfe_r is not None and current_r is not None) else None
+    giveback_pct = (giveback_r / mfe_r * 100) if (giveback_r is not None and mfe_r and mfe_r > 0) else None
+    ref = None if closed else price
+    from_peak = None
+    if ref is not None:
+        d = max(0.0, (peak - ref) if long else (ref - peak))
+        from_peak = {"price": d, "pct": _pct(d, peak)}
+    mfe_at = trade.get("best_price_at_ms")
+    end = trade.get("closed_at_ms") or now_ms
+    return {
+        "peak_price": peak,
+        "peak_side": "HIGHEST" if long else "LOWEST",
+        "mfe_r": mfe_r,
+        "current_r": current_r,
+        "current_r_basis": "REALISED" if closed else "REALISED_PLUS_UNREALISED",
+        "profit_giveback_r": giveback_r,
+        "profit_giveback_pct": giveback_pct,
+        "distance_from_peak": from_peak,
+        # The ledger records the peak PRICE but not WHEN it was reached, so
+        # time since MFE is unknown (never estimated) until that is tracked.
+        "time_since_mfe_s": ((end - mfe_at) / 1000.0) if mfe_at else None,
+        "time_since_mfe_reason": None if mfe_at else "MFE_TIMESTAMP_NOT_TRACKED",
     }
 
 

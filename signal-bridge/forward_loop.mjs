@@ -29,6 +29,7 @@ import { buildShadowPayload, executionFromCycle, riskInputsFor, scanCandlesByCoi
 import { supplementMarkets, supplementPerCycle, supplementPlan } from './research_universe.mjs';
 import { runLiveScan } from '../backend/scan-core.mjs';
 import { monitorIntervalMs, PositionMonitor } from './position_monitor.mjs';
+import { isRateLimitError, PRIORITY, sharedBudget } from './rate_limit.mjs';
 
 // The DISCOVERY cadence (scan -> rank -> maybe open). Unchanged: 5 minutes.
 export const DEFAULT_CYCLE_INTERVAL_MS = 300000;
@@ -50,7 +51,7 @@ const SHADOW_EXTRA_FETCH_PER_CYCLE = Math.max(0, Number(process.env.SHADOW_EXTRA
 // research-only on a deterministic rotation (research_universe.mjs); bounded
 // to SHADOW_SUPPLEMENT_PER_CYCLE (default 1, max 3) assets per cycle.
 const SHADOW_SUPPLEMENT_PER_CYCLE = supplementPerCycle(process.env.SHADOW_SUPPLEMENT_PER_CYCLE);
-const isRateLimited = (error) => /\b429\b/.test(String(error?.message || error));
+const isRateLimited = isRateLimitError;
 
 // Graceful stop: the current cycle always finishes (its mark/signal/reconcile
 // calls are each one committed backend transaction), then the loop ends its
@@ -77,6 +78,7 @@ export function emptyMetrics() {
     stale_signals_blocked: 0, duplicate_signals_blocked: 0, valid_intents: 0,
     risk_approvals: 0, risk_rejections: 0, fills: 0, errors: 0,
     exits: 0, stale_market_data: 0, reconciliation_checks: 0, reconciliation_failures: 0,
+    discovery_deferred_rate_limited: 0,
   };
 }
 
@@ -145,7 +147,7 @@ export async function advanceOpenTrades(metrics, { candles = fetchCompletedCandl
 export async function shadowObserve(cycle, result, outcome, posted, deps = {}) {
   if (!result?.scan?.research) return null;
   const { candles = fetchCompletedCandles, intervalMs = CYCLE_INTERVAL_MS, extraFetches = SHADOW_EXTRA_FETCH_PER_CYCLE,
-    researchScan = runLiveScan, supplementCount = SHADOW_SUPPLEMENT_PER_CYCLE } = deps;
+    researchScan = runLiveScan, supplementCount = SHADOW_SUPPLEMENT_PER_CYCLE, budget = sharedBudget() } = deps;
   const out = { recorded: 0, resolved: 0, errors: 0 };
   let production = null;
   try {
@@ -162,7 +164,9 @@ export async function shadowObserve(cycle, result, outcome, posted, deps = {}) {
   out.supplement = { selected: plan.selected, skipped: plan.skipped, not_on_venue: plan.notOnVenue, recorded: 0 };
   if (plan.selected.length) {
     try {
-      const scan = await researchScan({ markets: supplementMarkets(plan.selected), includeResearch: true, now: Date.now() });
+      // Shadow capture priority (P3): only spare budget, never waits.
+      const scan = await researchScan({ markets: supplementMarkets(plan.selected), includeResearch: true, now: Date.now(),
+        fetchImpl: budget.fetchImplFor(PRIORITY.P3_SHADOW_CAPTURE) });
       const payload = buildShadowPayload({ scan }, null, { observationIntervalMs: intervalMs * SHADOW_EVERY_N_CYCLES, scope: SCOPE_RESEARCH_SUPPLEMENT,
         crossMarketContext: production?.scan?.cross_market ?? null, assetCtxs: result.scan.research.assetCtxs });
       if (payload) out.supplement.recorded = (await api('POST', '/shadow/scan', payload)).body?.inserted || 0;
@@ -183,7 +187,7 @@ export async function shadowObserve(cycle, result, outcome, posted, deps = {}) {
       if (!rows || rows[0].time > since) {
         if (fetched >= extraFetches) continue;
         fetched += 1;
-        try { rows = await candles(coin, since, { now: Date.now() }); } catch (error) {
+        try { rows = await candles(coin, since, { now: Date.now(), priority: PRIORITY.P4_SHADOW_RESOLUTION }); } catch (error) {
           console.error(JSON.stringify({ event: 'SHADOW_CANDLES_UNAVAILABLE', coin, error: error.message }));
           // Delayed resolution is the lowest priority: on a rate limit, stop
           // asking this cycle (windows stay pending and are retried later).
@@ -207,7 +211,20 @@ export async function runCycle(cycle, metrics, deps = {}) {
   const lifecycle = await advanceOpenTrades(metrics, deps);
   // Research capture adds no requests (the scan already fetched every frame);
   // it is always on so Risk Sizing V2 gets its daily-candle input.
-  const result = await scan({ dryRun: true, includeResearch: true });
+  let result;
+  try {
+    result = await scan({ dryRun: true, includeResearch: true });
+  } catch (error) {
+    if (!isRateLimited(error)) throw error;
+    // A temporary rate limit is not an outage: discovery is deferred to the
+    // next cycle (no trade, nothing guessed) and the loop stays healthy. A
+    // real prolonged outage still shows up as MARKET_DATA_OFFLINE / STALE.
+    metrics.cycles += 1;
+    metrics.discovery_deferred_rate_limited += 1;
+    await api('POST', '/paper/no-trade', { reason: 'DISCOVERY_DEFERRED_RATE_LIMITED', detail: { error: String(error.message).slice(0, 300) } });
+    console.error(JSON.stringify({ event: 'DISCOVERY_DEFERRED_RATE_LIMITED', cycle, error: error.message }));
+    return { outcome: 'DEFERRED_RATE_LIMITED', lifecycle };
+  }
   if (!result.signal) {
     await api('POST', '/paper/no-trade', { reason: result.reason || 'NO_VALID_CANDIDATE', detail: { scanId: result.scanId, status: result.status } });
     const outcome = classify(result, metrics);
@@ -250,6 +267,13 @@ export async function runCycle(cycle, metrics, deps = {}) {
   return { outcome, lifecycle, signal_id: result.signal.signal_id, reason: posted.body?.reason, leverage, ...(shadowResult ? { shadow: shadowResult } : {}) };
 }
 
+// Rate-limit diagnostics (read-only counters) for GET /system/rate-limit.
+export async function reportRateLimitHealth(budget = sharedBudget()) {
+  try {
+    await api('POST', '/system/rate-limit', { source: 'forward-loop', ...budget.health() });
+  } catch { /* diagnostics only: never affects the cycle */ }
+}
+
 // `monitor`: undefined -> the real open-position monitor; null -> none (tests).
 export async function runLoop({ maxCycles = MAX_CYCLES, intervalMs = CYCLE_INTERVAL_MS, sleep = interruptibleSleep, deps = {}, monitor } = {}) {
   const metrics = emptyMetrics();
@@ -266,6 +290,7 @@ export async function runLoop({ maxCycles = MAX_CYCLES, intervalMs = CYCLE_INTER
         const rec = (await api('POST', '/reconcile', {})).body;
         metrics.reconciliation_checks += 1;
         if (rec.reconciled === false) metrics.reconciliation_failures += 1;
+        await reportRateLimitHealth();
         console.log(JSON.stringify({ cycle, at: new Date().toISOString(), ...cycleResult, reconciled: rec.reconciled, halted: rec.halted }));
         // A position can only have opened in this cycle: let the monitor look now.
         void positions?.wake();

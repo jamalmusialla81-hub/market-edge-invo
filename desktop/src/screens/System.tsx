@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { api, AppInfo, errorText, Health, Level, LogEntry, LogFile, SecretsStatus } from '../api';
 import { Badge, Dot, Panel, Table } from '../components/ui';
 import { DASH, duration, ts } from '../format';
+import { ResearchExport } from './ResearchExport';
 
 const LEVELS: Level[] = ['INFO', 'WARN', 'ERROR', 'RISK', 'EXECUTION'];
 const SECRET_LABELS: Record<string, string> = {
@@ -126,6 +127,7 @@ export function SystemScreen({ health, info }: { health: Health | null; info: Ap
         </Panel>
       </div>
       <LogView />
+      <ResearchExport />
       <Secrets />
     </div>
   );

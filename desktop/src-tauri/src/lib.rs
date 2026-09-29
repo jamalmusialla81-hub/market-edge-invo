@@ -72,9 +72,15 @@ impl AppState {
         self.rt.as_ref().ok_or_else(|| self.fatal.clone().unwrap_or_else(|| "controller not initialised".into()))
     }
     async fn call(&self, method: reqwest::Method, path: &str, body: Option<Value>) -> CmdResult<Value> {
+        self.call_with_timeout(method, path, body, None).await
+    }
+    async fn call_with_timeout(&self, method: reqwest::Method, path: &str, body: Option<Value>, timeout: Option<Duration>) -> CmdResult<Value> {
         let rt = self.rt()?;
         let url = format!("{}{}", rt.services.cfg.base_url(), path);
         let mut req = self.client.request(method, url).header("X-API-Key", rt.services.api_key());
+        if let Some(t) = timeout {
+            req = req.timeout(t);
+        }
         if let Some(b) = body {
             req = req.json(&b);
         }
@@ -327,6 +333,37 @@ fn pick_open_path(app: &tauri::AppHandle) -> Option<PathBuf> {
         .and_then(|p| p.into_path().ok())
 }
 
+fn pick_export_folder(app: &tauri::AppHandle) -> Option<PathBuf> {
+    use tauri_plugin_dialog::DialogExt;
+    app.dialog().file().set_title("Choose a folder for the research export").blocking_pick_folder().and_then(|p| p.into_path().ok())
+}
+
+#[tauri::command]
+async fn get_research_export_info(state: tauri::State<'_, AppState>) -> CmdResult<Value> {
+    state.get("/research/export").await
+}
+
+/// Read-only research export (CSV/Parquet) into a new folder the service
+/// creates under the chosen directory. Not a backup: nothing can be restored
+/// from it, and the service opens both databases read-only.
+#[tauri::command]
+async fn export_research(app: tauri::AppHandle, state: tauri::State<'_, AppState>, format: String) -> CmdResult<Value> {
+    if format != "csv" && format != "parquet" {
+        return Err("invalid export format".into());
+    }
+    state.rt()?;
+    let handle = app.clone();
+    let Some(dir) = tauri::async_runtime::spawn_blocking(move || pick_export_folder(&handle)).await.map_err(|e| e.to_string())? else {
+        return Ok(json!({"cancelled": true}));
+    };
+    // A large research database takes longer than the default 10s request timeout.
+    let manifest = state.call_with_timeout(reqwest::Method::POST, "/research/export", Some(json!({"out_dir": dir, "format": format})),
+        Some(Duration::from_secs(600))).await?;
+    state.logs.app(Level::Info, format!("EXPORT RESEARCH: {} ({format}, read-only, local folder only)",
+        manifest.get("folder").and_then(Value::as_str).unwrap_or("?")));
+    Ok(manifest)
+}
+
 #[tauri::command]
 async fn export_backup(app: tauri::AppHandle, state: tauri::State<'_, AppState>) -> CmdResult<Value> {
     let rt = state.rt()?;
@@ -485,6 +522,7 @@ async fn app_info(state: tauri::State<'_, AppState>) -> CmdResult<Value> {
             "version": backend.get("version"),
             "schema_version": backend.get("schema_version"),
             "build": backend.get("build"),
+            "research": backend.get("research"),
         },
         "node_version": node,
         "data_dir": state.data_dir,
@@ -872,6 +910,8 @@ pub fn run() {
             get_performance,
             get_shadow_summary,
             get_shadow_observations,
+            get_research_export_info,
+            export_research,
             get_shadow_observation,
             get_risk_config,
             get_risk_usage,
