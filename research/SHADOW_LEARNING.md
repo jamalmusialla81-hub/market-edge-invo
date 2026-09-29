@@ -248,3 +248,13 @@ No claim that any of this adds edge. It is data for later experiments. Not yet c
 - Deterministic: same source and `as_of_ms` gives the same `content_hash` (a hash of the canonical rows) and the same file. A published version is never edited: rebuilding identical content returns `UNCHANGED_ALREADY_PUBLISHED`; different content under an existing version name is refused, so a new dated snapshot is the only way to supersede.
 - Registry: `manifest.registry_entry` is added to `research/dataset-registry.js` via `withSnapshot()` as a new entry (never overwriting). The live `FORWARD-SHADOW-*` entries stay `trainable: false`.
 - Limit: no real snapshot has been built, because this environment has no shadow database with resolved forward data (it lives on the desktop app). Tests use a synthetic 10-scan fixture. The manual-validation step (build one from the real database and read the manifest) is still open.
+
+## Challenger training trigger (DATA 6, FORWARD-CHALLENGER-TRAINING-V1)
+
+`execution-service/market_edge_exec/training/`: `trigger.py` (pure decision), `challengers.py` (simple family), `run.py` (one cycle, logged in the experiment registry).
+
+- Trains **only** on a frozen DATA 3 snapshot, and refuses one whose contents no longer match its manifest hash. Fits on the TRAIN split only; validation and OOS rows are untouched (a test changes their targets and shows the fitted artifacts do not move).
+- Trigger: fires when enough NEW independent episodes (default 30) or NEW choice scans (default 20, scans with two or more candidates) exist since the last completed run, or an optional scheduled window elapsed. Thresholds have floors (5 / 5) so no setting can be met by a single trade. Dedup: if too small a share of the current snapshot's clusters is new (default under 25%), or it is the same snapshot as last time, it refuses even when the raw row count is large.
+- Family (pure Python, no neural nets): random baseline, current-Quant baseline, ridge regression, boosted regression stumps. A ranking model is not included; nothing so far shows a reason to need one.
+- Logging: a fired run is PLANNED, RUNNING, then NO_EVIDENCE (or FAILED with the error); it never marks itself PROMISING, because nothing is evaluated here (walk-forward is DATA 7, the placebo gate DATA 8). A check that does not fire is logged too, as a PLANNED to SUPERSEDED pair whose note says `NOT_RUN` and why. Artifacts are written under the artifact directory; nothing is deployed.
+- Limit: not run against a real snapshot, since none exists yet. The trigger is a function to call from a scheduler (DATA 17 later); it is not scheduled anywhere yet.
