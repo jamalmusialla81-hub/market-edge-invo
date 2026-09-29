@@ -56,8 +56,8 @@ def test_fresh_database_is_created_at_target_version_without_backup(tmp_path):
     assert report.to_version == migrations.target_version() == migrations.current_version(str(db))
     assert not (tmp_path / "backups").exists()
     health = TestClient(app).get("/health").json()
-    assert health["version"] == "0.1.0" and health["schema_version"] == report.to_version
-    assert health["build"]["backend_version"] == "0.1.0"
+    assert health["version"] == "0.2.0" and health["schema_version"] == report.to_version
+    assert health["build"]["backend_version"] == "0.2.0"
     # research versions come from the live shadow database and the running code
     from market_edge_exec.shadow import contracts as C
     assert health["research"] == {"shadow_schema_version": C.SHADOW_SCHEMA_VERSION, "supported_shadow_schema_version": C.SHADOW_SCHEMA_VERSION,
@@ -160,7 +160,7 @@ def test_cli_backup_validate_and_migrate(tmp_path):
         return out.returncode, json.loads(out.stdout.strip().splitlines()[-1])
 
     code, v = run("version")
-    assert code == 0 and v["backend_version"] == "0.1.0" and v["schema_version"] == migrations.target_version()
+    assert code == 0 and v["backend_version"] == "0.2.0" and v["schema_version"] == migrations.target_version()
     code, b = run("backup-db", str(db), str(tmp_path / "copy.sqlite3"))
     assert code == 0 and b["ok"] and b["counts"]["paper_trades"] == 1
     code, m = run("migrate", str(db))
