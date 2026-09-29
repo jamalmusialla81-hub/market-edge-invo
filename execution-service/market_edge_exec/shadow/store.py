@@ -32,9 +32,9 @@ from market_edge_exec.shadow import resolve as R
 DATA_EXPIRY_MS = 7 * 24 * C.HOUR   # a batch no candle set covered by then is closed as unavailable
 IMMUTABLE = ("shadow_scans", "shadow_observations", "shadow_labels", "shadow_hindsight", "forward_paper_executed",
              "forward_execution_quality", "data_quality_verdicts", "experiment_events", "drift_baselines", "drift_alerts",
-             "shadow_model_deployments", "shadow_model_predictions")
+             "shadow_model_deployments", "shadow_model_predictions", "policy_lifecycle_events")
 # Tables added after v1, with the schema version that introduced them (older backups lack them and stay restorable).
-TABLE_SINCE = {"forward_execution_quality": 2, "data_quality_verdicts": 3, "experiment_events": 4, "drift_baselines": 5, "drift_alerts": 5, "shadow_model_deployments": 6, "shadow_model_predictions": 6}
+TABLE_SINCE = {"forward_execution_quality": 2, "data_quality_verdicts": 3, "experiment_events": 4, "drift_baselines": 5, "drift_alerts": 5, "shadow_model_deployments": 6, "shadow_model_predictions": 6, "policy_lifecycle_events": 7}
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS shadow_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -115,6 +115,12 @@ CREATE TABLE IF NOT EXISTS shadow_model_predictions (
     prediction_id TEXT PRIMARY KEY, model_key TEXT NOT NULL, artifact_hash TEXT NOT NULL, scan_id TEXT NOT NULL, decision_ts INTEGER NOT NULL,
     production_choice TEXT, challenger_choice TEXT, record BLOB NOT NULL, record_hash TEXT NOT NULL, created_at_ms INTEGER NOT NULL
 );
+-- DATA 11: one shared lifecycle for every policy type. Append-only; a policy's state is the fold of its events, never an edited row.
+CREATE TABLE IF NOT EXISTS policy_lifecycle_events (
+    event_id INTEGER PRIMARY KEY AUTOINCREMENT, policy_id TEXT NOT NULL, event_type TEXT NOT NULL, from_state TEXT, to_state TEXT,
+    actor TEXT NOT NULL, authorization TEXT, evidence_experiment_id TEXT, criteria_hash TEXT, payload BLOB NOT NULL, at_ms INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS policy_lifecycle_policy ON policy_lifecycle_events (policy_id, event_id);
 CREATE INDEX IF NOT EXISTS shadow_model_pred_key ON shadow_model_predictions (model_key, decision_ts);
 CREATE TABLE IF NOT EXISTS shadow_resolution (
     observation_id TEXT PRIMARY KEY, coin TEXT NOT NULL, first_bar_ts INTEGER NOT NULL, batches_done TEXT NOT NULL,
@@ -142,7 +148,7 @@ def default_path(paper_db_path: str) -> str:
 
 
 SHADOW_TABLES = ("shadow_meta", "shadow_scans", "shadow_observations", "shadow_labels", "shadow_hindsight",
-                 "forward_paper_executed", "forward_execution_quality", "data_quality_verdicts", "experiment_events", "drift_baselines", "drift_alerts", "shadow_model_deployments", "shadow_model_predictions", "shadow_resolution")
+                 "forward_paper_executed", "forward_execution_quality", "data_quality_verdicts", "experiment_events", "drift_baselines", "drift_alerts", "shadow_model_deployments", "shadow_model_predictions", "policy_lifecycle_events", "shadow_resolution")
 
 
 def inspect_database(path: str) -> dict:

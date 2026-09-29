@@ -45,6 +45,7 @@ from market_edge_exec.risk.engine import RiskLimits, approve
 from market_edge_exec.routing.router import BACKEND_HUMMINGBOT, BACKEND_NAUTILUS_NATIVE, ExecutionRouter, RouterError
 from market_edge_exec.signal_bridge.bridge import process_signal
 from market_edge_exec.evaluation import forward as forward_validation
+from market_edge_exec.lifecycle import policy as policy_lifecycle
 from market_edge_exec.experiments.registry import ExperimentRegistry, RegistryError as ExperimentError, STATUSES as EXPERIMENT_STATUSES
 from market_edge_exec.quality import runner as quality_runner
 from market_edge_exec.shadow import contracts as shadow_contracts
@@ -551,6 +552,42 @@ def create_app(db_path: str = "market_edge_exec.sqlite3", hummingbot_mode: str =
     def shadow_model_validate(model_key: str):
         """Same evaluation, recorded in the experiment registry. Never promotes anything."""
         return forward_validation.run(app.state.shadow, experiments, model_key, log=True)
+
+    # ---- one lifecycle for every policy type (DATA 11): RESEARCH -> SHADOW -> PAPER, never LIVE, never automatic ----
+    LIFECYCLE_LABEL = "RESEARCH ONLY · SHADOW/PAPER LIFECYCLE · HUMAN AUTHORIZATION REQUIRED · NO LIVE STATE EXISTS"
+
+    def _lifecycle(fn, *args, **kwargs):
+        try:
+            return fn(*args, **kwargs)
+        except policy_lifecycle.LifecycleError as error:
+            code = 404 if str(error).startswith("UNKNOWN_POLICY:") else 409 if str(error).startswith(("ILLEGAL", "POLICY_EXISTS", "CRITERIA_NOT_MET", "NOT_UNDER")) else 422
+            raise HTTPException(status_code=code, detail=str(error))
+
+    @app.post("/research/lifecycle/policies", dependencies=[Depends(require_api_key)])
+    def lifecycle_register(payload: dict):
+        return _lifecycle(policy_lifecycle.register, app.state.shadow, policy_id=str(payload.get("policy_id") or ""), policy_type=str(payload.get("policy_type") or ""),
+                          criteria=payload.get("criteria"), subject_ref=payload.get("subject_ref"), description=str(payload.get("description") or ""), actor=str(payload.get("actor") or "API"))
+
+    @app.get("/research/lifecycle/policies", dependencies=[Depends(require_api_key)])
+    def lifecycle_list():
+        return {"label": LIFECYCLE_LABEL, "states": list(policy_lifecycle.STATES), "policies": policy_lifecycle.list_policies(app.state.shadow)}
+
+    @app.get("/research/lifecycle/policies/{policy_id}", dependencies=[Depends(require_api_key)])
+    def lifecycle_get(policy_id: str):
+        h = policy_lifecycle.history(app.state.shadow, policy_id)
+        if h is None:
+            raise HTTPException(status_code=404, detail=f"UNKNOWN_POLICY: {policy_id}")
+        return {"label": LIFECYCLE_LABEL, **h}
+
+    @app.post("/research/lifecycle/policies/{policy_id}/transition", dependencies=[Depends(require_api_key)])
+    def lifecycle_transition(policy_id: str, payload: dict):
+        return _lifecycle(policy_lifecycle.transition, app.state.shadow, experiments, policy_id, str(payload.get("to_state") or ""), actor=str(payload.get("actor") or "API"),
+                          authorization=payload.get("authorization"), evidence_experiment_id=payload.get("evidence_experiment_id"), note=str(payload.get("note") or ""))
+
+    @app.post("/research/lifecycle/policies/{policy_id}/review", dependencies=[Depends(require_api_key)])
+    def lifecycle_review(policy_id: str, payload: dict):
+        return _lifecycle(policy_lifecycle.review, app.state.shadow, experiments, policy_id, evidence_experiment_id=str(payload.get("evidence_experiment_id") or ""),
+                          drift_alert_level=payload.get("drift_alert_level"), actor=str(payload.get("actor") or "API"))
 
     def _experiment_call(fn, *args, **kwargs):
         try:

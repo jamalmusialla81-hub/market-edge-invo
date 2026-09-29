@@ -312,3 +312,19 @@ in its scan has an OK 72h label, and it was frozen before its own outcome window
 - Thresholds are this task's own and documented in the module, not copied from promotion-readiness.js.
 - API: `GET /research/shadow-models/{key}/validation` (not logged), `POST .../validate` (logged). Tests: `tests/test_forward_validation.py`.
 - Not yet run against real forward data: no challenger has been deployed and none has accumulated resolved scans.
+
+## Policy lifecycle (DATA 11)
+
+`market_edge_exec/lifecycle/policy.py`, shadow schema v7 (`policy_lifecycle_events`, append-only, immutable by trigger). One lifecycle for
+ranking models, risk sizing, adaptive exits and strategy variants: RESEARCH -> SHADOW -> PAPER, with DEMOTED as the way out.
+
+- There is no LIVE state: it is absent from the state list and the transition table, and a test checks the module source for it.
+- No skipping (RESEARCH -> PAPER is refused). Every forward move, and re-entry after demotion, needs a logged human authorization
+  (`authorized_by`, `authorization_ref`, `statement`); automated actor names are refused. Passing evidence alone never promotes.
+- Criteria are preregistered at `register` time, hashed, immutable, and may not be weaker than DATA 10's floors. At decision time the
+  recorded evidence is compared with those stored criteria (hash re-verified; a mismatch fails closed) and the itemized comparison is
+  written onto the event. Evidence created before the criteria were frozen is refused.
+- Demotion is the safe direction and needs no authorization. `review` demotes only on real negative forward evidence (floors met, verdict
+  NO_EVIDENCE); thin evidence retains and is never counted as support; a drift or strategy-health ALERT only recommends.
+- API under `/research/lifecycle/policies`. MAJOR 4 and MAJOR 6 are not retrofitted here (their own mode flags are untouched); they can
+  report through this once their own issues are ready. Nothing in this module can start, size or place anything.

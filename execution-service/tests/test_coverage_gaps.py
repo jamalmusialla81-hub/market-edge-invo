@@ -51,6 +51,7 @@ def test_every_immutable_shadow_table_refuses_update_and_delete(tmp_path):
     store.record_drift_baseline("b", T0, T0 + 1, {"numeric": {}, "categorical": {}}, "T", now_ms=T0)
     store.record_drift_alerts("b", 1, [{"dimension": "score", "level": "ALERT", "statistic": 1.0}], "T", T0)
     store._connect().execute("INSERT INTO shadow_model_deployments (model_key, event, model_name, actor, at_ms, detail) VALUES ('k','DEPLOYED','ridge','t',1,x'00')").connection.commit()
+    store._connect().execute("INSERT INTO policy_lifecycle_events (policy_id, event_type, actor, payload, at_ms) VALUES ('p','REGISTERED','a',x'00',1)").connection.commit()
     store._connect().execute("INSERT INTO shadow_model_predictions VALUES ('p','k','h','s',1,NULL,NULL,x'00','h',1)").connection.commit()
     first = R.first_bar_open(T0)
     closes = [100 + min(i, 60) * 0.1 for i in range(C.FULL_WINDOW_MS // BAR + 2)]
@@ -58,7 +59,7 @@ def test_every_immutable_shadow_table_refuses_update_and_delete(tmp_path):
     with sqlite3.connect(store.path) as conn:
         for table in IMMUTABLE:
             assert conn.execute(f"SELECT count(*) FROM {table}").fetchone()[0] > 0, f"{table} has no row to protect"
-            col = {"data_quality_verdicts": "checker_version", "experiment_events": "actor", "drift_baselines": "drift_version", "drift_alerts": "drift_version", "shadow_model_deployments": "actor", "shadow_model_predictions": "artifact_hash"}.get(table, "dataset_version")
+            col = {"data_quality_verdicts": "checker_version", "experiment_events": "actor", "drift_baselines": "drift_version", "drift_alerts": "drift_version", "shadow_model_deployments": "actor", "shadow_model_predictions": "artifact_hash", "policy_lifecycle_events": "actor"}.get(table, "dataset_version")
             for sql in (f"UPDATE {table} SET {col}='TAMPERED'", f"DELETE FROM {table}"):
                 with pytest.raises(sqlite3.DatabaseError, match="SHADOW_RESEARCH_ROW_IMMUTABLE"):
                     conn.execute(sql)
