@@ -111,7 +111,7 @@ def test_a_published_snapshot_is_immutable_and_never_overwritten(tmp_path):
     folder = tmp_path / "out" / m["version"]
     with closing(sqlite3.connect(folder / "snapshot.sqlite3")) as c:
         for sql in ("UPDATE snapshot_rows SET target=0", "DELETE FROM snapshot_rows", "UPDATE snapshot_meta SET value='x'"):
-            with pytest.raises(sqlite3.DatabaseError, match="SNAPSHOT_IMMUTABLE"):
+            with pytest.raises(sqlite3.DatabaseError, match="SNAPSHOT_IMMUTABLE|readonly database"):   # trigger for root, read-only file mode for everyone else
                 c.execute(sql)
     assert not os.access(folder / "manifest.json", os.W_OK) or os.geteuid() == 0
     with pytest.raises(B.SnapshotError, match="SNAPSHOT_EXISTS"):
