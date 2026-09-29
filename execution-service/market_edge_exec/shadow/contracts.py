@@ -72,7 +72,7 @@ FUTURE_LABEL_KEYS: set[str] = set()
 # Any field whose name says it describes the future is a target, never a
 # feature, even if a future label builder forgets to register it.
 HINDSIGHT_PATTERN = re.compile(
-    r"(optimal|hindsight|best_achievable|best_direction|best_holding|mfe|mae|future|outcome|realis|realiz|"
+    r"(optimal|hindsight|best_achievable|best_direction|best_holding|mfe|mae|future|outcome|reali[sz]ed_(?!vol)|"
     r"classification|efficiency|excursion|time_to_|policy_|_hit$|hit_at|first_touch|label|resolved|"
     r"missed|opportunity|window_end)", re.IGNORECASE)
 

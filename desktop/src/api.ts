@@ -128,11 +128,44 @@ export interface ShadowLink {
   resolution_status?: string | null; next_due_ts?: number | null; resolved_horizons?: string[];
   unresolvable_horizons?: string[]; pending_horizons?: string[]; post_outcome_available?: boolean;
 }
+// Risk Sizing V2. Records are the ORIGINAL immutable decision; counterfactual
+// (shadow-mode) records are research only and never the executed size.
+export type SizingRecord = Record<string, unknown> & {
+  sizing_rule_version: string; approved: boolean; rejection_reason?: string | null; wallet_equity?: number;
+  base_risk_pct?: number; effective_risk_pct?: number; stop_distance_pct?: number; vol_multiplier?: number; drawdown_multiplier?: number | null;
+  execution_buffer_pct?: number; raw_risk_notional?: number; position_notional_cap?: number; portfolio_cap_notional?: number;
+  portfolio_gross_cap_notional?: number; cluster_cap_notional?: number; liquidity_cap_notional?: number | null; margin_cap_notional?: number;
+  final_notional?: number; final_quantity?: number; planned_loss_dollars?: number; planned_loss_pct_equity?: number;
+  sizing_binding_constraint?: string; cluster_id?: string; liquidity_status?: string;
+};
+export interface SizingRecordRow { decision_id: string; mode: string; role: 'AUTHORITATIVE' | 'COUNTERFACTUAL'; policy_version: string;
+  approved: boolean; reason: string | null; created_at_ms: number; record_hash_ok: boolean; record: SizingRecord; label?: string }
+export interface TradeRiskSizing {
+  mode: string | null; executed: SizingRecordRow | null; counterfactual: SizingRecordRow[]; executed_quantity: number;
+  current_risk: { remaining_qty: number; active_stop: number; current_notional: number; current_planned_loss: number; cluster_id: string } | null;
+  outcome: Record<string, number | string | null> | null; note: string | null;
+}
+export interface RiskSizingPosition {
+  signal_id: string; asset: string; direction: string; notional: number; notional_pct_equity: number | null; planned_loss_dollars: number;
+  planned_loss_pct_equity: number | null; original_planned_loss_dollars: number | null; stop_distance_pct: number; active_stop: number;
+  cluster_id: string; binding_constraint: string | null; sizing_rule_version: string | null; position_leverage: number | null;
+}
+export interface RiskSizingStatus {
+  mode: 'SHADOW' | 'PAPER'; kelly: 'OFF'; live: 'DISABLED'; sizing_rule_version: string;
+  policy: { base_risk_pct: number; max_position_notional_pct: number; max_portfolio_gross_pct: number; max_open_planned_risk_pct: number;
+    max_cluster_planned_risk_pct: number; max_positions: number; max_leverage: number; execution_buffer_floor_pct: number;
+    max_expected_entry_slippage_bps: number; dd_pause_pct: number };
+  equity: number; peak_equity: number; drawdown_pct: number; drawdown_multiplier: number | null; drawdown_pause: boolean;
+  base_risk_pct: number; effective_risk_pct_before_vol: number; open_planned_risk_dollars: number; open_planned_risk_pct: number | null;
+  cluster_planned_risk: Record<string, { dollars: number; pct: number | null }>; gross_exposure_dollars: number;
+  gross_exposure_multiple: number | null; open_positions: number; positions: RiskSizingPosition[];
+}
+
 export interface TradeDetail {
   trade_id: string; status: string; is_open: boolean; opened_at_ms: number; closed_at_ms: number | null; exit_reason: string | null;
   decision: DecisionContext; live: LiveMetrics; levels: ChartLevel[]; markers: ChartMarker[];
   exits: { kind: string; quantity: number; fill_price: number; level: number; pnl: number; at_ms: number; trigger?: string }[];
-  realized_pnl: number; fees: number; net_pnl: number; hindsight: Hindsight; shadow?: ShadowLink; generated_at_ms: number;
+  realized_pnl: number; fees: number; net_pnl: number; hindsight: Hindsight; shadow?: ShadowLink; risk_sizing?: TradeRiskSizing; generated_at_ms: number;
 }
 export type CandleInterval = '1m' | '5m' | '15m' | '1h';
 export interface Candle { time: number; open: number; high: number; low: number; close: number; volume: number; complete: boolean }
@@ -206,6 +239,7 @@ export const api = {
   performance: () => invoke<Performance>('get_performance'),
   riskConfig: () => invoke<RiskConfig>('get_risk_config'),
   riskUsage: () => invoke<{ usage: RiskUsage[] }>('get_risk_usage'),
+  riskSizing: () => invoke<RiskSizingStatus>('get_risk_sizing'),
   updateRiskConfig: (update: Record<string, number>) => invoke<RiskConfig>('update_risk_config', { update }),
   logs: (file: LogFile, limit = 1500) => invoke<{ file: LogFile; path: string; entries: LogEntry[] }>('get_logs', { file, limit }),
   startPaper: () => invoke<ProcStatus>('start_paper'),

@@ -3,6 +3,9 @@ import { api, ShadowDetail, ShadowRow, ShadowSummary } from '../api';
 import { Badge, ErrorBanner, Panel, Stat, Table, usePoll } from '../components/ui';
 import { DASH, num, pct, price, ts } from '../format';
 
+// Values from the backend here are FRACTIONS (0.005 = 0.50%); format.pct expects percent.
+const fpct = (v: number | null | undefined, digits = 2) => (typeof v === 'number' && Number.isFinite(v) ? pct(v * 100, digits) : DASH);
+
 // Research-only view. Shadow observations are hypothetical: they consume no
 // capital, never change exposure and can never be executed. Hindsight labels
 // are shown only under POST-OUTCOME RESEARCH ONLY and are never predictions.
@@ -48,7 +51,7 @@ export function ShadowTable({ rows, onOpen }: { rows: ShadowRow[]; onOpen: (id: 
           <td>{r.research_candidate_valid ? 'yes' : <span className="neg">{r.invalid_reason}</span>}</td>
           <td>{r.resolution_status ?? DASH}</td>
           <td>{r.classification ? <Badge kind={CLASS_KIND[r.classification] ?? 'neutral'}>{r.classification}</Badge> : DASH}</td>
-          <td className="mono small">{r.observation_cluster_id.slice(-13)}{r.overlap_fraction > 0 ? ` · ${pct(r.overlap_fraction, 0)} overlap` : ''}</td>
+          <td className="mono small">{r.observation_cluster_id.slice(-13)}{r.overlap_fraction > 0 ? ` · ${fpct(r.overlap_fraction, 0)} overlap` : ''}</td>
         </tr>
       ))}
     </Table>
@@ -84,8 +87,8 @@ export function ShadowDetailView({ d }: { d: ShadowDetail }) {
               <tr key={h}>
                 <td>{h}</td>
                 <td>{String(l.label_status)}</td>
-                <td className="num">{l.mfe_pct !== undefined ? pct(l.mfe_pct as number) : l.up_excursion_pct !== undefined ? pct(l.up_excursion_pct as number) : DASH}</td>
-                <td className="num">{l.mae_pct !== undefined ? pct(l.mae_pct as number) : l.down_excursion_pct !== undefined ? pct(l.down_excursion_pct as number) : DASH}</td>
+                <td className="num">{l.mfe_pct !== undefined ? fpct(l.mfe_pct as number) : l.up_excursion_pct !== undefined ? fpct(l.up_excursion_pct as number) : DASH}</td>
+                <td className="num">{l.mae_pct !== undefined ? fpct(l.mae_pct as number) : l.down_excursion_pct !== undefined ? fpct(l.down_excursion_pct as number) : DASH}</td>
                 <td>{l.stop_hit === undefined ? DASH : l.stop_hit ? 'hit' : 'no'}</td>
                 <td>{l.tp1_hit === undefined ? DASH : l.tp1_hit ? 'hit' : 'no'}</td>
                 <td>{l.tp2_hit === undefined ? DASH : l.tp2_hit ? 'hit' : 'no'}</td>
@@ -106,8 +109,8 @@ export function ShadowDetailView({ d }: { d: ShadowDetail }) {
               <dt>Executable (within stop)</dt><dd className="mono">{typeof hs.executable_within_stop_r === 'number' ? `${num(hs.executable_within_stop_r as number, 2)}R` : DASH}</dd>
               <dt>Strategy efficiency</dt><dd className="mono">{typeof hs.strategy_efficiency === 'number' ? num(hs.strategy_efficiency as number, 2) : DASH}</dd>
               <dt>Best direction</dt><dd className="mono">{String(hs.best_direction)}</dd>
-              <dt>Executable long / short</dt><dd className="mono">{pct(hs.optimal_long_net_pct as number)} / {pct(hs.optimal_short_net_pct as number)}</dd>
-              <dt>Theoretical long / short</dt><dd className="mono">{pct(hs.theoretical_long_move_pct as number)} / {pct(hs.theoretical_short_move_pct as number)} <span className="muted small">(not tradable)</span></dd>
+              <dt>Executable long / short</dt><dd className="mono">{fpct(hs.optimal_long_net_pct as number)} / {fpct(hs.optimal_short_net_pct as number)}</dd>
+              <dt>Theoretical long / short</dt><dd className="mono">{fpct(hs.theoretical_long_move_pct as number)} / {fpct(hs.theoretical_short_move_pct as number)} <span className="muted small">(not tradable)</span></dd>
               <dt>Optimal entry → exit</dt><dd className="mono">{price(hs.optimal_entry as number)} → {price(hs.optimal_exit as number)}</dd>
             </dl>
           </>

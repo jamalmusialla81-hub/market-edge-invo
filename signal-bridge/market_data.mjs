@@ -74,3 +74,17 @@ export async function fetchCompletedCandles(coin, sinceMs, { fetchImpl, now = Da
   const rows = await post(fetchImpl, { type: 'candleSnapshot', req: { coin, interval: '5m', startTime: sinceMs - FIVE_MINUTES, endTime: now } }, 8000, { priority, budget });
   return parseCompletedCandles(rows, now);
 }
+
+// Order book for Risk Sizing V2's liquidity cap: ONE request, only for the
+// single signal submitted in a cycle (never for research or the monitor).
+// Levels as [[px, sz], ...], best first; at_ms is when it was read. No
+// cached or substituted book: on failure the caller sends none and V2 fails
+// closed (NO_LIQUIDITY_STATE) when it is authoritative.
+export async function fetchL2Book(coin, { fetchImpl = fetch, now = Date.now, timeoutMs = 5000 } = {}) {
+  const book = await post(fetchImpl, { type: 'l2Book', coin }, timeoutMs);
+  const side = (levels) => (Array.isArray(levels) ? levels : []).map((l) => [Number(l?.px), Number(l?.sz)])
+    .filter(([px, sz]) => Number.isFinite(px) && px > 0 && Number.isFinite(sz) && sz > 0);
+  const bids = side(book?.levels?.[0]), asks = side(book?.levels?.[1]);
+  if (!bids.length || !asks.length) throw new Error(`empty l2Book for ${coin}`);
+  return { venue: 'HYPERLIQUID', bids, asks, at_ms: now() };
+}
