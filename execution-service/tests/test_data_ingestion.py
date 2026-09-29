@@ -135,7 +135,7 @@ def test_a_v1_database_upgrades_in_place_with_null_for_old_rows(tmp_path):
     v1 = inspect_database(path)
     assert v1["ok"] and v1["shadow_schema_version"] == 1     # a v1 backup is still a valid restore source
     store = ShadowStore(path, source_commit="new")
-    assert store.versions()["shadow_schema_version"] == 2
+    assert store.versions()["shadow_schema_version"] == C.SHADOW_SCHEMA_VERSION   # v1 -> current, in place
     old = store.observations(limit=10)
     assert old and all(store.observation(o["observation_id"])["source_commit"] is None for o in old)   # never backfilled with a guess
     store.record_scan({**executed_scan("new-1"), "scan": {**executed_scan("new-1")["scan"], "scan_id": "new-1"}})

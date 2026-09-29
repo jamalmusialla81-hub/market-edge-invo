@@ -42,6 +42,7 @@ from market_edge_exec.risk import sizing_runtime, sizing_v2
 from market_edge_exec.risk.engine import RiskLimits, approve
 from market_edge_exec.routing.router import BACKEND_HUMMINGBOT, BACKEND_NAUTILUS_NATIVE, ExecutionRouter, RouterError
 from market_edge_exec.signal_bridge.bridge import process_signal
+from market_edge_exec.quality import runner as quality_runner
 from market_edge_exec.shadow import contracts as shadow_contracts
 from market_edge_exec.shadow.store import ShadowStore, default_path as shadow_default_path
 
@@ -458,6 +459,15 @@ def create_app(db_path: str = "market_edge_exec.sqlite3", hummingbot_mode: str =
     def exit_policy_evaluation():
         result = evaluate_exit_policies(exit_store.finalized_records())
         return {"label": EXIT_LABEL, **result, "markdown": render_exit_report(result)}
+
+    # ---- data quality gate (DATA 2): classification only, never edits or repairs a row ----
+    @app.post("/research/data-quality/run", dependencies=[Depends(require_api_key)])
+    def data_quality_run():
+        return {"label": "RESEARCH ONLY · CLASSIFICATION · ROWS ARE NEVER EDITED", **quality_runner.run(app.state.shadow, db_path)}
+
+    @app.get("/research/data-quality", dependencies=[Depends(require_api_key)])
+    def data_quality_summary():
+        return {"label": "RESEARCH ONLY · CLASSIFICATION · ROWS ARE NEVER EDITED", **quality_runner.summarize(app.state.shadow)}
 
     @app.post("/paper/hindsight", dependencies=[Depends(require_api_key)])
     def record_hindsight(payload: dict):

@@ -31,7 +31,9 @@ from market_edge_exec.shadow import resolve as R
 
 DATA_EXPIRY_MS = 7 * 24 * C.HOUR   # a batch no candle set covered by then is closed as unavailable
 IMMUTABLE = ("shadow_scans", "shadow_observations", "shadow_labels", "shadow_hindsight", "forward_paper_executed",
-             "forward_execution_quality")
+             "forward_execution_quality", "data_quality_verdicts")
+# Tables added after v1, with the schema version that introduced them (older backups lack them and stay restorable).
+TABLE_SINCE = {"forward_execution_quality": 2, "data_quality_verdicts": 3}
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS shadow_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -76,6 +78,14 @@ CREATE TABLE IF NOT EXISTS forward_execution_quality (
     signal_id TEXT PRIMARY KEY, observation_id TEXT, scan_id TEXT, dataset_version TEXT NOT NULL, field_class TEXT NOT NULL,
     source TEXT NOT NULL, source_commit TEXT, record BLOB NOT NULL, record_hash TEXT NOT NULL, created_at_ms INTEGER NOT NULL
 );
+-- DATA 2: validity verdicts (VALID / INVALID / UNRESOLVED / QUARANTINED), append-only.
+-- A verdict never edits the row it describes; a row changes bucket only when a new
+-- check writes a new verdict row, and the latest one wins.
+CREATE TABLE IF NOT EXISTS data_quality_verdicts (
+    verdict_id INTEGER PRIMARY KEY AUTOINCREMENT, subject_kind TEXT NOT NULL, subject_id TEXT NOT NULL, verdict TEXT NOT NULL,
+    reasons TEXT NOT NULL, checker_version TEXT NOT NULL, checked_at_ms INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS data_quality_subject ON data_quality_verdicts (subject_kind, subject_id, verdict_id);
 CREATE TABLE IF NOT EXISTS shadow_resolution (
     observation_id TEXT PRIMARY KEY, coin TEXT NOT NULL, first_bar_ts INTEGER NOT NULL, batches_done TEXT NOT NULL,
     resolution_status TEXT NOT NULL, next_due_ts INTEGER, updated_at_ms INTEGER NOT NULL
@@ -102,7 +112,7 @@ def default_path(paper_db_path: str) -> str:
 
 
 SHADOW_TABLES = ("shadow_meta", "shadow_scans", "shadow_observations", "shadow_labels", "shadow_hindsight",
-                 "forward_paper_executed", "forward_execution_quality", "shadow_resolution")
+                 "forward_paper_executed", "forward_execution_quality", "data_quality_verdicts", "shadow_resolution")
 
 
 def inspect_database(path: str) -> dict:
@@ -125,7 +135,7 @@ def inspect_database(path: str) -> dict:
     problems = []
     if integrity != "ok":
         problems.append(f"INTEGRITY_CHECK_FAILED: {integrity}")
-    optional_v2 = {"forward_execution_quality"} if version_of(meta) < 2 else set()
+    optional_v2 = {t for t, since in TABLE_SINCE.items() if version_of(meta) < since}
     missing = [t for t in SHADOW_TABLES if t not in tables and t not in optional_v2]
     if missing:
         problems.append(f"MISSING_TABLES: {missing}")
@@ -378,6 +388,45 @@ class ShadowStore:
         return {"signal_id": r["signal_id"], "observation_id": r["observation_id"], "scan_id": r["scan_id"], "field_class": r["field_class"],
                 "source": r["source"], "source_commit": r["source_commit"], "record": record,
                 "record_hash_ok": C.content_hash(record) == r["record_hash"]}
+
+    # ---- data quality verdicts (append-only) ----------------------------------
+    def record_quality_verdicts(self, verdicts: list[dict], checker_version: str, now_ms: Optional[int] = None) -> int:
+        """Append a verdict only when it differs from the subject's latest one, so a re-run is quiet
+        and every real change (including a re-check that finally passes) is a new, dated row."""
+        now_ms = now_ms or int(time.time() * 1000)
+        written = 0
+        with closing(self._connect()) as conn:
+            latest = {(r["subject_kind"], r["subject_id"]): (r["verdict"], r["reasons"]) for r in conn.execute(
+                "SELECT q.subject_kind, q.subject_id, q.verdict, q.reasons FROM data_quality_verdicts q JOIN "
+                "(SELECT subject_kind, subject_id, MAX(verdict_id) AS m FROM data_quality_verdicts GROUP BY 1, 2) l ON q.verdict_id=l.m")}
+            for v in verdicts:
+                reasons = C.canonical(v["reasons"])
+                if latest.get((v["subject_kind"], v["subject_id"])) == (v["verdict"], reasons):
+                    continue
+                conn.execute("INSERT INTO data_quality_verdicts (subject_kind, subject_id, verdict, reasons, checker_version, checked_at_ms) "
+                             "VALUES (?,?,?,?,?,?)", (v["subject_kind"], v["subject_id"], v["verdict"], reasons, checker_version, now_ms))
+                written += 1
+            conn.commit()
+        return written
+
+    def latest_quality(self, subject_kind: Optional[str] = None) -> dict:
+        """{(kind, id): {verdict, reasons, checked_at_ms}} -- the newest verdict per subject."""
+        sql = ("SELECT q.subject_kind, q.subject_id, q.verdict, q.reasons, q.checker_version, q.checked_at_ms FROM data_quality_verdicts q JOIN "
+               "(SELECT subject_kind, subject_id, MAX(verdict_id) AS m FROM data_quality_verdicts GROUP BY 1, 2) l ON q.verdict_id=l.m")
+        args: tuple = ()
+        if subject_kind:
+            sql += " WHERE q.subject_kind=?"
+            args = (subject_kind,)
+        with closing(self._connect()) as conn:
+            return {(r["subject_kind"], r["subject_id"]): {"verdict": r["verdict"], "reasons": json.loads(r["reasons"]),
+                                                            "checker_version": r["checker_version"], "checked_at_ms": r["checked_at_ms"]}
+                    for r in conn.execute(sql, args)}
+
+    def quality_history(self, subject_kind: str, subject_id: str) -> list[dict]:
+        with closing(self._connect()) as conn:
+            return [{"verdict": r["verdict"], "reasons": json.loads(r["reasons"]), "checked_at_ms": r["checked_at_ms"]} for r in conn.execute(
+                "SELECT verdict, reasons, checked_at_ms FROM data_quality_verdicts WHERE subject_kind=? AND subject_id=? ORDER BY verdict_id",
+                (subject_kind, subject_id))]
 
     # ---- resolution ------------------------------------------------------
     def pending(self, now_ms: Optional[int] = None, limit: int = 50) -> list[dict]:

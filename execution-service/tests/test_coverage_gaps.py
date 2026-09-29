@@ -44,12 +44,14 @@ def test_every_immutable_shadow_table_refuses_update_and_delete(tmp_path):
                                    observations=[{"kind": "CANDIDATE", "asset": "BTC", "submitted": True, "decision": decision(cand=candidate())}]))
     store.record_execution_quality({"status": "CLOSED", "signal_id": "scan-1-BTC", "trade_id": "scan-1-BTC", "direction": "long",
                                     "exits": [], "opened_at_ms": T0 + 5, "signal_timestamp": T0})
+    store.record_quality_verdicts([{"subject_kind": "SHADOW_OBSERVATION", "subject_id": "x", "verdict": "VALID", "reasons": []}], "TEST", now_ms=T0)
     first = R.first_bar_open(T0)
     closes = [100 + min(i, 60) * 0.1 for i in range(C.FULL_WINDOW_MS // BAR + 2)]
     store.resolve("BTC", bars_path(first, closes, spread=0.05), "HYPERLIQUID", "5m", now_ms=T0 + C.FULL_WINDOW_MS + C.HOUR)
     with sqlite3.connect(store.path) as conn:
         for table in IMMUTABLE:
             assert conn.execute(f"SELECT count(*) FROM {table}").fetchone()[0] > 0, f"{table} has no row to protect"
-            for sql in (f"UPDATE {table} SET dataset_version='TAMPERED'", f"DELETE FROM {table}"):
+            col = "checker_version" if table == "data_quality_verdicts" else "dataset_version"
+            for sql in (f"UPDATE {table} SET {col}='TAMPERED'", f"DELETE FROM {table}"):
                 with pytest.raises(sqlite3.DatabaseError, match="SHADOW_RESEARCH_ROW_IMMUTABLE"):
                     conn.execute(sql)

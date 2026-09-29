@@ -173,3 +173,14 @@ Most of the field list was already captured; this closes the specific gaps. Addi
 Two databases, one key: the shadow store and the paper ledger are separate SQLite files by design (the shadow store cannot reach the ledger), so the join is by value on `signal_id`, not a foreign key.
 
 A v1 shadow database upgrades in place (`ALTER TABLE ... ADD COLUMN`, nullable). A v1 backup is still a valid restore source; a newer-than-supported database is still refused.
+
+## DATA 2: the data quality gate (schema v3)
+
+`execution-service/market_edge_exec/quality/` gives every forward-data row one verdict: **VALID**, **INVALID**, **UNRESOLVED** or **QUARANTINED**, with machine-readable reasons (`STATUS:REASON`). It classifies; it never edits, repairs or deletes a row.
+
+- **QUARANTINED**: the row itself is damaged. Undecodable blob, decision hash mismatch, NaN/Inf, schema drift (missing column, missing `market` or `candidate`), bad timestamp type, sizing-record hash mismatch.
+- **INVALID**: well-formed but breaks a rule. Future timestamp, timestamp order, duplicate observation (same kind/asset/direction/strategy/decision time under different scans; the earliest stays), missing version metadata, cross-venue label substitution (outcome venue differs from the decision venue or from `HYPERLIQUID`), pre-listing history (only when a listing date is supplied; none is available today, so no claim is made), impossible OHLC, the existing snapshot reasons (`STALE_SNAPSHOT`, `NO_MARKET_PRICE`, bad geometry), bad joins (executed row without its observation or paper trade).
+- **UNRESOLVED**: fine so far, outcome not final. `resolve.py`'s `PENDING`, `PARTIAL`, `RESOLVED_WITH_GAPS`, `UNRESOLVED_MISSING_CANDLE`, `UNRESOLVED_DATA_UNAVAILABLE` map here; an open paper trade is here too.
+- **VALID**: nothing found.
+
+Verdicts go to `data_quality_verdicts` (shadow DB, append-only, immutable triggers). A re-run writes only changes, so a row changes bucket only through a new dated check. `POST /research/data-quality/run` runs it, `GET /research/data-quality` reports counts. Existing checks are reused (snapshot validity, resolution and label statuses); the paper database is opened read-only. DATA 3 should freeze only rows whose latest verdict is VALID. Node-side dataset statuses (`research/dataset-registry.js`) are unchanged.
