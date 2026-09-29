@@ -20,6 +20,11 @@ on:
       leverage_rotation:
         description: 'Endurance only: requested paper leverage rotation; risk approves or walks it down per trade'
         default: '1,2,3,5,10'
+  # Daily forward-paper evidence (Jakob, 2026-09-29): one ~1-hour endurance
+  # segment (12 cycles at the 5-minute cadence) continuing the cached paper
+  # session. Only the endurance job runs on this trigger.
+  schedule:
+    - cron: '0 14 * * *'
   push:
     branches: ['claude/**']
     paths:
@@ -44,6 +49,7 @@ jobs:
   nautilus-matrix:
     name: Nautilus (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
+    if: github.event_name != 'schedule'
     strategy:
       fail-fast: false
       matrix:
@@ -131,6 +137,7 @@ jobs:
   hummingbot-docker:
     name: Hummingbot container + bridge (Docker)
     runs-on: ubuntu-latest
+    if: github.event_name != 'schedule'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -284,6 +291,7 @@ jobs:
   binance-testnet:
     name: Binance USDT-M Futures Testnet connectivity (conditional on secrets)
     runs-on: ubuntu-latest
+    if: github.event_name != 'schedule'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -311,6 +319,7 @@ jobs:
   node-tests:
     name: Node production test suite (must stay green — proves no production impact)
     runs-on: ubuntu-latest
+    if: github.event_name != 'schedule'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -398,13 +407,13 @@ jobs:
           retention-days: 90
 
   endurance-harness:
-    name: Forward-paper endurance segment ${{ matrix.segment }} (manual trigger; persistent state via cache)
+    name: Forward-paper endurance segment ${{ matrix.segment }} (manual or daily; persistent state via cache)
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
     timeout-minutes: 360
     # One writer at a time: overlapping segments would race on the saved state.
     concurrency:
-      group: paper-session-v1
+      group: paper-session-v2
       cancel-in-progress: false
     strategy:
       fail-fast: false
@@ -426,29 +435,35 @@ jobs:
           python -m pip install --upgrade pip
           pip install fastapi "uvicorn[standard]" pydantic httpx nautilus_trader
 
-      # paper-session-v1 is the persistent forward-paper account. Endurance
-      # segment 1 (run 36237547517, endurance-state-* cache) ran through the
-      # pre-ledger path and is deliberately not continued: it had no equity
-      # accounting and its ENA stack came from the exposure bug.
-      - name: Restore the persistent paper session (account, trades, signal and idempotency history)
+      # paper-session-v2 is the persistent forward-paper account plus its shadow
+      # research database (#76): both are forward evidence for the gated roadmap
+      # tasks (#25-#28), so both carry over between segments. v1 (paper ledger
+      # only, pre Risk Sizing V2 / exit shadow) is deliberately not continued.
+      # Endurance segment 1 (run 36237547517, endurance-state-* cache) ran
+      # through the pre-ledger path and was never continued either.
+      - name: Restore the persistent paper session (account, trades, signal and idempotency history, shadow research)
         uses: actions/cache/restore@v4
         id: restore-state
         with:
-          path: execution-service/paper_session.sqlite3
-          key: paper-session-v1-${{ github.run_id }}-${{ matrix.segment }}
+          path: |
+            execution-service/paper_session.sqlite3
+            execution-service/market_edge_shadow_research.sqlite3
+          key: paper-session-v2-${{ github.run_id }}-${{ matrix.segment }}
           restore-keys: |
-            paper-session-v1-
+            paper-session-v2-
 
       - name: Report what state this segment starts from
         run: |
           echo "restored_key=${{ steps.restore-state.outputs.cache-matched-key }}"
           ls -la execution-service/paper_session.sqlite3 2>/dev/null || echo "no prior state: starting a new paper account"
+          ls -la execution-service/market_edge_shadow_research.sqlite3 2>/dev/null || echo "no prior shadow research database: starting a new one"
 
       - name: Start the paper execution-service against the persisted DB
         working-directory: execution-service
         env:
           MARKET_EDGE_EXEC_API_KEY: ci-endurance-key
           EXECUTION_SERVICE_DB_PATH: paper_session.sqlite3
+          MARKET_EDGE_SHADOW_DB: market_edge_shadow_research.sqlite3
         run: |
           nohup python run_server.py > uvicorn.log 2>&1 &
           for i in $(seq 1 20); do curl -sf http://127.0.0.1:8000/health && break; sleep 1; done
@@ -472,6 +487,16 @@ jobs:
           curl -sS -H "X-API-Key: ci-endurance-key" http://127.0.0.1:8000/orders > execution-service/final_orders.json
           curl -sS -X POST -H "X-API-Key: ci-endurance-key" http://127.0.0.1:8000/reconcile | tee execution-service/final_reconcile.json
 
+      - name: Evidence gates for the roadmap (read-only, flips nothing)
+        if: always()
+        working-directory: execution-service
+        run: |
+          python -m market_edge_exec.evidence.backup_readiness --paper paper_session.sqlite3 \
+            --shadow market_edge_shadow_research.sqlite3 --source "CI paper session, run ${{ github.run_id }} segment ${{ matrix.segment }}" \
+            --out evidence || true
+          # the gate table only (everything before the first detailed report)
+          [ -f evidence/readiness.md ] && sed '/^---$/,$d' evidence/readiness.md >> "$GITHUB_STEP_SUMMARY" || true
+
       - name: Server log
         if: always()
         run: tail -n 400 execution-service/uvicorn.log || true
@@ -480,8 +505,10 @@ jobs:
         if: always()
         uses: actions/cache/save@v4
         with:
-          path: execution-service/paper_session.sqlite3
-          key: paper-session-v1-${{ github.run_id }}-${{ matrix.segment }}
+          path: |
+            execution-service/paper_session.sqlite3
+            execution-service/market_edge_shadow_research.sqlite3
+          key: paper-session-v2-${{ github.run_id }}-${{ matrix.segment }}
 
       - name: Upload endurance artifacts
         if: always()
@@ -492,6 +519,8 @@ jobs:
             endurance_loop.log
             execution-service/paper_report.json
             execution-service/paper_session.sqlite3
+            execution-service/market_edge_shadow_research.sqlite3
+            execution-service/evidence/
             execution-service/final_positions.json
             execution-service/final_orders.json
             execution-service/final_reconcile.json

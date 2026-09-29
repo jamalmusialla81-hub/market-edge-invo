@@ -154,20 +154,49 @@ def run(backup_path: str, out_dir: Optional[str] = None) -> dict:
                          "app_version": m.get("app_version"), "git_sha": m.get("git_sha"), "format_version": m.get("format_version"),
                          "shadow_included": bool(m.get("shadow_included")), "ignored_entries": ext["ignored_entries"]},
               **result}
+    _write(report, out_dir)
+    return report
+
+
+def _snapshot(src: str, dst: str) -> str:
+    """Consistent copy of a possibly-live database (SQLite online backup, source opened read-only)."""
+    with closing(sqlite3.connect(f"file:{src}?mode=ro", uri=True)) as s, closing(sqlite3.connect(dst)) as d:
+        s.backup(d)
+    return dst
+
+
+def run_databases(paper_db: Optional[str], shadow_db: Optional[str], out_dir: Optional[str] = None, source: str = "databases") -> dict:
+    """The same gates on database files directly (e.g. the CI endurance session), via a consistent snapshot of each."""
+    scratch = tempfile.mkdtemp(prefix="me-dbs-")
+    try:
+        paper = _snapshot(paper_db, os.path.join(scratch, PAPER_ENTRY)) if paper_db and os.path.isfile(paper_db) else None
+        shadow = _snapshot(shadow_db, os.path.join(scratch, SHADOW_ENTRY)) if shadow_db and os.path.isfile(shadow_db) else None
+        result = assess(paper, shadow)
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
+    report = {"readiness_version": READINESS_VERSION, "label": LABEL,
+              "backup": {"file": source, "sha256": None, "created_at": None, "app_version": None, "git_sha": None,
+                         "format_version": None, "shadow_included": shadow is not None, "ignored_entries": []},
+              **result}
+    _write(report, out_dir)
+    return report
+
+
+def _write(report: dict, out_dir: Optional[str]) -> None:
     if out_dir:
         os.makedirs(out_dir, exist_ok=True)
         with open(os.path.join(out_dir, "readiness.json"), "w", encoding="utf-8") as f:
             json.dump(report, f, indent=2, sort_keys=True, default=str)
         with open(os.path.join(out_dir, "readiness.md"), "w", encoding="utf-8") as f:
             f.write(render_markdown(report))
-    return report
 
 
 def render_markdown(r: dict) -> str:
     b = r["backup"]
     lines = [f"# Evidence readiness from a desktop backup ({r['readiness_version']})", "", f"_{r['label']}_", "",
-             f"Backup `{b['file']}` (sha256 `{b['sha256'][:16]}…`), created {b['created_at']} by app {b['app_version']} "
-             f"({b['git_sha']}), format v{b['format_version']}, shadow database {'included' if b['shadow_included'] else 'NOT included'}.", "",
+             (f"Backup `{b['file']}` (sha256 `{b['sha256'][:16]}…`), created {b['created_at']} by app {b['app_version']} "
+              f"({b['git_sha']}), format v{b['format_version']}, " if b["sha256"] else f"Source: {b['file']}, ")
+             + f"shadow database {'included' if b['shadow_included'] else 'NOT included'}.", "",
              "| task | status | have | need |", "|---|---|---|---|"]
     lines += [f"| {g['task']} {g['title']} | **{g['status']}** | {g['have']} | {g['need']} |" for g in r["gates"]]
     notes = [f"- {g['task']}: {g['note']}" for g in r["gates"] if g.get("note")]
@@ -188,11 +217,16 @@ def render_markdown(r: dict) -> str:
 
 def main(argv: Optional[list] = None) -> int:
     ap = argparse.ArgumentParser(description="Which evidence-gated roadmap tasks a desktop backup unblocks. " + LABEL)
-    ap.add_argument("backup", help="a .mebackup file exported from the desktop app")
+    ap.add_argument("backup", nargs="?", help="a .mebackup file exported from the desktop app")
+    ap.add_argument("--paper", help="instead of a backup: a paper ledger database file")
+    ap.add_argument("--shadow", help="instead of a backup: a shadow research database file")
+    ap.add_argument("--source", default="databases", help="label for --paper/--shadow mode")
     ap.add_argument("--out", help="directory for readiness.md / readiness.json (keep it outside the repo)")
     args = ap.parse_args(argv)
+    if bool(args.backup) == bool(args.paper or args.shadow):
+        ap.error("give either a backup file or --paper/--shadow, not both")
     try:
-        report = run(args.backup, args.out)
+        report = run(args.backup, args.out) if args.backup else run_databases(args.paper, args.shadow, args.out, args.source)
     except BackupRejected as e:
         sys.stderr.write(f"backup rejected: {e}\n")
         return 2
