@@ -69,4 +69,14 @@ function assertTrainable(engine) {
   if (!entry.trainable) throw new Error(`DATASET_NOT_TRAINABLE: ${engine} is ${entry.status}. ${entry.reason}`);
   return entry;
 }
-module.exports = {DATASETS, status, assertTrainable};
+// Forward-shadow training snapshots (DATA 3) are registered by adding a NEW entry built from the snapshot's
+// manifest (execution-service/market_edge_exec/datasets/builder.py writes manifest.registry_entry). This returns a
+// copy of the registry with that entry; it never edits or replaces an existing entry, and a version name is never reused.
+function withSnapshot(datasets, manifest) {
+  const v = manifest && manifest.version, e = manifest && manifest.registry_entry;
+  if (!v || !e || manifest.manifest_schema !== 'forward-snapshot/v1' || !/^FORWARD-SHADOW-RESOLVED-V1-SNAPSHOT-\d{8}$/.test(v)) throw new Error('SNAPSHOT_MANIFEST_INVALID');
+  if (!/^[0-9a-f]{64}$/.test(manifest.content_hash || '')) throw new Error('SNAPSHOT_MANIFEST_MISSING_CONTENT_HASH');
+  if (datasets[v]) throw new Error(`DATASET_VERSION_EXISTS: ${v} is never overwritten`);
+  return Object.freeze({...datasets, [v]: Object.freeze({...e, contentHash: manifest.content_hash, counts: manifest.counts})});
+}
+module.exports = {DATASETS, status, assertTrainable, withSnapshot};

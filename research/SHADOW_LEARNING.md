@@ -237,3 +237,14 @@ No claim that any of this adds edge. It is data for later experiments. Not yet c
 - Strategy action is `NONE / FLAG / ALERT`. ALERT needs expectancy itself to alert or two unrelated metric groups alerting together. On simulated unchanged strategies that gave a FLAG about 17% of the time and an ALERT about 1%, so read one FLAG as "look", and a repeated or multi-metric ALERT as the signal.
 - `NORMAL / REDUCED-RISK / SHADOW-ONLY / PAUSED` are named in the output only. Nothing here changes a strategy's state, risk or eligibility; any such transition belongs to the evidence-gated promotion path (DATA 11) with explicit authorisation. Its only write is the append-only alert record (`drift_alerts`, name `strategy-health`), on level changes.
 - Limit: there is no real forward trade history yet, so it has only been tested on synthetic data; it has not been sanity-checked against the Shadow screen filters.
+
+## Versioned training snapshots (DATA 3, FORWARD-SNAPSHOT-BUILDER-V1)
+
+`python -m market_edge_exec.datasets.builder --shadow-db <file> --out <dir> [--date YYYYMMDD]` freezes the live shadow database into `<dir>/FORWARD-SHADOW-RESOLVED-V1-SNAPSHOT-<date>/` (`snapshot.sqlite3`, read-only, UPDATE/DELETE refused by triggers; and `manifest.json`). The source is opened `mode=ro` and never modified.
+
+- Rows: kind CANDIDATE, `research_candidate_valid`, DATA 2 verdict `VALID` (computed in memory with the same checks), required outcome (`72h.policy_r`, final label batch, label status `OK`) resolved. Everything else is counted by reason in `manifest.excluded`.
+- Features: decision-time only, numeric leaves under `features`, `derivatives`, `cross_market`; the leakage guard runs before anything is written; missing values stay null.
+- Splits: chronological (60/20/20 by rows). The unit is a connected component of scans that share an observation cluster or market episode, so correlated rows and a scan's own candidates never cross a split. A unit whose outcome window is still open when the next split starts is purged (counted in the manifest).
+- Deterministic: same source and `as_of_ms` gives the same `content_hash` (a hash of the canonical rows) and the same file. A published version is never edited: rebuilding identical content returns `UNCHANGED_ALREADY_PUBLISHED`; different content under an existing version name is refused, so a new dated snapshot is the only way to supersede.
+- Registry: `manifest.registry_entry` is added to `research/dataset-registry.js` via `withSnapshot()` as a new entry (never overwriting). The live `FORWARD-SHADOW-*` entries stay `trainable: false`.
+- Limit: no real snapshot has been built, because this environment has no shadow database with resolved forward data (it lives on the desktop app). Tests use a synthetic 10-scan fixture. The manual-validation step (build one from the real database and read the manifest) is still open.
