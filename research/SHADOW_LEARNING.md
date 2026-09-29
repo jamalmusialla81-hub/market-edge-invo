@@ -383,3 +383,25 @@ evidence counts and what is missing, placebo-gate p-values, per-policy promotion
 (walk-forward and forward-validation figures with intervals). Empty pipelines show plain "not run yet" text, never placeholder rows. The
 screen has no buttons, inputs or links, and the backend route only reads. The Shadow screen still owns the observation table and filters.
 Not yet looked at in the running app on real data (no real experiments exist yet).
+
+## Checking a desktop backup against the roadmap's evidence gates (#74)
+
+The forward evidence that MAJOR 4–7 wait on lives only in the desktop app. Export
+a backup there (Backup & restore → Export, a `.mebackup` file with no secrets),
+then run:
+
+```
+cd execution-service
+python -m market_edge_exec.evidence.backup_readiness /path/to/file.mebackup --out /tmp/readiness
+```
+
+It validates the backup the way restore does (format, version, no secrets,
+sha256 and SQLite integrity of each database). It extracts only the two
+databases to a scratch directory, and opens them read-only. It then runs the
+3H exit evaluation, the V2 sizing review (`evaluation/sizing_review.py`) and the
+forward diagnostic (`analysis/forward_diagnostic.py`). The report's gate table
+shows READY or BLOCKED, with have-vs-need counts, for #25 (a 3H PASS), #26 (a
+shadow database is present), #27 (the sizing review's floor) and #28 (3H's
+floor). #29 always shows NOT_ASSESSABLE, since a backup holds no L2 data. Every
+status comes from those modules' own counts and verdicts. It flips no issue and
+activates nothing. Keep the backup and the `--out` directory out of the repo.
