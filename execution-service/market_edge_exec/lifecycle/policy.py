@@ -213,3 +213,6 @@ def review(shadow: ShadowStore, registry, policy_id: str, *, evidence_experiment
         _insert(shadow, policy_id, "TRANSITION", policy["state"], "DEMOTED", actor, None, evidence_experiment_id, policy["criteria_hash"],
                 {"note": "Forward evidence met its floors and showed no stable improvement: demoted.", "criteria_check": None}, at)
     return {"policy_id": policy_id, "decision": decision, "state": "DEMOTED" if decision == "DEMOTE" else policy["state"], "demotion_recommended_by_alert": recommend}
+
+
+check_authorization = _check_authorization      # public name: other modules may VALIDATE an authorization, never grant one

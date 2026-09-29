@@ -355,3 +355,21 @@ versions, the stored decision-time inputs (hash-verified), the market price sour
   episode within 24h, and the drawdown of the actual sequence versus first-selection-per-episode), and picks the exposure or
   concurrent-position caps blocked. All hypothetical figures are labelled HYPOTHETICAL. Below 30 scans a comparison says NOT_ENOUGH_SCANS.
 - Not yet run on real forward data (none is resolved yet), and the manual spot-check of one real scan is still open.
+
+## Continuous learning orchestrator (DATA 17)
+
+`market_edge_exec/orchestrator/cycle.py`; run with `python -m market_edge_exec.orchestrator.cycle --shadow-db <db> --work-dir <dir>`. It only
+sequences the existing modules and reimplements none of them:
+
+trigger check (scratch build, nothing published unless it fires) -> freeze snapshot (DATA 3) -> train (DATA 6) -> walk-forward (DATA 7) ->
+placebo gate (DATA 8) -> report -> optional SHADOW deployment (DATA 9) -> record in the experiment registry (DATA 5).
+
+- It stops cleanly at the first step that fails or gives no evidence. Each step is attempted once; there is no loop and no parameter
+  adjustment, and asking again on unchanged data is refused by the trigger (same snapshot), so nothing is duplicated.
+- Deployment is off by default: the run ends with `AWAITING_AUTHORIZATION`. It deploys to SHADOW only when a named person's logged
+  authorization is supplied (`--deploy-authorization-file`), and automated actor names are refused.
+- The eight out-of-scope items are each a test in `tests/test_orchestrator.py`: no production Quant, risk policy or exit policy change
+  (import allow-list, ledger bytes unchanged), no PAPER (it imports only the authorization validator, never a lifecycle transition), no LIVE,
+  no per-trade retraining, no retry with adjusted parameters, and the sealed OOS split is never read (poisoning it does not change results).
+- A run must be at most once per snapshot date: a second run on the same date with different data is refused (`SNAPSHOT_EXISTS`), not worked around.
+- No scheduled CI job was added: the shadow database lives on the desktop, not in CI. The tests are the end-to-end dry run on a synthetic fixture.
