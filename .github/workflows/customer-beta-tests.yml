@@ -1,0 +1,27 @@
+name: Customer Beta Tests
+
+on:
+  pull_request:
+    paths:
+      - 'customer-beta/**'
+      - '.github/workflows/customer-beta-tests.yml'
+  push:
+    paths:
+      - 'customer-beta/**'
+      - '.github/workflows/customer-beta-tests.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Test customer beta
+        working-directory: customer-beta
+        run: npm ci && npm test

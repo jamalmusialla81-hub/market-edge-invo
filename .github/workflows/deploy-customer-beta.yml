@@ -29,8 +29,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Build customer beta
+      - name: Test and build customer beta
         working-directory: customer-beta
-        run: npm ci && npm run build
+        run: npm ci && npm test && npm run build
       - name: Deploy Cloudflare Pages
         run: npx --yes wrangler@4.33.1 pages deploy customer-beta/dist --project-name=market-edge-customer-beta --branch=main

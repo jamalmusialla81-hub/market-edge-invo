@@ -144,4 +144,28 @@ const monitorNow=1_800_000_000_000,monitorRows=Array.from({length:100},(_,index)
 const monitorDb=new FakeD1(),scheduled=await handleScheduled({scheduledTime:monitorNow},{MARKET_EDGE_DB:monitorDb},{},{watchlist:[{asset:'BTC',symbol:'BTCUSDT',exchange:'BINANCE'}],historicalAssets:[],delay:async()=>{},fetch:async()=>new Response(JSON.stringify(monitorRows),{status:200})});
 assert.equal(scheduled.status,'COMPLETE');assert.equal(scheduled.executionDisabled,true);assert.equal(scheduled.researchRunner,'github-actions-node');assert.equal(scheduled.heavyReplay,'disabled');assert.equal(monitorDb.calls.length,0);
 
+// Promotion readiness never crowns a champion: a PROMOTION_READY report is recorded as a
+// report plus a lifecycle event, and no statement writes CHAMPION anywhere.
+class ReadinessD1 {
+  constructor(){this.calls=[];}
+  prepare(sql){const db=this;return {sql,args:[],bind(...args){this.args=args;return this;},async run(){db.calls.push({sql,args:this.args});return {success:true,meta:{changes:1}};},async all(){return /FROM model_registry WHERE status='CHALLENGER'/.test(sql)?{results:[{id:'model-x',status:'CHALLENGER',algorithm:'test',dataset_hash:'h',created_at:1,metadata_json:JSON.stringify({model:{featureNames:['a','b']}})}]}:{results:[]};}};}
+  async batch(items){for(const item of items)await item.run();}
+}
+{
+  const readyDb=new ReadinessD1(),readyEnv={...env,RESEARCH_INGEST_TOKEN:'test-research-secret',MARKET_EDGE_DB:readyDb},auth={authorization:'Bearer test-research-secret'};
+  const report=decision=>({modelId:'model-x',decision,status:decision,hardGates:{},evidence:{},decisionReasons:['test'],createdAt:1});
+  let readyResponse=await handleRequest(request('/v1/research/ml/ingest',{operation:'ml_promotion_readiness_commit',run_id:'r1',reports:[report('PROMOTION_READY')]},auth),readyEnv,{},{});
+  assert.equal(readyResponse.status,200);
+  const readyBody=await readyResponse.json();
+  assert.equal(readyBody.autoChampionPromotion,false);assert.equal(readyBody.saved[0].decision,'PROMOTION_READY');
+  assert.ok(readyDb.calls.some(call=>/ml_model_lifecycle_events/.test(call.sql)&&call.args.includes('PROMOTION_READY')));
+  assert.ok(!readyDb.calls.some(call=>call.args.includes('CHAMPION')||/'CHAMPION'/.test(call.sql)),'readiness must never write CHAMPION');
+  const before=readyDb.calls.length;
+  for(const bad of [report('CHAMPION'),{...report('PROMOTION_READY'),status:'KEEP_CHALLENGER'},{...report('KEEP_CHALLENGER'),modelId:'unknown'}]){
+    readyResponse=await handleRequest(request('/v1/research/ml/ingest',{operation:'ml_promotion_readiness_commit',run_id:'r2',reports:[bad]},auth),readyEnv,{},{});
+    assert.equal(readyResponse.status,400);assert.equal((await readyResponse.json()).error.code,'READINESS_REPORT_INVALID');
+  }
+  assert.equal(readyDb.calls.length,before,'invalid reports must write nothing');
+}
+
 console.log('AI backend tests passed');
