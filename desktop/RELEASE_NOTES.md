@@ -1,4 +1,37 @@
-# Market Edge desktop 0.2.0 (paper trading only)
+# Market Edge desktop 0.3.0 (paper trading only)
+
+Unsigned pre-release. Everything below is research or display only: it never
+changes a paper trade and no model or exit policy has evidence yet.
+
+## What's new since 0.2.0
+
+- **Research screen.** Read-only status of what is production, what is running
+  in shadow and what is post-outcome research, kept in three separate sections.
+  No controls.
+- **Forward-shadow research pipeline (backend).** Data quality gate, versioned
+  training snapshots, experiment registry, drift and strategy-health monitors,
+  walk-forward evaluation, a mandatory placebo gate, shadow challenger
+  deployment, forward validation with explicit evidence floors, an
+  evidence-gated policy lifecycle (no LIVE state; forward moves need a logged
+  human authorization), replay report, counterfactual portfolio analysis and a
+  learning-loop orchestrator that stops at the authorization boundary.
+  Shadow database schema is now v7.
+- **Trade chart and Trade Detail.** MFE/MAE markers with the time reached,
+  intermediate time ticks, an exit-policy counterfactual overlay (off by
+  default, labelled research only), Trade Detail shows when MFE/MAE was reached.
+- **System screen.** Rate-limit diagnostic panel and a backup summary.
+
+## Honest status
+
+- None of the research pipeline has run on real forward data yet; it is tested
+  on synthetic fixtures. No challenger model is deployed.
+- The Risk panel, Trade Detail and Research screen were not manually validated
+  in a running app before this release.
+- Unsigned: macOS may warn on first open.
+
+---
+
+# Previous release: Market Edge desktop 0.2.0 (paper trading only)
 
 Second release of the standalone Market Edge desktop app.
 

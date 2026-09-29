@@ -135,7 +135,7 @@ NODE_BIN=$(to_unix "$(jq -r .layout.node "$OUT/self-check.json")")
 check EXEC_INSIDE_APP "$EXEC_BIN" under_root "$EXEC_BIN"
 check NODE_INSIDE_APP "$NODE_BIN" under_root "$NODE_BIN"
 check REPO_ROOT_NULL "layout.repo_root" test "$(jq -r .layout.repo_root "$OUT/self-check.json")" = null
-check VERSION_0_2_0 "$(jq -r '.app_version + " " + .git_sha + " " + .build_timestamp' "$OUT/self-check.json")" test "$(jq -r .app_version "$OUT/self-check.json")" = 0.2.0
+check VERSION_0_3_0 "$(jq -r '.app_version + " " + .git_sha + " " + .build_timestamp' "$OUT/self-check.json")" test "$(jq -r .app_version "$OUT/self-check.json")" = 0.3.0
 check BACKEND_FROZEN "$(jq -r '.execution_service | "backend " + .backend_version + " python " + .python + " schema v" + (.schema_version|tostring)' "$OUT/self-check.json")" test "$(jq -r .execution_service.frozen "$OUT/self-check.json")" = true
 
 # ================================================================ 2. legacy DB migration (separate data dir)
@@ -172,7 +172,7 @@ LOOP_OS=$(to_unix "$(exe_of "$LOOP_PID")")
 check LOOP_PROCESS_FROM_BUNDLE "os pid $LOOP_PID: $LOOP_OS" under_root "$LOOP_OS"
 check SQLITE_OPENS "$(st '.status.sqlite | "quick_check \(.quick_check) \(.path)"')" test "$(st .status.sqlite.ok)" = true
 check NAUTILUS_IN_BUNDLE "$(st '.status.nautilus.version')" test "$(st .status.nautilus.ok)" = true
-check HEALTH_VERSION "$(st '.health | "v\(.version) schema v\(.schema_version) sha \(.build.git_sha)"')" test "$(st .health.version)" = 0.2.0
+check HEALTH_VERSION "$(st '.health | "v\(.version) schema v\(.schema_version) sha \(.build.git_sha)"')" test "$(st .health.version)" = 0.3.0
 check FIRST_RUN_INIT "config.json, logs/, backups/, DB in $DATA" test -f "$DATA/config.json" -a -d "$DATA/logs" -a -d "$DATA/backups" -a -f "$DATA/market_edge_paper.sqlite3"
 for f in desktop execution-service forward-loop reconciliation; do
   check "LOG_$f" "$DATA/logs/$f.log" test -f "$DATA/logs/$f.log"
