@@ -170,10 +170,21 @@ export interface RiskSizingStatus {
   gross_exposure_multiple: number | null; open_positions: number; positions: RiskSizingPosition[];
 }
 
+/** One plain-language explanation per real exit (Task S). Friction/overshoot fields are null when that exit predates their recording. */
+export interface ExitExplanation {
+  kind: string; at_ms: number; quantity: number; why: string; level: number | null; fill_price: number; trigger: string; seen_by: string;
+  observed_price: number | null; expected_slippage_bps: number | null; actual_slippage_bps: number | null; difference_bps: number | null;
+  friction_provenance: 'measured' | 'default_used' | null; friction_note: string | null; overshoot_bps: number | null; overshoot_R: number | null;
+  first_observed_post_stop_price: number | null; decision_latency_ms: number | null; since_previous_observation_ms: number | null;
+  recorded: { friction: boolean; stop_overshoot: boolean };
+}
+export interface ExitCoverage { distinguishable: boolean; exists: boolean; note: string }
+
 export interface TradeDetail {
   trade_id: string; status: string; is_open: boolean; opened_at_ms: number; closed_at_ms: number | null; exit_reason: string | null;
   decision: DecisionContext; live: LiveMetrics; levels: ChartLevel[]; markers: ChartMarker[];
   exits: { kind: string; quantity: number; fill_price: number; level: number; pnl: number; at_ms: number; trigger?: string }[];
+  exit_explanations?: ExitExplanation[]; exit_coverage?: Record<string, ExitCoverage>;
   realized_pnl: number; fees: number; net_pnl: number; hindsight: Hindsight; shadow?: ShadowLink; risk_sizing?: TradeRiskSizing; generated_at_ms: number;
 }
 export type CandleInterval = '1m' | '5m' | '15m' | '1h';

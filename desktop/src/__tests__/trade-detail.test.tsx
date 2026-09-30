@@ -7,7 +7,7 @@ vi.mock('@tauri-apps/api/core', () => ({ invoke: (...args: unknown[]) => invoke(
 import App, { Warnings } from '../App';
 import { PositionTable } from '../screens/Positions';
 import { TradeTable } from '../screens/Trades';
-import { GivebackStats, TradeDetailView } from '../screens/TradeDetail';
+import { ExitExplanations, GivebackStats, TradeDetailView } from '../screens/TradeDetail';
 import { appInfoFixture, candleSetFixture, healthFixture, positionFixture, tradeDetailFixture, tradeFixture } from './fixtures';
 
 afterEach(() => { cleanup(); invoke.mockReset(); });
@@ -262,5 +262,65 @@ describe('chart polish and exit-policy overlay (#33, #32)', () => {
     fireEvent.click(screen.getByLabelText(/SHOW EXIT-POLICY COUNTERFACTUALS/));
     expect(await screen.findByText(/No counterfactual records for this trade/)).toBeInTheDocument();
     expect(container.querySelector('[data-counterfactual]')).toBeNull();
+  });
+});
+
+
+describe('why did this trade exit (Task S)', () => {
+  const rows = () => tradeDetailFixture({ open: false }).exit_explanations!;
+  const coverage = () => tradeDetailFixture({ open: false }).exit_coverage;
+
+  it('explains each exit with trigger, slippage, overshoot and latency', () => {
+    render(<ExitExplanations rows={rows()} coverage={coverage()} />);
+    const tp1 = document.querySelector('[data-exit="TP1"]') as HTMLElement;
+    expect(within(tp1).getByText(/first target/)).toBeInTheDocument();
+    expect(within(tp1).getByText(/live exchange trade print/)).toBeInTheDocument();
+    expect(within(tp1).getByText(/expected 3.0 bps · actual 3.0 bps · difference 0.0 bps/)).toBeInTheDocument();
+    expect(within(tp1).queryByText('Stop overshoot')).toBeNull();          // a target exit has no overshoot row
+    expect(within(tp1).getByText(/400 ms/)).toBeInTheDocument();
+    const be = document.querySelector('[data-exit="BREAKEVEN_STOP"]') as HTMLElement;
+    expect(within(be).getByText('Stop overshoot')).toBeInTheDocument();
+    expect(within(be).getByText(/2.0 bps · 0.02R/)).toBeInTheDocument();
+    expect(within(be).getByText(/difference 2.5 bps/)).toBeInTheDocument();
+  });
+
+  it('states which exit reasons cannot be told apart instead of implying they exist', () => {
+    render(<ExitExplanations rows={rows()} coverage={coverage()} />);
+    const note = screen.getByLabelText('Exit reasons that cannot be told apart');
+    expect(within(note).getAllByRole('listitem').map((li) => li.querySelector('b')!.textContent)).toEqual(['manual', 'kill switch', 'adaptive']);
+    expect(note.textContent).toMatch(/No manual-close path exists/);
+  });
+
+  it('shows a dash-style honest message for an old exit with nothing recorded, never an invented number', () => {
+    const old = { ...rows()[1], friction_provenance: null, expected_slippage_bps: null, actual_slippage_bps: null, difference_bps: null,
+      overshoot_bps: null, overshoot_R: null, decision_latency_ms: null, since_previous_observation_ms: null, recorded: { friction: false, stop_overshoot: false } };
+    render(<ExitExplanations rows={[old]} />);
+    expect(screen.getByText(/predates friction measurement/)).toBeInTheDocument();
+    expect(screen.getByText(/predates overshoot measurement/)).toBeInTheDocument();
+    expect(screen.queryByText(/bps/)).toBeNull();
+  });
+
+  it('a default_used exit says it was not measured and shows only the assumption', () => {
+    const d = { ...rows()[0], friction_provenance: 'default_used' as const, friction_note: 'candle-path exit: no live observed price', actual_slippage_bps: 3, difference_bps: null };
+    render(<ExitExplanations rows={[d]} />);
+    expect(screen.getByText(/not measured: candle-path exit/)).toBeInTheDocument();
+    expect(screen.queryByText(/difference/)).toBeNull();
+  });
+
+  it('a candle-path stop with no observed price says so', () => {
+    const c = { ...rows()[1], kind: 'STOP', overshoot_bps: null, overshoot_R: null, recorded: { friction: true, stop_overshoot: true } };
+    render(<ExitExplanations rows={[c]} />);
+    expect(screen.getByText(/no price was observed past the stop/)).toBeInTheDocument();
+  });
+
+  it('appears on a closed trade in Trade Detail and not when the backend predates it', async () => {
+    backend(() => tradeDetailFixture({ open: false }));
+    const { unmount } = render(<TradeDetailView tradeId="scan-abc-ETH" onBack={() => undefined} />);
+    expect(await screen.findByText('Why did this trade exit?')).toBeInTheDocument();
+    unmount();
+    backend(() => { const d = tradeDetailFixture({ open: false }); delete d.exit_explanations; delete d.exit_coverage; return d; });
+    render(<TradeDetailView tradeId="scan-abc-ETH" onBack={() => undefined} />);
+    await screen.findByRole('img', { name: 'ETH LONG trade chart' });
+    expect(screen.queryByText('Why did this trade exit?')).toBeNull();
   });
 });

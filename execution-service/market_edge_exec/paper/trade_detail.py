@@ -184,6 +184,58 @@ def chart_markers(trade: dict) -> list[dict]:
     return markers
 
 
+# ---- Task S: "why did this trade exit?" ------------------------------------------------------------------------------
+EXIT_WHY = {
+    "TP1": "Price reached the first target, so half the position was sold and the stop moved to breakeven.",
+    "TP2": "Price reached the second target, so the remaining position was sold.",
+    "STOP": "Price fell through the stop before either target, so the whole position was closed at a loss.",
+    "BREAKEVEN_STOP": "After the first target, price came back to the entry price, so the remainder was closed at breakeven.",
+    "TIMEOUT": "Neither the stop nor a target was reached inside the maximum holding time, so the remainder was closed at the last price.",
+}
+SEEN_BY = {"WS_TRADE": "a live exchange trade print", "POLL_HEARTBEAT": "the monitor's polled price",
+           "CANDLE_5M": "the completed 5-minute candle sweep (no live price was seen)"}
+# Exit reasons the roadmap asks about. `distinguishable` is true only when the ledger can tell it apart from the five kinds above.
+EXIT_COVERAGE = {
+    "MANUAL": {"distinguishable": False, "exists": False,
+               "note": "No manual-close path exists. The 'MANUAL EXIT' chart label is defined but nothing emits it, so a manual exit cannot appear on any trade."},
+    "KILL_SWITCH": {"distinguishable": False, "exists": True,
+                    "note": "The kill switch halts new entries and lets reduce-only exits through, but does not close positions. An exit while it is engaged is recorded as an ordinary STOP, target or TIMEOUT with nothing marking that the switch was on."},
+    "ADAPTIVE": {"distinguishable": False, "exists": False,
+                 "note": "No adaptive exit is authoritative. Exit policies run only as research counterfactuals, so every real exit is one of the five fixed lifecycle kinds."},
+}
+
+
+def _bps(pct: Optional[float]) -> Optional[float]:
+    return None if pct is None else pct * 10_000
+
+
+def exit_explanations(trade: dict) -> list[dict]:
+    """One plain-language explanation per real exit, with expected vs actual friction and overshoot where they were recorded.
+    Fields recorded by Tasks G and H are None (never invented) on exits that predate them."""
+    out = []
+    for e in trade.get("exits") or []:
+        f, o = e.get("friction"), e.get("stop_overshoot")
+        trigger = e.get("trigger") or "CANDLE_5M"
+        actual = (f or {}).get("actual") or {}
+        out.append({
+            "kind": e["kind"], "at_ms": e["at_ms"], "quantity": e["quantity"],
+            "why": EXIT_WHY.get(e["kind"], f"Recorded exit kind {e['kind']} has no explanation text."),
+            "level": e.get("level"), "fill_price": e["fill_price"], "trigger": trigger,
+            "seen_by": SEEN_BY.get(trigger, trigger), "observed_price": e.get("observed_price"),
+            "expected_slippage_bps": _bps(((f or {}).get("expected") or {}).get("slippage_pct")),
+            "actual_slippage_bps": _bps(actual.get("slippage_pct")),
+            "difference_bps": _bps((f or {}).get("difference_pct")),
+            "friction_provenance": (f or {}).get("slippage_provenance"),
+            "friction_note": (f or {}).get("default_reason"),
+            "overshoot_bps": (o or {}).get("overshoot_bps"), "overshoot_R": (o or {}).get("overshoot_R"),
+            "first_observed_post_stop_price": (o or {}).get("first_observed_post_stop_price"),
+            "decision_latency_ms": ((f or {}).get("monitor") or {}).get("observation_lag_ms"),
+            "since_previous_observation_ms": ((f or {}).get("monitor") or {}).get("since_previous_observation_ms"),
+            "recorded": {"friction": f is not None, "stop_overshoot": o is not None},
+        })
+    return out
+
+
 def chart_levels(trade: dict) -> list[dict]:
     direction = trade["direction"].upper()
     out = [{"kind": "ENTRY", "price": trade["entry_fill"], "label": f"ENTRY ({direction})"},
@@ -301,6 +353,7 @@ def build_trade_detail(ledger: PaperLedger, trade: dict, now_ms: int, max_age_s:
         "levels": chart_levels(trade),
         "markers": chart_markers(trade),
         "exits": trade.get("exits") or [],
+        "exit_explanations": exit_explanations(trade), "exit_coverage": EXIT_COVERAGE,
         "realized_pnl": trade["realized_pnl"], "fees": trade["fees"], "net_pnl": trade["realized_pnl"] - trade["fees"],
         "risk_sizing": risk_sizing_view(ledger, trade),
         "shadow": shadow_view(shadow_link),
