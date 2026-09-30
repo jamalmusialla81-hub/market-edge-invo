@@ -26,6 +26,7 @@ from statistics import median
 from typing import Optional
 
 from market_edge_exec.paper import lifecycle
+from market_edge_exec.risk import liquidity
 from market_edge_exec.risk.clusters import CLUSTER_METHOD_VERSION, cluster_for
 
 SIZING_RULE_VERSION = "RISK-SIZING-V2.0"
@@ -209,64 +210,16 @@ def volatility_state(vol: Optional[VolInput], now_ms: int, policy: SizingPolicy)
             "vol_bars": len(closes), "vol_last_bar_open_ms": vol.last_bar_open_ms}, None
 
 
-def _levels(side: list) -> list[tuple[float, float]]:
-    out = []
-    for lvl in side or []:
-        px, sz = (lvl[0], lvl[1]) if isinstance(lvl, (list, tuple)) else (lvl.get("px"), lvl.get("sz"))
-        px, sz = float(px), float(sz)
-        if not (_finite(px, sz) and px > 0 and sz > 0):
-            raise ValueError("bad depth level")
-        out.append((px, sz))
-    return out
+_levels = liquidity.levels   # kept under its old name; the book walk itself now lives in risk/liquidity.py (Task I)
 
 
 def liquidity_state(depth: Optional[DepthInput], direction: str, now_ms: int, policy: SizingPolicy) -> tuple[Optional[dict], Optional[str]]:
-    """The largest order whose average fill stays within
-    MAX_EXPECTED_ENTRY_SLIPPAGE_BPS of the mid, walking the real book."""
-    if depth is None:
-        return None, "missing"
-    if depth.venue != policy.vol_venue:
-        return None, f"wrong venue {depth.venue}"
-    if not _finite(depth.at_ms) or now_ms - depth.at_ms > policy.max_depth_age_ms or depth.at_ms > now_ms + 5_000:
-        return None, "stale depth"
-    try:
-        bids, asks = _levels(depth.bids), _levels(depth.asks)
-    except (TypeError, ValueError):
-        return None, "invalid depth"
-    if not bids or not asks or bids[0][0] >= asks[0][0]:
-        return None, "invalid depth"
-    mid = (bids[0][0] + asks[0][0]) / 2
-    book = asks if direction == "long" else bids
-    bound = policy.max_expected_entry_slippage_bps / 10_000
-    cap_notional, cost, qty = 0.0, 0.0, 0.0     # cost = sum px*sz consumed
-    for px, sz in book:
-        # average px after adding x units of this level must stay within the bound
-        limit = mid * (1 + bound) if direction == "long" else mid * (1 - bound)
-        adverse = (px - limit) if direction == "long" else (limit - px)
-        if adverse <= 0:
-            cost, qty = cost + px * sz, qty + sz
-            continue
-        # solve (cost + px*x) / (qty + x) = limit for x
-        x = (limit * qty - cost) / adverse if direction == "long" else (cost - limit * qty) / adverse
-        x = max(0.0, min(sz, x))
-        cost, qty = cost + px * x, qty + x
-        break
-    cap_notional = qty * mid
-
-    def slippage_at(notional: float) -> float:
-        if notional <= 0:
-            return 0.0
-        need, c, q = notional / mid, 0.0, 0.0
-        for px, sz in book:
-            take = min(sz, need - q)
-            c, q = c + px * take, q + take
-            if q >= need - 1e-15:
-                break
-        if q < need - 1e-12:
-            return math.inf
-        return abs(c / q / mid - 1)
-    return {"mid": mid, "liquidity_cap_notional": cap_notional, "slippage_at": slippage_at,
-            "depth_at_ms": depth.at_ms, "book_levels": len(book)}, None
+    """The largest order whose average fill stays within MAX_EXPECTED_ENTRY_SLIPPAGE_BPS of the mid, walking the real book.
+    Unchanged behaviour: the walk is liquidity.walk(), this returns the same five keys it always did."""
+    state, why = liquidity.walk(depth, direction, now_ms, policy)
+    if state is None:
+        return None, why
+    return {k: state[k] for k in ("mid", "liquidity_cap_notional", "slippage_at", "depth_at_ms", "book_levels")}, None
 
 
 # ---- the sizer ---------------------------------------------------------------
