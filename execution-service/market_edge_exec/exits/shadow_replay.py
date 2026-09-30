@@ -76,6 +76,11 @@ def ensure_table(connect) -> None:
         conn.commit()
 
 
+def has_table(connect) -> bool:
+    with closing(connect()) as conn:
+        return conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='shadow_exit_replays'").fetchone() is not None
+
+
 def _num(value) -> Optional[float]:
     return float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) and value == value else None
 
@@ -233,9 +238,12 @@ ORDER BY CASE WHEN o.execution_rejection_reason IN ({b_marks}) THEN 0 ELSE 1 END
 """
 
 
-def _pending_rows(connect, now_ms: int, coin: Optional[str], limit: Optional[int], expired: bool = False) -> list[dict]:
-    """Leader observations with no replay row yet: inside the path horizon, or (expired=True) past it."""
-    ensure_table(connect)
+def _pending_rows(connect, now_ms: int, coin: Optional[str], limit: Optional[int], expired: bool = False, create: bool = True) -> list[dict]:
+    """Leader observations with no replay row yet: inside the path horizon, or (expired=True) past it. Read-only callers pass create=False."""
+    if create:
+        ensure_table(connect)
+    elif not has_table(connect):
+        return []   # nothing has ever been replayed: every leader would be pending, but a read never creates the table
     sql = _LEADER_SQL.format(age_op="<" if expired else ">=", coin_clause="AND o.coin=?" if coin else "", b_marks=",".join("?" * len(B_REASONS)))
     if limit:
         sql += f" LIMIT {int(limit)}"
@@ -280,7 +288,8 @@ def run_for_coin(connect, coin: str, candles: list[dict], now_ms: Optional[int] 
 
 # ---- 5. reporting, cohort by cohort --------------------------------------------------------------------------
 def _records(connect, cohort: str) -> list[dict]:
-    ensure_table(connect)
+    if not has_table(connect):
+        return []
     with closing(connect()) as conn:
         conn.row_factory = sqlite3.Row
         rows = conn.execute("SELECT observation_id, policy_version, observation_cluster_id, market_episode_id, record FROM shadow_exit_replays "
@@ -327,7 +336,7 @@ def cohort_report(connect, now_ms: Optional[int] = None) -> dict:
             "market_episodes": len({m[1] for m in meta.values()}),
             "independence_units_3h": len({cluster_id(m[2], EVIDENCE_BAR_V1["cluster_hours"]) for m in meta.values()}),
             "episode_classes": dict(sorted(classes.items())), "evaluation": evaluation}
-    pending_rows = _pending_rows(connect, now_ms, None, None)
+    pending_rows = _pending_rows(connect, now_ms, None, None, create=False)
     return {
         "version": SHADOW_REPLAY_VERSION, "entry_model": ENTRY_MODEL_VERSION, "eligibility": ELIGIBILITY_VERSION,
         "episode_class_thresholds": EPISODE_CLASS,
@@ -336,7 +345,7 @@ def cohort_report(connect, now_ms: Optional[int] = None) -> dict:
         "cohort_A_note": "Actual paper trades: reported by /research/exit-policies/evaluation, never mixed with B or C here.",
         "cohorts": cohorts,
         "pending_leader_observations": len(pending_rows),
-        "expired_without_replay": len(_pending_rows(connect, now_ms, None, None, expired=True)),
+        "expired_without_replay": len(_pending_rows(connect, now_ms, None, None, expired=True, create=False)),
         "selection_caveat": ("A row is final only once every policy has exited on a complete recorded path. Observations still open when the "
                              "path ends are not counted (they are reported as pending), so long holds are under-represented until their "
                              "paths complete. The paired comparison uses identical paths for every policy."),

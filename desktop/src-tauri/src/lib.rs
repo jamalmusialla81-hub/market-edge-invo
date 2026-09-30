@@ -163,6 +163,11 @@ async fn get_rate_limit(state: tauri::State<'_, AppState>) -> CmdResult<Value> {
 async fn get_research_status(state: tauri::State<'_, AppState>) -> CmdResult<Value> {
     state.get("/research/status").await
 }
+// Exit-evidence dashboard (read-only display; nothing here changes an exit mode, a trade or the evidence bar).
+#[tauri::command]
+async fn get_exit_evidence(state: tauri::State<'_, AppState>) -> CmdResult<Value> {
+    state.get("/research/exit-evidence").await
+}
 #[tauri::command]
 async fn get_shadow_summary(state: tauri::State<'_, AppState>) -> CmdResult<Value> {
     state.get("/shadow/summary").await
@@ -926,6 +931,7 @@ pub fn run() {
             get_performance,
             get_rate_limit,
             get_research_status,
+            get_exit_evidence,
             get_shadow_summary,
             get_shadow_observations,
             get_research_export_info,
