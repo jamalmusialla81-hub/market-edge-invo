@@ -79,7 +79,8 @@ def test_no_observations_at_all():
 def test_a_trade_expects_only_the_policies_of_the_registry_it_was_recorded_under():
     v1 = cp.expected_policies(pol.REGISTRY, "EXIT-POLICIES-V1")
     v2 = cp.expected_policies(pol.REGISTRY, "EXIT-POLICIES-V2")
-    assert len(v1) == 18 and set(v1) < set(v2)
+    v3 = cp.expected_policies(pol.REGISTRY, "EXIT-POLICIES-V3")
+    assert len(v1) == 18 and set(v1) < set(v2) and len(v2) == 22 and set(v2) < set(v3) and len(v3) == len(pol.REGISTRY) == 28
     assert cp.expected_policies(pol.REGISTRY, None) == sorted(pol.REGISTRY)
 
 

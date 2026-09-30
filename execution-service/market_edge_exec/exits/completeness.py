@@ -39,8 +39,8 @@ DEGRADED = "RESEARCH_PIPELINE_DEGRADED"
 
 # A trade is expected to carry the policies of the registry version it was recorded under, not policies added later (Task O's
 # structural variants arrived in V2; trades recorded under V1 are not "missing" them).
-REGISTRY_ORDER = ["EXIT-POLICIES-V1", "EXIT-POLICIES-V2"]
-STUDY_ADDED_IN = {"3O": "EXIT-POLICIES-V2"}
+REGISTRY_ORDER = ["EXIT-POLICIES-V1", "EXIT-POLICIES-V2", "EXIT-POLICIES-V3"]
+STUDY_ADDED_IN = {"3O": "EXIT-POLICIES-V2", "3Q": "EXIT-POLICIES-V3"}
 
 
 def expected_policies(registry, version: Optional[str]) -> list[str]:

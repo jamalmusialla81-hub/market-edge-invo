@@ -24,7 +24,7 @@ from market_edge_exec.control.settings import BOUNDS as SETTINGS_BOUNDS, Control
 from market_edge_exec.domain.contracts import ContractError, ExecutionIntent
 from market_edge_exec.hummingbot.factory import build_hummingbot_client
 from market_edge_exec.nautilus.portfolio import NautilusPortfolio
-from market_edge_exec.exits import EXIT_MANAGER_VERSION, shadow_replay as shadow_exit_replay
+from market_edge_exec.exits import EXIT_MANAGER_VERSION, prereg as exit_prereg, shadow_replay as shadow_exit_replay
 from market_edge_exec.exits.completeness import assess as assess_exit_completeness, evaluate_eligible as evaluate_eligible_exit_policies
 from market_edge_exec.exits.evaluation import render_markdown as render_exit_report
 from market_edge_exec.exits.policies import POLICY_REGISTRY_VERSION, registry_view as exit_policy_view
@@ -505,6 +505,11 @@ def create_app(db_path: str = "market_edge_exec.sqlite3", hummingbot_mode: str =
     def shadow_exit_replay_report():
         return {"label": "RESEARCH ONLY · COUNTERFACTUAL · ZERO CAPITAL · NEVER COUNTS TOWARD THE PAPER BAR",
                 **shadow_exit_replay.cohort_report(app.state.shadow._connect)}
+
+    @app.post("/research/exit-policies/state-aware/register", dependencies=[Depends(require_api_key)])
+    def state_aware_register():
+        """Records the preregistered STATE_AWARE_GIVEBACK_V1 grid in the experiment registry (idempotent). Runs nothing, changes no policy."""
+        return {"label": "RESEARCH ONLY · PREREGISTRATION", **exit_prereg.register(ExperimentRegistry(app.state.shadow))}
 
     @app.get("/research/exit-policies/integrity", dependencies=[Depends(require_api_key)])
     def exit_policy_integrity():
