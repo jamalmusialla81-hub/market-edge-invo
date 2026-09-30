@@ -25,7 +25,8 @@ from market_edge_exec.domain.contracts import ContractError, ExecutionIntent
 from market_edge_exec.hummingbot.factory import build_hummingbot_client
 from market_edge_exec.nautilus.portfolio import NautilusPortfolio
 from market_edge_exec.exits import EXIT_MANAGER_VERSION
-from market_edge_exec.exits.evaluation import evaluate as evaluate_exit_policies, render_markdown as render_exit_report
+from market_edge_exec.exits.completeness import assess as assess_exit_completeness, evaluate_eligible as evaluate_eligible_exit_policies
+from market_edge_exec.exits.evaluation import render_markdown as render_exit_report
 from market_edge_exec.exits.policies import POLICY_REGISTRY_VERSION, registry_view as exit_policy_view
 from market_edge_exec.exits.store import ExitStore
 from market_edge_exec.paper.candles import CachedCandleFetcher, hyperliquid_fetcher, trade_candles
@@ -483,8 +484,12 @@ def create_app(db_path: str = "market_edge_exec.sqlite3", hummingbot_mode: str =
 
     @app.get("/research/exit-policies/evaluation", dependencies=[Depends(require_api_key)])
     def exit_policy_evaluation():
-        result = evaluate_exit_policies(exit_store.finalized_records())
+        result = evaluate_eligible_exit_policies(exit_store._connect)
         return {"label": EXIT_LABEL, **result, "markdown": render_exit_report(result)}
+
+    @app.get("/research/exit-policies/integrity", dependencies=[Depends(require_api_key)])
+    def exit_policy_integrity():
+        return {"label": EXIT_LABEL, **assess_exit_completeness(exit_store._connect)}
 
     # ---- data quality gate (DATA 2): classification only, never edits or repairs a row ----
     @app.post("/research/data-quality/run", dependencies=[Depends(require_api_key)])

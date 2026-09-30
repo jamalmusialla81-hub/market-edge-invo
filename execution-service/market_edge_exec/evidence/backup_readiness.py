@@ -100,7 +100,8 @@ def _gate(task: str, title: str, ready: bool, have: str, need: str, note: Option
 def assess(paper_db: Optional[str], shadow_db: Optional[str]) -> dict:
     from market_edge_exec.analysis import forward_diagnostic as D
     from market_edge_exec.evaluation import sizing_review as SR
-    from market_edge_exec.exits.evaluation import EVIDENCE_BAR_V1, evaluate
+    from market_edge_exec.exits.completeness import evaluate_eligible
+    from market_edge_exec.exits.evaluation import EVIDENCE_BAR_V1
     from market_edge_exec.exits.store import ExitStore
 
     exits: Optional[dict] = None
@@ -112,14 +113,18 @@ def assess(paper_db: Optional[str], shadow_db: Optional[str]) -> dict:
                 c = sqlite3.connect(f"file:{paper_db}?mode=ro", uri=True)
                 c.row_factory = sqlite3.Row
                 return c
-            exits = evaluate(ExitStore(ro).finalized_records())
+            exits = evaluate_eligible(ro)
     sizing = SR.review(paper_db) if paper_db else None
     diagnostic = D.diagnose(shadow_db, paper_db) if shadow_db else None
 
     bar = EVIDENCE_BAR_V1
     n_ex, ep_ex = (exits["trades_with_baseline"], exits["independent_episodes"]) if exits else (0, 0)
     passing = sorted(k for k, v in (exits or {}).get("policies", {}).items() if v["verdict"] == "PASS")
-    ex_have = f"{n_ex} finalized trades / {ep_ex} episodes" + ("" if exits else " (no exit counterfactual table)")
+    integ = (exits or {}).get("evidence_integrity")
+    excluded = len(integ["excluded"]) if integ else 0
+    ex_have = (f"{n_ex} complete-path finalized trades / {ep_ex} episodes" + (f" ({excluded} closed trades excluded as legacy or incomplete path)" if excluded else "")
+               + (f"; {integ['pipeline_status']}" if integ and integ["pipeline_status"] != "OK" else "")
+               if exits else "0 finalized trades / 0 episodes (no exit counterfactual table)")
     gates = [
         _gate("#25", "MAJOR 4 paper adaptive exit rollout", bool(passing),
               f"{ex_have}; passing policies: {', '.join(passing) or 'none'}", f"a 3H PASS (bar {bar['version']})",

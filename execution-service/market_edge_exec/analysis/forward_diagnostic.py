@@ -218,16 +218,16 @@ def no_trade(states: list[dict]) -> dict:
 def exit_counterfactuals(paper_db_path: Optional[str]) -> dict:
     if not paper_db_path:
         return {"status": "NOT_PROVIDED", "reason": "no paper ledger given"}
-    from market_edge_exec.exits.evaluation import evaluate
-    from market_edge_exec.exits.store import ExitStore
+    from market_edge_exec.exits.completeness import evaluate_eligible
     with closing(_ro(paper_db_path)) as conn:
         if not conn.execute("SELECT 1 FROM sqlite_master WHERE name='exit_policy_counterfactuals'").fetchone():
             return {"status": "NOT_AVAILABLE", "reason": "ledger predates MAJOR 3G (no exit counterfactual table)"}
-    result = evaluate(ExitStore(lambda: _ro(paper_db_path)).finalized_records())
+    result = evaluate_eligible(lambda: _ro(paper_db_path))
     verdicts = Counter(p["verdict"] for p in result["policies"].values())
     return {"status": "EVALUATED", "trades_with_baseline": result["trades_with_baseline"], "independent_episodes": result["independent_episodes"],
             "verdicts": dict(verdicts), "policies": {k: {f: v[f] for f in ("verdict", "trades", "independent_episodes", "delta_mean_R", "delta_ci")}
-                                                     for k, v in result["policies"].items()}, "evidence_bar": result["evidence_bar"]["version"]}
+                                                     for k, v in result["policies"].items()}, "evidence_bar": result["evidence_bar"]["version"],
+            "evidence_integrity": result["evidence_integrity"]}
 
 
 def diagnose(shadow_db_path: str, paper_db_path: Optional[str] = None, *, seed: int = SEED) -> dict:
