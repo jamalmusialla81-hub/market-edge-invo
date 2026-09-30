@@ -126,6 +126,8 @@ function candidateFields(c) {
     strategy_score: num(c?.quantStrategyScore), model_score: num(c?.mlRawScore), combined_score: num(c?.combinedScore),
     verdict: c?.strictDecision || c?.decision || null, entry_status: c?.entryStatus || null, entry_quality: c?.entryQuality || null,
     regime: c?.regime || null, risk_plan_valid: Boolean(c?.risk?.valid),
+    // Decision semantics (TASK A, #80): additive, decision-time, derived from the same scan as `verdict` above.
+    semantics: c?.semantics || null,
   };
 }
 const geometryComplete = (f) => Boolean(f.direction && [f.entry, f.stop, f.tp1, f.tp2, f.rr1].every(Number.isFinite));
