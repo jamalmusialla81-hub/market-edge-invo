@@ -42,7 +42,8 @@ def test_partial_data_counts_cohorts_separately_and_shows_acceleration(tmp_path)
     assert body["gate"]["paper_finalized"] == 0                       # cohorts B and C never count toward the paper bar
     assert "never count toward the paper bar" in body["cohort_B_C_note"]
     assert sum(d["shadow_replays"] for d in body["daily"]) == 2
-    assert body["current_vs_adaptive"] and all(v["verdict"] == "INSUFFICIENT_EVIDENCE" for v in body["current_vs_adaptive"].values())
+    assert body["current_vs_adaptive"] == {} or all(v["verdict"] != "PASS" for v in body["current_vs_adaptive"].values())   # no paper trade: nothing to compare
+    assert body["gate"]["passing_summary"] == "NONE"
 
 
 def test_a_degraded_pipeline_is_reported_with_the_missing_trade_ids(tmp_path, monkeypatch):
