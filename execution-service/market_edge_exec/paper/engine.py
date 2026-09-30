@@ -22,7 +22,7 @@ from typing import Callable, Optional
 
 from market_edge_exec.exits.shadow import ExitShadow
 from market_edge_exec.domain.contracts import AlphaSignal, ContractError, ExecutionIntent, RiskDecision
-from market_edge_exec.paper import lifecycle
+from market_edge_exec.paper import friction, lifecycle
 from market_edge_exec.paper.ledger import PaperLedger
 from market_edge_exec.persistence.store import Store
 from dataclasses import replace as _replace
@@ -327,6 +327,8 @@ class PaperEngine:
                 decision_id = self.ledger.record_sizing(sid, signal.asset, mode, "AUTHORITATIVE", auth, at_ms=now_ms)
                 record_v2(v2_record)
                 sizing_fields = {}
+            # Task G: measurement only (expected vs observed friction); never feeds back into the fill or the size.
+            friction_entry = friction.entry_friction(signal.direction, mark_price, entry_fill, qty, now_ms, mark_at_ms, signal.timestamp, depth_in, policy)
             trade = {
                 "trade_id": sid, "signal_id": sid, "instrument": instrument, "asset": signal.asset, "coin": coin or signal.asset,
                 "direction": signal.direction, "strategy": signal.strategy_id, "status": "OPEN", "backend": backend,
@@ -347,7 +349,7 @@ class PaperEngine:
                 "exposure_capped": assessment.exposure_capped,
                 "realized_pnl": 0.0, "unrealized_pnl": 0.0, "fees": entry_fee,
                 "slippage_cost": abs(entry_fill - mark_price) * qty, "mark_price": mark_price, "last_checked_ms": now_ms,
-                "quant_score": signal.quant_score, "exits": [],
+                "quant_score": signal.quant_score, "exits": [], "friction_entry": friction_entry,
                 # Open-position monitor state, persisted so a restart resumes
                 # it instead of resetting it.
                 "best_price": entry_fill, "worst_price": entry_fill,
@@ -369,7 +371,8 @@ class PaperEngine:
         return EntryResult(signal_id=sid, accepted=True, trade=trade)
 
     # ---- lifecycle -----------------------------------------------------
-    def _route_exits(self, trade: dict, instrument: str, events: list, trigger: str, observed_price: Optional[float] = None) -> list:
+    def _route_exits(self, trade: dict, instrument: str, events: list, trigger: str, observed_price: Optional[float] = None,
+                     observation_lag_ms: Optional[int] = None, since_previous_observation_ms: Optional[int] = None) -> list:
         """Route each exit as a reduce-only intent (so exits still go through
         when the kill switch is engaged) and apply it to the ledger. Intent ids
         are "<trade_id>:<KIND>", so the router and the ledger's UNIQUE event
@@ -400,11 +403,17 @@ class PaperEngine:
             extra = {"trigger": trigger}
             if observed_price is not None:
                 extra["observed_price"] = observed_price
+            # Task G: measurement only; recorded on the exit, never used to change it.
+            extra["friction"] = friction.exit_friction(trade["direction"], event.kind, event.level, event.fill_price, trigger, observed_price,
+                                                       observation_lag_ms, since_previous_observation_ms)
             if self.ledger.apply_exit(trade, event.kind, event.quantity, event.fill_price, event.level, realized, exit_fee,
                                       abs(event.fill_price - event.level) * event.quantity, event.at_ms, extra=extra):
                 exits.append({"kind": event.kind, "quantity": event.quantity, "fill_price": event.fill_price, "pnl": realized,
                               "at_ms": event.at_ms, "trigger": trigger})
                 log_event("paper_exit", signal_id=trade["trade_id"], reason=event.kind, trigger=trigger)
+        if exits:
+            trade["friction"] = friction.summarize(trade)
+            self.ledger.save(trade)
         return exits
 
     def _refresh_unrealized(self, trade: dict) -> None:
@@ -488,6 +497,7 @@ class PaperEngine:
             extremes = [p for p in (observed_high, observed_low) if _finite_positive(p)]
             update_excursions(trade, [price], at_ms, "TICK")
             update_excursions(trade, extremes, at_ms, "STREAM_EXTREME_BY_HEARTBEAT")
+            previous_observation_ms = (at_ms - trade["last_price_at_ms"]) if trade.get("last_price_at_ms") else None
             if at_ms >= (trade.get("last_price_at_ms") or 0):
                 trade["last_price"], trade["last_price_at_ms"], trade["last_price_source"] = float(price), at_ms, source
             trade["monitor_status"], trade["monitor_detail"] = MONITOR_LIVE, None
@@ -502,7 +512,8 @@ class PaperEngine:
                 )
                 self._shadow("record_tick", "record_tick", trade, float(price), at_ms, observed_high if _finite_positive(observed_high) else None,
                              observed_low if _finite_positive(observed_low) else None, now_ms)
-            result.exits = self._route_exits(trade, instrument, events, trigger, observed_price=float(price))
+            result.exits = self._route_exits(trade, instrument, events, trigger, observed_price=float(price),
+                                             observation_lag_ms=int(now_ms - at_ms), since_previous_observation_ms=previous_observation_ms)
             if trade["status"] != "CLOSED":
                 self._refresh_unrealized(trade)
                 self.ledger.save(trade)
