@@ -21,7 +21,7 @@ from market_edge_exec.exits.model import Action, FULL_EXIT, HOLD, MOVE_TO_BREAKE
 from market_edge_exec.exits.state import PositionState
 from market_edge_exec.paper import lifecycle
 
-POLICY_REGISTRY_VERSION = "EXIT-POLICIES-V1"
+POLICY_REGISTRY_VERSION = "EXIT-POLICIES-V2"   # V2 = V1 plus the Task O structural variants; no V1 policy changed
 HOUR_MS = 3_600_000
 # Round-trip fees + one exit slippage, from the lifecycle's own constants: a
 # stop here means "about no loss after costs", not "exactly at entry".
@@ -89,6 +89,13 @@ def time_decay(state: PositionState, params: dict) -> Action:
     return Action(HOLD)
 
 
+# ---- Task O: fixed structural variants of the baseline lifecycle -------------------------------------------------
+def structural_variant(state: PositionState, params: dict) -> Action:
+    """Never intervenes. The variant lives in its params (`tp1_fraction`, `max_hold_h`), which the replay hands to the
+    same lifecycle.advance / evaluate_tick the baseline uses, so it differs from CURRENT_POLICY in exactly that one number."""
+    return Action(HOLD)
+
+
 @dataclass(frozen=True)
 class Policy:
     version: str
@@ -126,6 +133,14 @@ def _build() -> dict:
     for h in (12, 24):
         add(f"TIME_DECAY_V1_H{h}", "3F", time_decay, {"activate_R": 0.5, "hours": h},
             f"Winner (MFE >= 0.5R) with no new peak for {h}h: stop to half the MFE; at {2 * h}h exit if it faded below 75% of the peak.")
+    # 3O: the baseline's own fixed structure. Every one differs from CURRENT_POLICY by exactly one named number.
+    for split in (25, 75):
+        add(f"TP1_SPLIT_V1_{split}_{100 - split}", "3O", structural_variant, {"tp1_fraction": split / 100},
+            f"Take {split}% at TP1 and {100 - split}% at TP2 (baseline is 50/50); stop to breakeven after TP1 as before.")
+    for h in (48, 72):
+        add(f"TIMEOUT_V1_H{h}", "3O", structural_variant, {"max_hold_h": h},
+            f"Time out after {h}h instead of {lifecycle.MAX_HOLD_MS // HOUR_MS}h. Only shorter timeouts are listed: the real trade's price path "
+            f"ends at its own exit, so a longer timeout can never be replayed without inventing prices.")
     return out
 
 
