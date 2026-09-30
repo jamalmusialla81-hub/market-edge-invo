@@ -64,6 +64,28 @@ test('every candidate and every market state is observed, not only the selected 
   assert.deepEqual(p.scan.failures, ['XRP: All feeds unavailable']);
 });
 
+test('decision semantics (TASK A) are recorded on every candidate, are decision-time, and map back from the legacy row', () => {
+  const Quant = require('../quant-engine.js');
+  const scan = researchScan();
+  const withSemantics = (c, m) => ({ ...c, semantics: Quant.decisionSemantics(c, { sourceCount: m.sourceCount, matchingFeeds: 3, maxPriceDisagreement: 0.004 }) });
+  for (const m of scan.research.markets) { m.quantPick = withSemantics(m.quantPick, m); m.candidates = m.candidates.map((c) => withSemantics(c, m)); }
+  const p = buildShadowPayload({ scan, signal }, { decision: 'EXECUTED', signal_id: 'scan-t1-BTC' });
+  const cands = p.observations.filter((o) => o.kind === 'CANDIDATE');
+  assert.equal(cands.length, 4);
+  for (const o of cands) {
+    const c = o.decision.candidate;
+    assert.equal(c.semantics.version, 'DECISION-SEMANTICS-V1');
+    assert.deepEqual(Guard.hindsightPaths(o.decision), []);
+    // The recorded legacy verdict fields alone reproduce the same three populated concepts.
+    const back = Quant.mapLegacyVerdict({ strict_verdict: c.verdict, direction: c.direction, strategy: c.strategy, quant_score: c.quant_score, entry: c.entry, stop: c.stop, tp1: c.tp1, rr1: c.rr1,
+      entry_quality: c.entry_quality, entry_status: c.entry_status, market: { source_count: o.decision.market.source_count, matching_feeds: 3, max_price_disagreement: 0.004 } });
+    if (c.verdict) assert.deepEqual([back.ranking_verdict, back.entry_readiness, back.data_confirmation], [c.semantics.ranking_verdict, c.semantics.entry_readiness, c.semantics.data_confirmation]);
+  }
+  // A candidate with no semantics (old Quant output) is recorded as null, never invented.
+  const old = buildShadowPayload({ scan: researchScan(), signal }, { decision: 'EXECUTED' });
+  assert.ok(old.observations.filter((o) => o.kind === 'CANDIDATE').every((o) => o.decision.candidate.semantics === null));
+});
+
 test('decision-time data carries features, cross-market and derivatives context, and no future field', () => {
   const p = buildShadowPayload({ scan: researchScan(), signal }, { decision: 'EXECUTED' });
   const btc = p.observations.find((o) => o.kind === 'CANDIDATE' && o.asset === 'BTC' && o.decision.candidate.is_production_pick);

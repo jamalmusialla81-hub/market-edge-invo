@@ -450,6 +450,70 @@
       executionModel:{entry:'next-bar open with directional slippage',sameCandle:'stop first',exit:'50% TP1 / 50% TP2; breakeven stop after TP1; 30-bar maximum',feePct:Number(settings.feePct??.0005),slippagePct:Number(settings.slippagePct??.0003),funding:'not modeled'}
     };
   }
+  // ---- Decision semantics (TASK A, #80): explicit, separately-named concepts derived alongside the legacy
+  // `decision`/`strict_verdict`, which are unchanged. Pure and additive: nothing here feeds ranking, sizing or any
+  // recommendation. Bands reuse constants that already exist (settings.minQuality and its 10-point WAIT band, the 2%
+  // price-disagreement limit and the two-feed confirmation rule in backend/scan-core.mjs); no new threshold is introduced.
+  const SEMANTICS_VERSION = 'DECISION-SEMANTICS-V1';
+  const SEMANTICS_MAX_PRICE_DISAGREEMENT = 0.02, SEMANTICS_MIN_CONFIRMING_FEEDS = 2;
+  const ENTRY_READINESS = ['IDEAL', 'ACCEPTABLE', 'EXTENDED'];
+  const numberOrNaN = value => value === null || value === undefined ? NaN : Number(value);
+  function semanticsFromFacts(f) {
+    const minQuality = Number.isFinite(f.minQuality) ? f.minQuality : 72;
+    let ranking_verdict = 'INVALID';
+    if (f.analysisAvailable && f.hasCandidate && f.geometryValid !== false && Number.isFinite(f.quality)) {
+      ranking_verdict = f.quality >= minQuality ? 'STRONG' : f.quality >= minQuality - 10 ? 'VALID' : 'WEAK';
+    }
+    const entry_readiness = f.analysisAvailable && ENTRY_READINESS.includes(f.entryQuality) ? f.entryQuality : 'INVALID';
+    const d = f.data || {};
+    let data_confirmation = 'UNAVAILABLE';
+    if (f.analysisAvailable && Number.isFinite(d.sourceCount) && d.sourceCount > 0) {
+      if (d.stale === true) data_confirmation = 'STALE';
+      else if (Number.isFinite(d.maxPriceDisagreement) && d.maxPriceDisagreement > SEMANTICS_MAX_PRICE_DISAGREEMENT) data_confirmation = 'CONFLICTING';
+      else if (d.sourceCount >= SEMANTICS_MIN_CONFIRMING_FEEDS && Number.isFinite(d.matchingFeeds) && d.matchingFeeds >= SEMANTICS_MIN_CONFIRMING_FEEDS) data_confirmation = 'CONFIRMED';
+      else data_confirmation = 'PARTIAL';
+    }
+    return { version: SEMANTICS_VERSION, ranking_verdict, entry_readiness, data_confirmation,
+      risk_decision: null, execution_feasibility: null, final_execution_decision: null };
+  }
+  // q is a Quant output (evaluateSetup / evaluateSetupCandidates item) taken AFTER scan-core's feed-confirmation
+  // overrides; context carries the feed facts only the scan knows: {sourceCount, matchingFeeds, maxPriceDisagreement, stale}.
+  function decisionSemantics(q, context = {}) {
+    q = q || {};
+    const hasCandidate = ['long', 'short'].includes(q.direction) && Boolean(q.strategy);
+    const hasGeometryFields = q.entry !== undefined || q.stop !== undefined;
+    const geometryValid = hasGeometryFields ? [q.entry, q.stop, q.target1 ?? q.target, q.rr1 ?? q.rr].every(Number.isFinite) : null;
+    return semanticsFromFacts({
+      analysisAvailable: q.decision !== 'ANALYSIS UNAVAILABLE', hasCandidate, geometryValid,
+      quality: numberOrNaN(q.setupQuality ?? q.quality), minQuality: context.minQuality, entryQuality: q.entryQuality,
+      data: { sourceCount: context.sourceCount, matchingFeeds: context.matchingFeeds, maxPriceDisagreement: context.maxPriceDisagreement, stale: context.stale }
+    });
+  }
+  // Historical rows: derive the same fields from what an old strict_verdict row actually recorded. Nothing is guessed:
+  // a field with no supporting evidence in the row stays INVALID/UNAVAILABLE, and every mapping says whether it is
+  // inferred from the verdict alone. WAIT is deliberately ambiguous (timing conflict, extended entry, risk plan or
+  // feed confirmation all produced the same string), so it is never mapped to a single cause.
+  const LEGACY_VERDICTS = Object.freeze(['TAKE TRADE', 'WAIT', 'NO TRADE', 'ANALYSIS UNAVAILABLE', 'RANKED']);
+  function mapLegacyVerdict(row = {}) {
+    const verdict = row.strict_verdict ?? row.verdict ?? null;
+    const legacy = { verdict, mapped: LEGACY_VERDICTS.includes(verdict), inferred: [], ambiguous: verdict === 'WAIT' || verdict === 'RANKED' };
+    if (!legacy.mapped) return { ...semanticsFromFacts({ analysisAvailable: false }), legacy };
+    const direction = ['long', 'short'].includes(row.direction) ? row.direction : null;
+    const geometryKnown = row.entry !== undefined || row.stop !== undefined;
+    const geometryValid = geometryKnown ? [row.entry, row.stop, row.tp1, row.rr1].every(Number.isFinite) : null;
+    const m = row.market || {};
+    const data = { sourceCount: m.source_count ?? row.source_count, matchingFeeds: m.matching_feeds ?? row.matching_feeds, maxPriceDisagreement: m.max_price_disagreement ?? row.max_price_disagreement };
+    const entryQuality = row.entry_quality ?? (ENTRY_READINESS.includes(row.entry_status) ? row.entry_status : undefined);
+    const out = semanticsFromFacts({
+      analysisAvailable: verdict !== 'ANALYSIS UNAVAILABLE', hasCandidate: Boolean(direction && row.strategy) && verdict !== 'NO TRADE',
+      geometryValid, quality: numberOrNaN(row.quant_score ?? row.setup_quality), minQuality: row.minQuality, entryQuality, data });
+    // scan-core downgrades TAKE TRADE unless two feeds confirm within the price limit and the entry is not EXTENDED.
+    if (verdict === 'TAKE TRADE') {
+      if (out.data_confirmation === 'UNAVAILABLE') { out.data_confirmation = 'CONFIRMED'; legacy.inferred.push('data_confirmation'); }
+      if (out.entry_readiness === 'INVALID' && ENTRY_READINESS.includes(row.entry_status)) out.entry_readiness = row.entry_status;
+    }
+    return { ...out, legacy };
+  }
   function traderReliability(record) {
     const trades = Math.max(0, Number(record.trades || ((record.wins || 0) + (record.losses || 0)))), wins = Math.max(0, Number(record.wins || 0));
     const winRate = trades ? wins / trades : 0, expectancy = Number(record.expectancy || 0), drawdown = Math.max(0, Number(record.maxDrawdown || 0)), leverage = Math.max(1, Number(record.leverage || 1));
@@ -470,5 +534,5 @@
     const total = longWeight + shortWeight;
     return { sample: relevant.length, reliability: relevant.length ? mean(relevant.map(traderReliability)) : 0, weightedLong: total ? longWeight / total : 0.5, weightedShort: total ? shortWeight / total : 0.5 };
   }
-  return { VERSION, LEVERAGE_CHOICES, clamp, mean, median, std, ema, sma, rsi, atr, rollingVwap, validateCandles, validateFreshness, swingPoints, features, recentStructure, classifyRegime, strategyCandidates, riskPlan, opportunityScore, evaluateSetup, evaluateRankedSetup, evaluateSetupCandidates, performanceStats, simulateBacktest, walkForwardTest, backtest, traderReliability, aggregateSocial };
+  return { VERSION, LEVERAGE_CHOICES, clamp, mean, median, std, ema, sma, rsi, atr, rollingVwap, validateCandles, validateFreshness, swingPoints, features, recentStructure, classifyRegime, strategyCandidates, riskPlan, opportunityScore, evaluateSetup, evaluateRankedSetup, evaluateSetupCandidates, decisionSemantics, mapLegacyVerdict, SEMANTICS_VERSION, LEGACY_VERDICTS, performanceStats, simulateBacktest, walkForwardTest, backtest, traderReliability, aggregateSocial };
 });

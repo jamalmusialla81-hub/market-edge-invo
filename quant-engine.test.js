@@ -103,4 +103,72 @@ assert.deepStrictEqual(historical.costSensitivity.map(row=>row.roundTripCostPct)
 for(let index=1;index<historical.costSensitivity.length;index++) assert(historical.costSensitivity[index].stats.expectancy<=historical.costSensitivity[index-1].stats.expectancy+1e-12);
 assert.match(historical.executionModel.sameCandle,/stop first/);
 
+// ---- TASK A (#80): decision semantics -----------------------------------------------------------------------------
+{
+  const S = Quant.decisionSemantics, feeds = { sourceCount: 3, matchingFeeds: 3, maxPriceDisagreement: 0.004 };
+  const setup = { direction: 'long', strategy: 'TREND CONTINUATION', setupQuality: 65, entryQuality: 'ACCEPTABLE', entry: 100, stop: 98, target1: 103.6, target2: 105, rr1: 1.8 };
+  // The same setup reached WAIT through unrelated causes: each concept is reported separately and stays put.
+  const timingWait = { ...setup, decision: 'WAIT', reason: '15m confirmation and 5m execution timing both oppose the setup' };
+  const riskWait = { ...setup, decision: 'RANKED', strictDecision: 'WAIT', risk: { valid: false, reason: 'ACCOUNT/MINIMUM SIZE CONSTRAINT' } };
+  const a = S(timingWait, feeds), b = S(riskWait, feeds);
+  assert.deepStrictEqual(a, b);
+  assert.strictEqual(a.ranking_verdict, 'VALID');          // 65 sits in the existing minQuality-10 band, not WEAK
+  assert.strictEqual(a.entry_readiness, 'ACCEPTABLE');
+  assert.strictEqual(a.data_confirmation, 'CONFIRMED');
+  assert.deepStrictEqual([a.risk_decision, a.execution_feasibility, a.final_execution_decision], [null, null, null]);
+  assert.strictEqual(a.version, Quant.SEMANTICS_VERSION);
+  // Bands reuse settings.minQuality; no fixed number is baked in.
+  assert.strictEqual(S({ ...setup, setupQuality: 72 }, { ...feeds, minQuality: 72 }).ranking_verdict, 'STRONG');
+  assert.strictEqual(S({ ...setup, setupQuality: 61 }, { ...feeds, minQuality: 72 }).ranking_verdict, 'WEAK');
+  assert.strictEqual(S({ ...setup, setupQuality: 61 }, { ...feeds, minQuality: 60 }).ranking_verdict, 'STRONG');
+  // Entry readiness is independent of quality; data confirmation is independent of both.
+  assert.strictEqual(S({ ...setup, entryQuality: 'EXTENDED' }, feeds).entry_readiness, 'EXTENDED');
+  assert.strictEqual(S(setup, { ...feeds, sourceCount: 1, matchingFeeds: 1 }).data_confirmation, 'PARTIAL');
+  assert.strictEqual(S(setup, { ...feeds, matchingFeeds: 1 }).data_confirmation, 'PARTIAL');
+  assert.strictEqual(S(setup, { ...feeds, maxPriceDisagreement: 0.03 }).data_confirmation, 'CONFLICTING');
+  assert.strictEqual(S(setup, { ...feeds, stale: true }).data_confirmation, 'STALE');
+  assert.strictEqual(S(setup, {}).data_confirmation, 'UNAVAILABLE');
+  // No candidate, unavailable analysis or broken geometry is INVALID, never quietly WEAK.
+  assert.strictEqual(S({ decision: 'NO TRADE', quality: null, setupQuality: null }, feeds).ranking_verdict, 'INVALID');
+  const unavailable = S({ decision: 'ANALYSIS UNAVAILABLE', quality: 0 }, feeds);
+  assert.deepStrictEqual([unavailable.ranking_verdict, unavailable.entry_readiness, unavailable.data_confirmation], ['INVALID', 'INVALID', 'UNAVAILABLE']);
+  assert.strictEqual(S({ ...setup, stop: NaN }, feeds).ranking_verdict, 'INVALID');
+  // A real evaluateRankedSetup output: the legacy fields are what they were, the semantics are additive.
+  const ranked = Quant.evaluateRankedSetup({ timeframes: { m5: series(320, 1), m15: series(320, 1), h1: series(320, 1), h4: series(320, 1), d1: series(320, 1) },
+    settings: { balance: 1000, riskPct: 0.01, maxLeverage: 10, minNotional: 10, maxExposurePct: 2, requireMTF: false } });
+  assert.ok(['TAKE TRADE', 'RANKED', 'WAIT', 'NO TRADE'].includes(ranked.decision));
+  assert.strictEqual('semantics' in ranked, false);        // evaluateSetup itself is untouched
+  const real = S(ranked, feeds);
+  assert.ok(['STRONG', 'VALID', 'WEAK', 'INVALID'].includes(real.ranking_verdict) && ['IDEAL', 'ACCEPTABLE', 'EXTENDED', 'INVALID'].includes(real.entry_readiness));
+}
+{
+  // Every historical strict_verdict value maps deterministically; nothing is guessed.
+  const M = Quant.mapLegacyVerdict, market = { source_count: 3, matching_feeds: 3, max_price_disagreement: 0.004 };
+  const row = (strict_verdict, extra = {}) => ({ strict_verdict, direction: 'long', strategy: 'TREND CONTINUATION', quant_score: 80, entry: 100, stop: 98, tp1: 103.6, rr1: 1.8, entry_quality: 'IDEAL', entry_status: 'IDEAL', market, ...extra });
+  assert.deepStrictEqual(Quant.LEGACY_VERDICTS, ['TAKE TRADE', 'WAIT', 'NO TRADE', 'ANALYSIS UNAVAILABLE', 'RANKED']);
+  const take = M(row('TAKE TRADE'));
+  assert.deepStrictEqual([take.ranking_verdict, take.entry_readiness, take.data_confirmation, take.legacy.ambiguous, take.legacy.inferred], ['STRONG', 'IDEAL', 'CONFIRMED', false, []]);
+  // WAIT is ambiguous by design and is reported so; with the row's own facts it is still resolved per concept.
+  const wait = M(row('WAIT', { entry_quality: 'EXTENDED', market: { ...market, matching_feeds: 1 } }));
+  assert.deepStrictEqual([wait.entry_readiness, wait.data_confirmation, wait.legacy.ambiguous], ['EXTENDED', 'PARTIAL', true]);
+  // Old rows with no feed facts stay UNAVAILABLE for WAIT; TAKE TRADE's confirmation is inferred and says so.
+  assert.strictEqual(M(row('WAIT', { market: undefined })).data_confirmation, 'UNAVAILABLE');
+  const takeNoMarket = M(row('TAKE TRADE', { market: undefined }));
+  assert.deepStrictEqual([takeNoMarket.data_confirmation, takeNoMarket.legacy.inferred], ['CONFIRMED', ['data_confirmation']]);
+  const none = M({ strict_verdict: 'NO TRADE', direction: null });
+  assert.deepStrictEqual([none.ranking_verdict, none.entry_readiness], ['INVALID', 'INVALID']);
+  const gone = M({ strict_verdict: 'ANALYSIS UNAVAILABLE' });
+  assert.deepStrictEqual([gone.ranking_verdict, gone.data_confirmation], ['INVALID', 'UNAVAILABLE']);
+  assert.strictEqual(M(row('RANKED')).legacy.ambiguous, true);
+  // Deterministic, and an unknown verdict is reported unmapped, never coerced into a known one.
+  assert.deepStrictEqual(M(row('WAIT')), M(row('WAIT')));
+  const unknown = M(row('MAYBE'));
+  assert.deepStrictEqual([unknown.legacy.mapped, unknown.ranking_verdict, unknown.data_confirmation], [false, 'INVALID', 'UNAVAILABLE']);
+  // Live and legacy paths agree on the same facts.
+  const live = Quant.decisionSemantics({ direction: 'long', strategy: 'TREND CONTINUATION', setupQuality: 80, entryQuality: 'IDEAL', entry: 100, stop: 98, target1: 103.6, rr1: 1.8, decision: 'TAKE TRADE' },
+    { sourceCount: 3, matchingFeeds: 3, maxPriceDisagreement: 0.004 });
+  const { legacy, ...legacyFields } = take;
+  assert.deepStrictEqual(legacyFields, live);
+}
+
 console.log('Quant engine tests passed');

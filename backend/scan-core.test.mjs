@@ -96,3 +96,23 @@ console.log('Customer scan adapter tests passed');
   assert.ok(research.markets[0].timeframes.m5.length>=60);
   assert.equal(research.assetCtxs.BTC.openInterest,'1000');
 }
+
+// TASK A (#80): decision semantics are additive and research-only. The customer response never carries them
+// (already proven byte-for-byte above by `rest` deepEqual `base`); the research payload carries them on the
+// production pick and on every candidate, computed from the final (post feed-confirmation) Quant output.
+{
+  const base=await runLiveScan({fetchImpl:fixtureFetch,now:NOW,settings:{balance:1000,riskPct:.01,maxLeverage:5,maxExposurePct:.2}});
+  assert.equal(JSON.stringify(base).includes('semantics'),false);
+  const {research}=await runLiveScan({fetchImpl:fixtureFetch,now:NOW,settings:{balance:1000,riskPct:.01,maxLeverage:5,maxExposurePct:.2},includeResearch:true});
+  const market=research.markets[0],fields=['ranking_verdict','entry_readiness','data_confirmation','risk_decision','execution_feasibility','final_execution_decision'];
+  for(const semantics of [market.quantPick.semantics,...market.candidates.map(candidate=>candidate.semantics)]){
+    assert.equal(semantics.version,'DECISION-SEMANTICS-V1');
+    assert.deepEqual(Object.keys(semantics).filter(key=>key!=='version'),fields);
+    assert.equal(semantics.risk_decision,null);assert.equal(semantics.execution_feasibility,null);assert.equal(semantics.final_execution_decision,null);
+    assert.ok(['STRONG','VALID','WEAK','INVALID'].includes(semantics.ranking_verdict));
+    assert.ok(['IDEAL','ACCEPTABLE','EXTENDED','INVALID'].includes(semantics.entry_readiness));
+    assert.ok(['CONFIRMED','PARTIAL','CONFLICTING','STALE','UNAVAILABLE'].includes(semantics.data_confirmation));
+  }
+  // The feed facts come from the scan itself, not from a default.
+  assert.equal(market.quantPick.semantics.data_confirmation,market.sourceCount>=2&&market.matchingFeeds>=2&&market.maxPriceDisagreement<=.02?'CONFIRMED':market.maxPriceDisagreement>.02?'CONFLICTING':'PARTIAL');
+}
