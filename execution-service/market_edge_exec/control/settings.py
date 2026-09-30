@@ -125,6 +125,20 @@ class ControlStore:
                          (action, json.dumps(payload or {}), time.time()))
             conn.commit()
 
+    def get_json(self, key: str):
+        """A stored JSON value (None if absent). Read-only helper for state machines that persist beside the settings."""
+        raw = self._get(key)
+        return None if raw is None else json.loads(raw)
+
+    def put_json_audited(self, key: str, value, action: str, payload: Optional[dict] = None) -> None:
+        """Write `value` under `key` and append the audit row in ONE transaction, so a state change can never exist without its log."""
+        with closing(self._connect()) as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            self._set(conn, key, value)
+            conn.execute("INSERT INTO control_audit (action, payload, created_at) VALUES (?, ?, ?)",
+                         (action, json.dumps(payload or {}), time.time()))
+            conn.commit()
+
     def audit_log(self, limit: int = 200) -> list[dict]:
         with closing(self._connect()) as conn:
             rows = conn.execute("SELECT action, payload, created_at FROM control_audit ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
