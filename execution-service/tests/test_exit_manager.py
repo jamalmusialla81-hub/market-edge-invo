@@ -130,12 +130,12 @@ def run_policy(name, observations, s=None):
 
 def test_registry_is_versioned_and_frozen():
     names = list(pol.REGISTRY)
-    assert names[0] == "CURRENT_POLICY" and len(names) == len(set(names)) == 18
+    assert names[0] == "CURRENT_POLICY" and len(names) == len(set(names)) == 22   # 18 (V1) + 4 structural variants (Task O)
     for expected in ("BREAKEVEN_V1_R0.5", "BREAKEVEN_V1_R0.75", "BREAKEVEN_V1_R1.0", "MFE_TRAIL_25", "MFE_TRAIL_33", "MFE_TRAIL_50"):
         assert expected in pol.REGISTRY
     with pytest.raises(TypeError):
         pol.REGISTRY["MFE_TRAIL_25"].params["giveback"] = 0.9
-    assert {p.study for p in pol.REGISTRY.values()} == {"3G-baseline", "3A", "3B", "3C", "3D", "3E", "3F"}
+    assert {p.study for p in pol.REGISTRY.values()} == {"3G-baseline", "3A", "3B", "3C", "3D", "3E", "3F", "3O"}
 
 
 def test_breakeven_below_threshold_holds_and_at_threshold_moves_long():

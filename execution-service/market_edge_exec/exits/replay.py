@@ -39,9 +39,17 @@ def _tighter(long: bool, a: float, b: float) -> bool:
     return a > b if long else a < b
 
 
-def _evaluate(spec: TradeSpec, run: RunState, obs: Observation) -> list:
+def _structure(spec: TradeSpec, policy: pol.Policy) -> tuple[float, int]:
+    """(TP1 fraction, max hold ms) for this policy: the production values unless a structural variant (Task O) names its own."""
+    params = policy.params
+    hold = int(params["max_hold_h"] * pol.HOUR_MS) if "max_hold_h" in params else spec.max_hold_ms
+    return params.get("tp1_fraction", lifecycle.TP1_FRACTION), hold
+
+
+def _evaluate(spec: TradeSpec, run: RunState, obs: Observation, policy: pol.Policy) -> list:
     """Exit events the fixed lifecycle produces for this observation, against
     the (possibly policy-tightened) stop in force BEFORE it."""
+    tp1_fraction, max_hold_ms = _structure(spec, policy)
     eff, base = effective_stop(spec, run), baseline_stop(spec, run.tp1_hit)
     override: Optional[float] = eff if eff != base else None
     side = lifecycle.exit_side(spec.direction)
@@ -50,7 +58,8 @@ def _evaluate(spec: TradeSpec, run: RunState, obs: Observation) -> list:
         # The fixed timeout is judged once per sweep, after its last candle.
         now = obs.eval_ms if obs.last else spec.opened_at_ms
         events = lifecycle.advance(spec.direction, spec.entry, spec.stop, spec.tp1, spec.tp2, run.qty_left, spec.quantity,
-                                   run.tp1_hit, spec.opened_at_ms, [candle], now, spec.max_hold_ms, active_stop_override=override)
+                                   run.tp1_hit, spec.opened_at_ms, [candle], now, max_hold_ms, active_stop_override=override,
+                                   tp1_fraction=tp1_fraction)
         if override is not None:
             for e in events:
                 if e.kind in ("STOP", "BREAKEVEN_STOP") and e.level == override:
@@ -61,8 +70,8 @@ def _evaluate(spec: TradeSpec, run: RunState, obs: Observation) -> list:
         if obs.at_ms < run.last_exit_at_ms:
             return []
         events = lifecycle.evaluate_tick(spec.direction, spec.entry, spec.stop, spec.tp1, spec.tp2, run.qty_left, spec.quantity,
-                                         run.tp1_hit, spec.opened_at_ms, obs.price, obs.at_ms, spec.max_hold_ms,
-                                         active_stop_override=override)
+                                         run.tp1_hit, spec.opened_at_ms, obs.price, obs.at_ms, max_hold_ms,
+                                         active_stop_override=override, tp1_fraction=tp1_fraction)
     if override is not None:
         for e in events:
             if e.kind in ("STOP", "BREAKEVEN_STOP"):
@@ -134,7 +143,7 @@ def step(spec: TradeSpec, run: RunState, obs: Observation, policy: pol.Policy) -
     if run.status != "OPEN":
         return
     run.obs_count += 1
-    _apply_events(spec, run, _evaluate(spec, run, obs))
+    _apply_events(spec, run, _evaluate(spec, run, obs, policy))
     if run.status != "OPEN":
         return   # closed by the fixed lifecycle (or its own stop): MFE/MAE stop here
     _update_extremes(spec, run, obs)

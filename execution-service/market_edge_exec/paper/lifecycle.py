@@ -45,7 +45,7 @@ def exit_side(direction: str) -> str:
 def advance(direction: str, entry: float, stop: float, tp1: Optional[float], tp2: Optional[float],
             remaining_qty: float, original_qty: float, tp1_hit: bool, opened_at_ms: int,
             candles: list[dict], now_ms: int, max_hold_ms: int = MAX_HOLD_MS,
-            active_stop_override: Optional[float] = None) -> list[ExitEvent]:
+            active_stop_override: Optional[float] = None, tp1_fraction: float = TP1_FRACTION) -> list[ExitEvent]:
     """Walks candles (dicts with time/open/high/low/close, time in ms, only
     those after the last check) in order and returns the exit events they
     trigger. Stop is checked first within a candle: if a candle spans both
@@ -70,7 +70,7 @@ def advance(direction: str, entry: float, stop: float, tp1: Optional[float], tp2
             return events
         if not tp1_hit and tp1 is not None and (candle["high"] >= tp1 if long else candle["low"] <= tp1):
             tp1_hit = True
-            part = min(round(original_qty * TP1_FRACTION, 8), qty_left)
+            part = min(round(original_qty * tp1_fraction, 8), qty_left)
             events.append(ExitEvent("TP1", part, tp1, slipped(tp1, side), candle["time"]))
             qty_left -= part
         if tp1_hit and qty_left > 0 and tp2 is not None and (candle["high"] >= tp2 if long else candle["low"] <= tp2):
@@ -86,7 +86,7 @@ def advance(direction: str, entry: float, stop: float, tp1: Optional[float], tp2
 def evaluate_tick(direction: str, entry: float, stop: float, tp1: Optional[float], tp2: Optional[float],
                   remaining_qty: float, original_qty: float, tp1_hit: bool, opened_at_ms: int,
                   price: float, at_ms: int, max_hold_ms: int = MAX_HOLD_MS,
-                  active_stop_override: Optional[float] = None) -> list[ExitEvent]:
+                  active_stop_override: Optional[float] = None, tp1_fraction: float = TP1_FRACTION) -> list[ExitEvent]:
     """Position-management triggers for ONE observed live price (a trade print
     from the exchange stream, or a polled mid). Same geometry, same order of
     checks and same 50/50 split as advance(), but it only ever judges the
@@ -108,7 +108,7 @@ def evaluate_tick(direction: str, entry: float, stop: float, tp1: Optional[float
         return [ExitEvent(kind, qty_left, active_stop, slipped(price, side), at_ms)]
     if not tp1_hit and tp1 is not None and (price >= tp1 if long else price <= tp1):
         tp1_hit = True
-        part = min(round(original_qty * TP1_FRACTION, 8), qty_left)
+        part = min(round(original_qty * tp1_fraction, 8), qty_left)
         events.append(ExitEvent("TP1", part, tp1, slipped(tp1, side), at_ms))
         qty_left -= part
     if tp1_hit and qty_left > 0 and tp2 is not None and (price >= tp2 if long else price <= tp2):
