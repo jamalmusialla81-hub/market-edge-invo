@@ -156,3 +156,36 @@ def summarize(trade: dict) -> dict:
             "difference": sum(f["difference_pct"] * n for _, f, n in measured),
             "measured_legs": [k for k, _, _ in measured], "default_used_legs": [k for k, f, _ in legs if f["slippage_provenance"] != MEASURED],
             "note": "difference covers measured legs only; default_used legs report the simulator's own assumption"}
+
+
+# ---- TASK H (#86): stop overshoot / gap, one named record per stop exit --------------------------------------------
+OVERSHOOT_VERSION = "STOP-OVERSHOOT-V1"
+STOP_EXIT_KINDS = ("STOP", "BREAKEVEN_STOP")
+DETECTION_SOURCES = ("WS_TRADE", "POLL_HEARTBEAT", "CANDLE_5M")   # the fast monitor's own vocabulary; nothing new is invented
+
+
+def stop_overshoot(direction: str, kind: str, intended_stop: float, fill_price: float, detection_source: str, initial_risk_per_unit: Optional[float],
+                   first_observed_post_stop_price: Optional[float] = None, time_since_last_observation_ms: Optional[int] = None) -> Optional[dict]:
+    """The gap between a stop level and the first real price seen through it. None for a non-stop exit.
+
+    `overshoot_*` uses the first observed price past the stop (what the monitor actually saw); it is null when none was
+    observed (a candle-path exit) rather than a guess. `fill_overshoot_bps` is the simulated fill against the level, which
+    also includes the simulator's fixed slippage, so the two are never conflated. detection_source already says whether the
+    observation was a websocket print, a poll or a candle, so there is no separate websocket_or_poll field."""
+    if kind not in STOP_EXIT_KINDS:
+        return None
+    has_obs = _finite(first_observed_post_stop_price) and first_observed_post_stop_price > 0 and _finite(intended_stop) and intended_stop > 0
+    over_px = max(intended_stop - first_observed_post_stop_price if direction == "long" else first_observed_post_stop_price - intended_stop, 0.0) if has_obs else None
+    fill_px = max(_adverse_pct(direction, intended_stop, fill_price) * intended_stop, 0.0) if _finite(fill_price, intended_stop) and intended_stop > 0 else None
+    risk_ok = _finite(initial_risk_per_unit) and initial_risk_per_unit > 0
+    return {
+        "version": OVERSHOOT_VERSION, "kind": kind, "intended_stop": intended_stop,
+        "first_observed_post_stop_price": first_observed_post_stop_price if has_obs else None, "fill_price": fill_price,
+        "overshoot_bps": over_px / intended_stop * 10_000 if over_px is not None else None,
+        "overshoot_R": over_px / initial_risk_per_unit if over_px is not None and risk_ok else None,
+        "fill_overshoot_bps": fill_px / intended_stop * 10_000 if fill_px is not None else None,
+        "fill_overshoot_R": fill_px / initial_risk_per_unit if fill_px is not None and risk_ok else None,
+        "detection_source": detection_source, "time_since_last_observation_ms": time_since_last_observation_ms,
+        "observed": has_obs,
+        "unavailable_reason": None if has_obs else "no price was observed past the stop (candle-path exit); overshoot is not guessed",
+    }

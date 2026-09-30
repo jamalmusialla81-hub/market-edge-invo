@@ -406,6 +406,10 @@ class PaperEngine:
             # Task G: measurement only; recorded on the exit, never used to change it.
             extra["friction"] = friction.exit_friction(trade["direction"], event.kind, event.level, event.fill_price, trigger, observed_price,
                                                        observation_lag_ms, since_previous_observation_ms)
+            overshoot = friction.stop_overshoot(trade["direction"], event.kind, event.level, event.fill_price, trigger,
+                                                abs(trade["entry_fill"] - trade["stop"]), observed_price, since_previous_observation_ms)
+            if overshoot is not None:
+                extra["stop_overshoot"] = overshoot
             if self.ledger.apply_exit(trade, event.kind, event.quantity, event.fill_price, event.level, realized, exit_fee,
                                       abs(event.fill_price - event.level) * event.quantity, event.at_ms, extra=extra):
                 exits.append({"kind": event.kind, "quantity": event.quantity, "fill_price": event.fill_price, "pnl": realized,
