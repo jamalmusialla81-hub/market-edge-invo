@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useState } from 'react';
-import { api, CandleInterval, Distance, Excursion, TradeDetail } from '../api';
+import { api, CandleInterval, Distance, Excursion, ExitCoverage, ExitExplanation, TradeDetail } from '../api';
 import { CandleChart, CounterfactualPoint, ExcursionPoint, HindsightLine } from '../components/CandleChart';
 import { Badge, ErrorBanner, Panel, Stat, usePoll } from '../components/ui';
 import { ago, DASH, duration, lev, num, pct, price, qty, tone, ts, usd } from '../format';
@@ -17,6 +17,46 @@ function dist(d: Distance | null | undefined, hit?: string) {
 function exc(e: Excursion | undefined) {
   if (!e) return DASH;
   return <>{price(e.price)} <span className="muted small">{e.r === null ? '' : `${num(e.r, 2)}R · `}{usd(e.usd, { sign: true })}</span></>;
+}
+
+const bps = (v: number | null | undefined) => (v === null || v === undefined ? DASH : `${num(v, 1)} bps`);
+const millis = (v: number | null | undefined) => (v === null || v === undefined ? DASH : v < 1000 ? `${Math.round(v)} ms` : duration(v / 1000));
+
+/** "Why did this trade exit?" One row per real exit, from recorded facts only: a dash means it was not recorded for that exit
+ *  (it predates the measurement), never a guessed value. Exit reasons the ledger cannot tell apart are stated below. */
+export function ExitExplanations({ rows, coverage }: { rows: ExitExplanation[]; coverage?: Record<string, ExitCoverage> }) {
+  return (
+    <Panel title="Why did this trade exit?" right={<span className="muted small">Display only. Built from what was recorded at each exit.</span>}>
+      {!rows.length && <div className="muted small">No exits yet.</div>}
+      {rows.map((x) => (
+        <div key={x.kind} className="exit-why" data-exit={x.kind}>
+          <div><b>{x.kind}</b> <span className="muted small">{ts(x.at_ms)} · fill {price(x.fill_price)}{x.level === null ? '' : ` (level ${price(x.level)})`}</span></div>
+          <div>{x.why}</div>
+          <dl className="kv">
+            <dt>Seen by</dt><dd>{x.seen_by}{x.observed_price === null ? '' : <span className="muted small"> · observed {price(x.observed_price)}</span>}</dd>
+            <dt>Slippage</dt>
+            <dd>{x.friction_provenance === 'measured'
+              ? <>expected {bps(x.expected_slippage_bps)} · actual {bps(x.actual_slippage_bps)} · difference {bps(x.difference_bps)}</>
+              : x.recorded.friction ? <>expected {bps(x.expected_slippage_bps)} <span className="muted small">· not measured: {x.friction_note ?? 'no live input'}</span></> : <span className="muted small">not recorded for this exit (predates friction measurement)</span>}</dd>
+            {['STOP', 'BREAKEVEN_STOP'].includes(x.kind) && <>
+              <dt>Stop overshoot</dt>
+              <dd>{x.recorded.stop_overshoot
+                ? (x.overshoot_bps === null ? <span className="muted small">no price was observed past the stop (candle-path exit)</span> : <>{bps(x.overshoot_bps)} · {x.overshoot_R === null ? DASH : `${num(x.overshoot_R, 2)}R`}</>)
+                : <span className="muted small">not recorded for this exit (predates overshoot measurement)</span>}</dd>
+            </>}
+            <dt>Decision latency</dt>
+            <dd>{millis(x.decision_latency_ms)}{x.since_previous_observation_ms === null ? '' : <span className="muted small"> · {millis(x.since_previous_observation_ms)} since the monitor's previous price</span>}</dd>
+          </dl>
+        </div>
+      ))}
+      {coverage && (
+        <div className="muted small exit-coverage" aria-label="Exit reasons that cannot be told apart">
+          <b>Not distinguishable in the ledger:</b>
+          <ul>{Object.entries(coverage).filter(([, c]) => !c.distinguishable).map(([k, c]) => <li key={k}><b>{k.replace('_', ' ').toLowerCase()}</b>: {c.note}</li>)}</ul>
+        </div>
+      )}
+    </Panel>
+  );
 }
 
 const rMult = (r: number | null) => (r === null ? DASH : `${num(r, 2)}R`);
@@ -236,6 +276,8 @@ export function TradeDetailView({ tradeId, onBack, pollMs = 2000, candlePollMs =
           </table>
         </Panel>
       </div>
+
+      {d.exit_explanations && <ExitExplanations rows={d.exit_explanations} coverage={d.exit_coverage} />}
 
       {d.risk_sizing && <TradeRiskSizingView s={d.risk_sizing} />}
 

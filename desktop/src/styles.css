@@ -256,3 +256,7 @@ table.exits { margin-top: 10px; }
 .shadow-filters input { background: transparent; color: inherit; border: 1px solid var(--border); border-radius: 4px; padding: 2px 6px; font: inherit; }
 .shadow-filters input[type="number"] { width: 84px; }
 .shadow-filters input[type="search"] { width: 110px; }
+
+.exit-why { padding: 8px 0; border-bottom: 1px solid var(--border, rgba(128, 128, 128, 0.25)); }
+.exit-why:last-of-type { border-bottom: 0; }
+.exit-coverage ul { margin: 4px 0 0 18px; padding: 0; }

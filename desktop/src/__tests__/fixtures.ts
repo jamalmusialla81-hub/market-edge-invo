@@ -99,6 +99,18 @@ export function tradeDetailFixture(over: { open?: boolean; price?: number; monit
       { kind: 'ENTRY', at_ms: t0, price: 100.03, side: 'BUY', label: 'LONG ENTRY (BUY)', quantity: 10 },
       ...exits.map((e) => ({ kind: e.kind, at_ms: e.at_ms, price: e.fill_price, side: 'SELL' as const, label: `${e.kind} (SELL ${e.quantity})`, quantity: e.quantity, trigger: e.trigger })),
     ],
+    exit_explanations: exits.map((e) => ({
+      kind: e.kind, at_ms: e.at_ms, quantity: e.quantity, why: e.kind === 'TP1' ? 'Price reached the first target, so half the position was sold and the stop moved to breakeven.' : 'After the first target, price came back to the entry price, so the remainder was closed at breakeven.',
+      level: e.level, fill_price: e.fill_price, trigger: e.trigger, seen_by: e.trigger === 'WS_TRADE' ? 'a live exchange trade print' : "the monitor's polled price",
+      observed_price: e.fill_price, expected_slippage_bps: 3, actual_slippage_bps: e.kind === 'TP1' ? 3 : 5.5, difference_bps: e.kind === 'TP1' ? 0 : 2.5, friction_provenance: 'measured' as const, friction_note: null,
+      overshoot_bps: e.kind === 'BREAKEVEN_STOP' ? 2 : null, overshoot_R: e.kind === 'BREAKEVEN_STOP' ? 0.02 : null, first_observed_post_stop_price: null,
+      decision_latency_ms: 400, since_previous_observation_ms: 5_000, recorded: { friction: true, stop_overshoot: e.kind === 'BREAKEVEN_STOP' },
+    })),
+    exit_coverage: {
+      MANUAL: { distinguishable: false, exists: false, note: 'No manual-close path exists.' },
+      KILL_SWITCH: { distinguishable: false, exists: true, note: 'An exit while the kill switch is engaged is recorded as an ordinary exit.' },
+      ADAPTIVE: { distinguishable: false, exists: false, note: 'No adaptive exit is authoritative.' },
+    },
     exits, realized_pnl: open ? 0 : 49.85, fees: 1.2, net_pnl: open ? -1.2 : 48.65,
     hindsight: over.hindsight
       ? { label: 'POST-OUTCOME / HINDSIGHT - computed after the trade resolved; the live model did not know this', post_outcome: true, known_at_decision_time: false,
