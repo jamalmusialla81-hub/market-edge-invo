@@ -20,6 +20,24 @@ changes a paper trade and no model or exit policy has evidence yet.
   intermediate time ticks, an exit-policy counterfactual overlay (off by
   default, labelled research only), Trade Detail shows when MFE/MAE was reached.
 - **System screen.** Rate-limit diagnostic panel and a backup summary.
+- **Decision semantics.** Candidates now carry the decision-semantics fields
+  next to the strict verdict, with a legacy mapping. Display and research only;
+  no trade decision changed.
+- **Trade Detail: "Why did this trade exit?"** Each exit is explained, and the
+  exit reasons that cannot be told apart from the recorded data are said so.
+- **Evidence and audit tooling (backend, read-only).** Forward evidence
+  sufficiency engine, paper/shadow/execution linkage audit, execution friction
+  (expected vs actual), stop-overshoot record and report, a shared liquidity
+  walk with an execution-feasibility stage, dynamic correlation-cluster
+  candidates (never looser than the static clusters), and a drawdown recovery
+  state machine that runs in shadow only.
+- **Adaptive exit research, extended (still shadow only).** Fixed-structure
+  lifecycle variants (split take-profit, timeouts) join the candidate exit
+  policies. New exit-replay completeness check: every paper trade is labelled
+  complete, legacy (opened before the exit shadow existed), incomplete or
+  missing replays, and only complete-path trades can count toward the exit
+  evidence bar. The bar itself is unchanged and no exit policy has evidence.
+  New read-only endpoint `/research/exit-policies/integrity`.
 
 ## Honest status
 
