@@ -139,6 +139,10 @@ def evaluate(records: list[dict], bar: dict = EVIDENCE_BAR_V1) -> dict:
                          "max_drawdown_R": max_drawdown(r_base), "mean_giveback_R": _mean([r["base_giveback"] for r in rows]),
                          "tp2_capture_rate": _mean([1.0 if r["base_tp2"] else 0.0 for r in rows])},
             "delta_mean_R": _mean(deltas), "delta_ci": [lo, hi],
+            # Early-exit regret (#121), per trade against CURRENT_POLICY on the same path. Reported next to the gate, never a substitute for it:
+            # a policy that saves small losses by sacrificing rare big winners shows a large upside_sacrificed_R and cannot hide behind the mean.
+            "early_exit_regret": {"profit_saved_R": _mean([max(d, 0.0) for d in deltas]), "upside_sacrificed_R": _mean([max(-d, 0.0) for d in deltas]),
+                                  "net_exit_value_R": _mean(deltas), "worst_single_sacrifice_R": max([-d for d in deltas], default=None)},
             "breakdown": {"asset": _breakdown(rows, lambda r: r["asset"]), "direction": _breakdown(rows, lambda r: r["direction"]),
                           "volatility_regime": _breakdown(rows, lambda r: r["regime"]), "tp1_status": _breakdown(rows, lambda r: r["tp1"])},
         }

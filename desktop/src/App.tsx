@@ -12,6 +12,7 @@ import { SystemScreen } from './screens/System';
 import { About } from './screens/About';
 import { Shadow } from './screens/Shadow';
 import { Research } from './screens/Research';
+import { ExitEvidence } from './screens/ExitEvidence';
 
 // Shadow is last so the existing Ctrl+1..8 shortcuts keep their screens.
 const SCREENS = ['Dashboard', 'Signals', 'Positions', 'Trades', 'Performance', 'Risk', 'System', 'About', 'Shadow', 'Research'] as const;
@@ -209,7 +210,7 @@ export default function App() {
           {!detail && screen === 'Performance' && <PerformanceScreen />}
           {!detail && screen === 'Risk' && <Risk />}
           {!detail && screen === 'Shadow' && <Shadow />}
-          {!detail && screen === 'Research' && <Research />}
+          {!detail && screen === 'Research' && <><Research /><ExitEvidence /></>}
           {!detail && screen === 'System' && <SystemScreen health={h} info={info} />}
           {!detail && screen === 'About' && <About info={info} />}
         </main>

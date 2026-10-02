@@ -26,10 +26,10 @@ def run(policy, s, path):
 
 
 def test_variants_are_registered_in_the_same_versioned_registry_and_no_v1_policy_changed():
-    assert pol.POLICY_REGISTRY_VERSION == "EXIT-POLICIES-V2"
+    assert pol.POLICY_REGISTRY_VERSION == "EXIT-POLICIES-V3"   # V3 adds the 3Q STATE_AWARE_GIVEBACK_V1 family; 3O and V1 are untouched
     for name in VARIANTS:
         assert name in pol.REGISTRY and pol.REGISTRY[name].study == "3O"
-    v1 = [p for p in pol.REGISTRY.values() if p.study != "3O"]
+    v1 = [p for p in pol.REGISTRY.values() if p.study not in ("3O", "3Q")]
     assert len(v1) == V1_POLICIES and v1[0].version == "CURRENT_POLICY"
     assert dict(pol.REGISTRY["TP1_SPLIT_V1_25_75"].params) == {"tp1_fraction": 0.25}
     assert dict(pol.REGISTRY["TIMEOUT_V1_H72"].params) == {"max_hold_h": 72}
@@ -136,7 +136,7 @@ def test_variants_are_recorded_as_counterfactuals_beside_a_real_trade_and_do_not
     assert [e["kind"] for e in real["exits"]] == ["TP1", "BREAKEVEN_STOP"] and real["exits"][0]["quantity"] == pytest.approx(real["quantity"] * 0.5)
     for name, frac in (("TP1_SPLIT_V1_25_75", 0.25), ("TP1_SPLIT_V1_75_25", 0.75), ("CURRENT_POLICY", 0.5)):
         rec = cf(app, "sig-1", name)
-        assert rec["status"] == "EXITED" and rec["registry_version"] == "EXIT-POLICIES-V2"
+        assert rec["status"] == "EXITED" and rec["registry_version"] == pol.POLICY_REGISTRY_VERSION
         assert rec["events"][0]["kind"] == "TP1" and rec["events"][0]["quantity"] == pytest.approx(real["quantity"] * frac)
     # timeouts: the real trade closed long before 48h, so those variants also finish identically to the baseline
     assert cf(app, "sig-1", "TIMEOUT_V1_H48")["counterfactual_R"] == pytest.approx(cf(app, "sig-1")["counterfactual_R"])

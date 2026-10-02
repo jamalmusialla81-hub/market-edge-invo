@@ -108,6 +108,21 @@ export interface ExitCounterfactual {
 export interface ExitCounterfactuals {
   label: string; trade_id: string; trade_status: string; counterfactuals: Record<string, ExitCounterfactual>;
 }
+/** Exit-evidence dashboard (#122). POST-OUTCOME RESEARCH ONLY; read-only. */
+export interface ExitEvidence {
+  label: string; read_only: boolean; generated_at_ms: number;
+  shadow: { raw_observations: number; candidate_observations: number; candidates_not_executed_for_a_selection_reason: number; candidates_research_only: number;
+            unique_market_episodes: number; unique_observation_clusters: number };
+  paper: { complete_path_finalized_trades: number; legacy_unlinked: number; open: number; path_incomplete: number; replays_missing: number };
+  executable_shadow: Record<string, { replayed_observations: number; observation_clusters: number; market_episodes: number; independence_units_3h: number }>;
+  entry_failure_episodes: number; giveback_failure_episodes: number;
+  gate: { bar: string; paper_finalized: number; paper_finalized_needed: number; independent_episodes: number; independent_episodes_needed: number;
+          verdicts: Record<string, number>; passing_policies: string[]; passing_summary: string };
+  current_vs_adaptive: Record<string, { trades: number; mean_R: number | null; baseline_mean_R: number | null; delta_mean_R: number | null; verdict: string }>;
+  pipeline: { status: string; degraded_trades: { trade_id: string; label: string; reasons: string[]; missing_policies: string[] }[] };
+  cohort_B_C_note: string; next_evaluation_condition: string; adaptive_exits_enabled: { PAPER: boolean; PAPER_CANARY: boolean };
+  daily: { day_utc_ms: number; shadow_replays: number; paper_complete_trades: number }[];
+}
 export interface Giveback {
   /** Most favourable price since entry: the HIGHEST for a long, the LOWEST for a short. */
   peak_price: number; peak_side: 'HIGHEST' | 'LOWEST';
@@ -321,6 +336,7 @@ export const api = {
   exitCounterfactuals: (tradeId: string) => invoke<ExitCounterfactuals>('get_exit_counterfactuals', { tradeId }),
   rateLimit: () => invoke<RateLimitDiagnostics>('get_rate_limit'),
   researchStatus: () => invoke<ResearchStatus>('get_research_status'),
+  exitEvidence: () => invoke<ExitEvidence>('get_exit_evidence'),
   shadowSummary: () => invoke<ShadowSummary>('get_shadow_summary'),
   shadowObservations: (filter: { limit?: number; kind?: string; execution_status?: string; classification?: string } = {}) =>
     invoke<{ observations: ShadowRow[] }>('get_shadow_observations', { filter }),

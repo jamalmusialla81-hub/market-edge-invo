@@ -83,6 +83,7 @@ export function ExitCounterfactualNote({ data, error }: { data: import('../api')
   const rows = data ? Object.entries(data.counterfactuals) : [];
   return (
     <div className="cf-note" role="note">
+      <div className="cf-label"><b>POST-OUTCOME RESEARCH ONLY · NOT AN ACTION THE BOT TOOK</b></div>
       <b>RESEARCH ONLY · COUNTERFACTUAL · NOT AN ACTUAL FILL.</b> Alternative exit policies replayed on the prices seen during this trade; they never changed the real exits and used no capital. Hollow diamonds on the chart mark where each would have exited. No policy has been shown to work.
       {error && <div className="neg small">Could not load counterfactuals: {error}</div>}
       {data && !rows.length && <div className="muted small">No counterfactual records for this trade (it was opened before exit shadowing existed, or the switch is off).</div>}

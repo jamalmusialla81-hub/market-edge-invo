@@ -21,7 +21,7 @@ from market_edge_exec.exits.model import Action, FULL_EXIT, HOLD, MOVE_TO_BREAKE
 from market_edge_exec.exits.state import PositionState
 from market_edge_exec.paper import lifecycle
 
-POLICY_REGISTRY_VERSION = "EXIT-POLICIES-V2"   # V2 = V1 plus the Task O structural variants; no V1 policy changed
+POLICY_REGISTRY_VERSION = "EXIT-POLICIES-V3"   # V2 = V1 plus Task O structural variants; V3 = V2 plus STATE_AWARE_GIVEBACK_V1; no earlier policy changed
 HOUR_MS = 3_600_000
 # Round-trip fees + one exit slippage, from the lifecycle's own constants: a
 # stop here means "about no loss after costs", not "exactly at entry".
@@ -96,6 +96,30 @@ def structural_variant(state: PositionState, params: dict) -> Action:
     return Action(HOLD)
 
 
+# ---- 3Q STATE_AWARE_GIVEBACK_V1 (#121) -------------------------------------------------------------------------
+def state_aware_giveback(state: PositionState, params: dict) -> Action:
+    """Interpretable: it only acts on a winner that has given back a large FRACTION of its peak, has not made a new peak for a while and
+    whose momentum has turned. A trade that made its peak recently, or is still moving with the position, is HELD (case A). Missing
+    momentum or volatility means no decision, never a guess. Stops only tighten and the hard stop stays the floor; exits only come earlier."""
+    if state.mfe_R < params["activate_R"] or state.mfe_R <= 0 or state.momentum_R is None or state.volatility is None:
+        return Action(HOLD)
+    giveback_fraction = state.distance_from_peak_R / state.mfe_R
+    recent_peak = state.time_since_mfe_ms < params["stall_h"] * HOUR_MS
+    healthy = recent_peak or state.momentum_R > 0
+    if giveback_fraction < params["giveback_fraction"] or healthy:
+        return Action(HOLD)
+    if params["mode"] == "EXIT":
+        return Action(FULL_EXIT, note="STATE_AWARE_GIVEBACK") if state.unrealized_R > 0 else Action(HOLD)
+    protect = state.price - params["vol_mult"] * state.volatility if state.direction == "long" else state.price + params["vol_mult"] * state.volatility
+    return Action(TIGHTEN_STOP, stop=protect)
+
+
+# The whole grid is declared here, before any evaluation: 2 giveback fractions x 2 stall times for PROTECT, and the stricter fraction for EXIT.
+STATE_AWARE_GRID = {"activate_R": 0.8, "vol_mult": 1.5, "giveback_fraction": (0.40, 0.55), "stall_h": (1, 3),
+                    "variants": (("PROTECT", 0.40, 1), ("PROTECT", 0.40, 3), ("PROTECT", 0.55, 1), ("PROTECT", 0.55, 3),
+                                 ("EXIT", 0.55, 1), ("EXIT", 0.55, 3))}
+
+
 @dataclass(frozen=True)
 class Policy:
     version: str
@@ -141,6 +165,14 @@ def _build() -> dict:
         add(f"TIMEOUT_V1_H{h}", "3O", structural_variant, {"max_hold_h": h},
             f"Time out after {h}h instead of {lifecycle.MAX_HOLD_MS // HOUR_MS}h. Only shorter timeouts are listed: the real trade's price path "
             f"ends at its own exit, so a longer timeout can never be replayed without inventing prices.")
+    # 3Q: STATE_AWARE_GIVEBACK_V1, a preregistered handful (STATE_AWARE_GRID); strategy is a research breakdown only, never a parameter.
+    for mode, frac, hours in STATE_AWARE_GRID["variants"]:
+        add(f"STATE_AWARE_GIVEBACK_V1_{mode}_G{int(round(frac * 100))}_H{hours}", "3Q", state_aware_giveback,
+            {"mode": mode, "activate_R": STATE_AWARE_GRID["activate_R"], "giveback_fraction": frac, "stall_h": hours,
+             "vol_mult": STATE_AWARE_GRID["vol_mult"]},
+            f"Winner (MFE >= {STATE_AWARE_GRID['activate_R']}R) that gave back >= {int(frac * 100)}% of its peak, no new peak for {hours}h and momentum "
+            f"turned: {'exit' if mode == 'EXIT' else 'stop to ' + str(STATE_AWARE_GRID['vol_mult']) + ' x PATH_RANGE_V1 behind the price'}. "
+            f"Held while the peak is recent or momentum is with the trade.")
     return out
 
 

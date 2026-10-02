@@ -24,11 +24,12 @@ from market_edge_exec.control.settings import BOUNDS as SETTINGS_BOUNDS, Control
 from market_edge_exec.domain.contracts import ContractError, ExecutionIntent
 from market_edge_exec.hummingbot.factory import build_hummingbot_client
 from market_edge_exec.nautilus.portfolio import NautilusPortfolio
-from market_edge_exec.exits import EXIT_MANAGER_VERSION
+from market_edge_exec.exits import EXIT_MANAGER_VERSION, evidence_dashboard as exit_evidence, prereg as exit_prereg, shadow_replay as shadow_exit_replay
 from market_edge_exec.exits.completeness import assess as assess_exit_completeness, evaluate_eligible as evaluate_eligible_exit_policies
 from market_edge_exec.exits.evaluation import render_markdown as render_exit_report
 from market_edge_exec.exits.policies import POLICY_REGISTRY_VERSION, registry_view as exit_policy_view
 from market_edge_exec.exits.store import ExitStore
+from market_edge_exec.telemetry.logging import log_event
 from market_edge_exec.paper.candles import CachedCandleFetcher, hyperliquid_fetcher, trade_candles
 from market_edge_exec.paper.engine import PaperEngine
 from market_edge_exec.paper.trade_detail import HINDSIGHT_FIELDS, build_trade_detail, monitor_status
@@ -305,13 +306,26 @@ def create_app(db_path: str = "market_edge_exec.sqlite3", hummingbot_mode: str =
 
     @app.get("/shadow/pending", dependencies=[Depends(require_api_key)])
     def shadow_pending(limit: int = 50):
-        return {"pending": app.state.shadow.pending(limit=limit)}
+        pending = {p["coin"]: dict(p) for p in app.state.shadow.pending(limit=limit)}
+        try:   # coins whose exit-replay path is still incomplete also need candles (#120); never affects label resolution
+            for p in shadow_exit_replay.pending_coins(app.state.shadow._connect, limit=limit):
+                cur = pending.get(p["coin"])
+                pending[p["coin"]] = {**(cur or {}), "coin": p["coin"], "since_ms": min(p["since_ms"], cur["since_ms"]) if cur else p["since_ms"]}
+        except Exception as error:  # noqa: BLE001
+            log_event("shadow_exit_replay_error", reason="pending", detail=str(error)[:300])
+        return {"pending": sorted(pending.values(), key=lambda p: p["since_ms"])[:limit]}
 
     @app.post("/shadow/resolve", dependencies=[Depends(require_api_key)])
     def shadow_resolve(payload: dict):
         try:
-            return app.state.shadow.resolve(str(payload.get("coin") or ""), payload.get("candles") or [],
-                                            payload.get("venue"), payload.get("interval"), payload.get("now_ms"))
+            result = app.state.shadow.resolve(str(payload.get("coin") or ""), payload.get("candles") or [],
+                                              payload.get("venue"), payload.get("interval"), payload.get("now_ms"))
+            try:   # executable Shadow exit replay (#120): research only, best effort, never changes the label result
+                result["exit_replay"] = shadow_exit_replay.run_for_coin(app.state.shadow._connect, str(payload.get("coin") or ""),
+                                                                       payload.get("candles") or [], payload.get("now_ms"))
+            except Exception as error:  # noqa: BLE001
+                log_event("shadow_exit_replay_error", reason="run", detail=str(error)[:300])
+            return result
         except ValueError as error:
             raise HTTPException(status_code=422, detail={"reason": str(error)})
 
@@ -486,6 +500,21 @@ def create_app(db_path: str = "market_edge_exec.sqlite3", hummingbot_mode: str =
     def exit_policy_evaluation():
         result = evaluate_eligible_exit_policies(exit_store._connect)
         return {"label": EXIT_LABEL, **result, "markdown": render_exit_report(result)}
+
+    @app.get("/research/shadow-exit-replay", dependencies=[Depends(require_api_key)])
+    def shadow_exit_replay_report():
+        return {"label": "RESEARCH ONLY · COUNTERFACTUAL · ZERO CAPITAL · NEVER COUNTS TOWARD THE PAPER BAR",
+                **shadow_exit_replay.cohort_report(app.state.shadow._connect)}
+
+    @app.post("/research/exit-policies/state-aware/register", dependencies=[Depends(require_api_key)])
+    def state_aware_register():
+        """Records the preregistered STATE_AWARE_GIVEBACK_V1 grid in the experiment registry (idempotent). Runs nothing, changes no policy."""
+        return {"label": "RESEARCH ONLY · PREREGISTRATION", **exit_prereg.register(ExperimentRegistry(app.state.shadow))}
+
+    @app.get("/research/exit-evidence", dependencies=[Depends(require_api_key)])
+    def exit_evidence_dashboard():
+        """Read-only counts for the exit-evidence dashboard (#122). Displays what exists; changes nothing."""
+        return exit_evidence.build(exit_store._connect, app.state.shadow._connect)
 
     @app.get("/research/exit-policies/integrity", dependencies=[Depends(require_api_key)])
     def exit_policy_integrity():
